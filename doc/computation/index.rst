@@ -1537,6 +1537,27 @@ velocity of the surface material, so that the reference acceleration drives the 
 surface; this is how conveyor belts and turntables are implemented, and it is also the quantity reported in the
 contact rows of ``mjData.efc_vel``.
 
+.. _soAdhesion:
+
+Contacts of geoms with nonzero :ref:`adhesion<body-geom-adhesion>` can pull: writing :math:`\delta` for the contact's
+adhesive force, the feasible force set is the friction cone *translated* down the contact normal by :math:`\delta`.
+This is implemented with an exact factorization which leaves the cone machinery untouched. A constant attractive force
+:math:`\delta` along the contact normal is accumulated into the passive force ``mjData.qfrc_adhesion``, and the
+reference acceleration of the contact's normal row is biased:
+
+.. math::
+   \ar \rightarrow \ar + R \, \delta
+
+(for pyramidal cones the bias is distributed equally over the :math:`2(\mathrm{dim}-1)` edges). To see that this
+factorization is exactly cone translation, combine :math:`f = (A+R)^{-1}(\ar - \au)` with :eq:`eq:identity` to obtain
+the force relation :math:`R f = \ar - \ac`, and consider the net interface force :math:`f - \delta`: the passive
+attraction cancels :math:`A \delta` in :eq:`eq:identity` while the bias cancels :math:`R \delta` in the force relation,
+so the pair :math:`(f - \delta, \ac)` satisfies exactly the unbiased equations, with the cone membership of :math:`f`
+becoming membership of the translated cone for :math:`f - \delta`. Consequently the compression branch of the net
+contact force is independent of adhesion — resting penetration is unaffected — while a tensile branch of depth
+:math:`\delta` is added. Since contacts of adhesive geoms remain active throughout the :ref:`gap<body-geom-gap>` band,
+where their position residual is positive, the biased reference acceleration acts across separation.
+
 To summarize, the constraint behavior is determined by three per-constraint quantities: impedance :math:`0<d<1`, damping
 :math:`b > 0`, and stiffness :math:`k \geq 0`. These are computed from the :at:`solimp` and :at:`solref` attributes as
 described in the :ref:`solver parameters <soRefScaling>` section of the Modeling chapter, which also offers additional
