@@ -226,7 +226,7 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
     }
 
     if (geom->type == mjGEOM_FLEX || geom->type == mjGEOM_SKIN) {
-      if (!scene_objects_->CreateSkinFlexMesh(scene, model_objects_->GetModel(),
+      if (!scene_objects_->UpdateSkinFlexMesh(scene, model_objects_->GetModel(),
                                               *geom)) {
         continue;
       }
@@ -307,8 +307,9 @@ void SceneBridge::ApplySlot(Slot& slot, const mjvGeom& geom,
                        ? (kDiffGeomMesh | kDiffGeomPose | kDiffGeomMaterial)
                        : DiffGeom(slot.shadow, geom);
 
-  // Flex and skin meshes are recreated every frame, so the mesh is
-  // unconditionally re-assigned; ApplyGeomMesh also sets pose and size.
+  // Flex and skin meshes are updated in place every frame, so the mesh is
+  // unconditionally re-assigned to refresh bounds and the active draw range;
+  // ApplyGeomMesh also sets pose and size.
   const bool deformable =
       geom.type == mjGEOM_FLEX || geom.type == mjGEOM_SKIN;
   if (deformable) {

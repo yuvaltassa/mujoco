@@ -29,21 +29,35 @@ class SceneObjects {
  public:
   explicit SceneObjects(mjrfContext* ctx);
 
-  // Creates a skin or flex mesh from the given geom in the mjvScene.
-  bool CreateSkinFlexMesh(const mjvScene* scene, const mjModel* model,
+  // Creates or updates the skin or flex mesh for the given geom from the
+  // mjvScene. The mesh is created on first use (or when the frame's data
+  // outgrows its buffers) and updated in place otherwise.
+  bool UpdateSkinFlexMesh(const mjvScene* scene, const mjModel* model,
                           const mjvGeom& geom);
 
-  // Returns the mesh for the given geom id, as created by CreateSkinFlexMesh.
+  // Returns the mesh for the given geom id, as set by UpdateSkinFlexMesh.
   const mjrfMesh* GetSkinMesh(int geom_id) const;
   const mjrfMesh* GetFlexMesh(int geom_id) const;
+
+  // Returns the number of active indices in the flex mesh; indices past this
+  // count belong to earlier frames with more faces and must not be drawn.
+  int GetFlexIndexCount(int geom_id) const;
 
   SceneObjects(const SceneObjects&) = delete;
   SceneObjects& operator=(const SceneObjects&) = delete;
 
  private:
+  // A mesh rebuilt from per-frame simulation output, updated in place.
+  struct DynamicMesh {
+    UniquePtr<mjrfMesh> mesh{nullptr, mjrf_destroyMesh};
+    mjtSize vertex_capacity = 0;
+    int num_attributes = 0;
+    mjtSize num_indices = 0;
+  };
+
   mjrfContext* ctx_ = nullptr;
-  std::unordered_map<int, UniquePtr<mjrfMesh>> skins_;
-  std::unordered_map<int, UniquePtr<mjrfMesh>> flexes_;
+  std::unordered_map<int, DynamicMesh> skins_;
+  std::unordered_map<int, DynamicMesh> flexes_;
 };
 
 }  // namespace mujoco
