@@ -14,6 +14,7 @@
 
 #include "experimental/filament/compat/scene_bridge.h"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -56,10 +57,31 @@ SceneBridge::SceneBridge(mjrfContext* ctx, mjrfScene* scene, const mjModel* mode
 
 SceneBridge::~SceneBridge() {
   light_manager_.reset();
-  for (auto& iter : renderables_) {
+  for (auto& [key, slot] : keyed_) {
+    if (slot.in_scene) {
+      mjrf_removeRenderableFromScene(scene_, slot.renderable.get());
+    }
+  }
+  keyed_.clear();
+  for (auto& iter : frame_renderables_) {
     mjrf_removeRenderableFromScene(scene_, iter.get());
   }
-  renderables_.clear();
+  frame_renderables_.clear();
+}
+
+// Model elements have exact (objtype, objid) identity in the mjvScene; decor
+// and appended (e.g. mjv_addGeoms ghost) geoms do not. The first occurrence
+// per frame claims the keyed slot; duplicates take the per-frame path.
+static bool IsKeyedGeom(const mjvGeom& geom) {
+  if (geom.objid < 0 || geom.category == mjCAT_DECOR) {
+    return false;
+  }
+  return geom.objtype == mjOBJ_GEOM || geom.objtype == mjOBJ_SITE ||
+         geom.objtype == mjOBJ_FLEX || geom.objtype == mjOBJ_SKIN;
+}
+
+static uint64_t GeomKey(const mjvGeom& geom) {
+  return (uint64_t(uint32_t(geom.objtype)) << 32) | uint32_t(geom.objid);
 }
 
 std::optional<float3> SceneBridge::ClipFromWorld(const float3& pos) const{
@@ -109,11 +131,17 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
   camera_ = mjv_averageCamera(scene->camera, scene->camera + 1);
   clip_from_world_ = CalculateClipFromWorld(viewport, camera_);
 
-  // Remove all drawables from previous render and prepare new ones.
-  for (auto& iter : renderables_) {
+  ++frame_;
+  const bool reapply_all = reapply_all_;
+  reapply_all_ = false;
+
+  // Remove the previous frame's per-frame renderables (decor, appended
+  // geoms) and prepare new ones. Keyed model elements persist across frames
+  // and are updated in place below.
+  for (auto& iter : frame_renderables_) {
     mjrf_removeRenderableFromScene(scene_, iter.get());
   }
-  renderables_.clear();
+  frame_renderables_.clear();
   for (int i = 0; i < scene->ngeom; ++i) {
     const mjvGeom* geom = scene->geoms + i;
 
@@ -151,7 +179,7 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
           mjrf_setRenderableSize(vertex.get(), size);
           mjrf_setRenderableTransform(vertex.get(), scene->flexvert + 3*v, rot);
           mjrf_addRenderableToScene(scene_, vertex.get());
-          renderables_.push_back(std::move(vertex));
+          frame_renderables_.push_back(std::move(vertex));
         }
       }
 
@@ -196,7 +224,7 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
           mjrf_setRenderableSize(vertex.get(), size);
           mjrf_setRenderableTransform(vertex.get(), pos, rot);
           mjrf_addRenderableToScene(scene_, vertex.get());
-          renderables_.push_back(std::move(vertex));
+          frame_renderables_.push_back(std::move(vertex));
         }
       }
     }
@@ -208,11 +236,31 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
       }
     }
 
+    // Model elements are reconciled against their persistent renderable.
+    if (IsKeyedGeom(*geom)) {
+      KeyedSlot& slot = keyed_[GeomKey(*geom)];
+      if (slot.last_seen != frame_) {
+        UpdateKeyedSlot(slot, *geom, reapply_all);
+        continue;
+      }
+      // The key was already claimed this frame (a ghost copy of a model
+      // element); fall through to the per-frame path.
+    }
+
     UniquePtr<mjrfRenderable> renderable = CreateGeomRenderable(
         *geom, ctx_, model_objects_.get(), scene_objects_.get());
 
     mjrf_addRenderableToScene(scene_, renderable.get());
-    renderables_.push_back(std::move(renderable));
+    frame_renderables_.push_back(std::move(renderable));
+  }
+
+  // Sweep: remove keyed renderables that were not claimed this frame, e.g.
+  // geoms hidden by a group toggle. The renderable is kept for re-showing.
+  for (auto& [key, slot] : keyed_) {
+    if (slot.last_seen != frame_ && slot.in_scene) {
+      mjrf_removeRenderableFromScene(scene_, slot.renderable.get());
+      slot.in_scene = false;
+    }
   }
 
   mjrfLight* headlight = nullptr;
@@ -249,16 +297,64 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
   }
 }
 
+void SceneBridge::UpdateKeyedSlot(KeyedSlot& slot, const mjvGeom& geom,
+                                  bool reapply_all) {
+  if (!slot.renderable) {
+    mjrfRenderableParams params;
+    mjrf_defaultRenderableParams(&params);
+    slot.renderable = CreateRenderable(ctx_, params);
+    reapply_all = true;
+  }
+  mjrfRenderable* renderable = slot.renderable.get();
+
+  const int diff = reapply_all
+                       ? (kDiffGeomMesh | kDiffGeomPose | kDiffGeomMaterial)
+                       : DiffGeom(slot.shadow, geom);
+
+  // Flex and skin meshes are recreated every frame, so the mesh is
+  // unconditionally re-assigned; ApplyGeomMesh also sets pose and size.
+  const bool deformable =
+      geom.type == mjGEOM_FLEX || geom.type == mjGEOM_SKIN;
+  if (deformable) {
+    ApplyGeomMesh(renderable, geom, model_objects_.get(),
+                  scene_objects_.get());
+    if (diff & (kDiffGeomMesh | kDiffGeomMaterial)) {
+      ApplyGeomMaterial(renderable, geom, model_objects_.get());
+    }
+  } else if (diff & kDiffGeomMesh) {
+    ApplyGeomMesh(renderable, geom, model_objects_.get(),
+                  scene_objects_.get());
+    ApplyGeomMaterial(renderable, geom, model_objects_.get());
+  } else {
+    if (diff & kDiffGeomPose) {
+      ApplyGeomPose(renderable, geom);
+    }
+    if (diff & kDiffGeomMaterial) {
+      ApplyGeomMaterial(renderable, geom, model_objects_.get());
+    }
+  }
+
+  slot.shadow = geom;
+  slot.last_seen = frame_;
+  if (!slot.in_scene) {
+    mjrf_addRenderableToScene(scene_, renderable);
+    slot.in_scene = true;
+  }
+}
+
 void SceneBridge::UploadMesh(const mjModel* model, int id) {
   model_objects_->UploadMesh(model, id);
+  reapply_all_ = true;
 }
 
 void SceneBridge::UploadTexture(const mjModel* model, int id) {
   model_objects_->UploadTexture(model, id);
+  reapply_all_ = true;
 }
 
 void SceneBridge::UploadHeightField(const mjModel* model, int id) {
   model_objects_->UploadHeightField(model, id);
+  reapply_all_ = true;
 }
 
 void SceneBridge::SetDrawTextFunction(DrawTextAtFn fn) {

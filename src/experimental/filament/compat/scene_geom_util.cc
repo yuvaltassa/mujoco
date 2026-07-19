@@ -41,9 +41,8 @@ static float GetPlaneTileSize(const mjModel* model, int matid,
   }
 }
 
-static void PrepareGeomMeshes(mjrfRenderable* renderable, const mjvGeom& geom,
-                              ModelObjects* model_objs,
-                              SceneObjects* scene_objs) {
+void ApplyGeomMesh(mjrfRenderable* renderable, const mjvGeom& geom,
+                   ModelObjects* model_objs, SceneObjects* scene_objs) {
   const mjModel* model = model_objs->GetModel();
   const int nstack = model->vis.quality.numstacks;
   const int nslice = model->vis.quality.numslices;
@@ -144,8 +143,77 @@ static void PrepareGeomMeshes(mjrfRenderable* renderable, const mjvGeom& geom,
   mjrf_setRenderableTransform(renderable, position, rotation);
 }
 
-static void UpdateGeomMaterial(mjrfRenderable* renderable, const mjvGeom& geom,
-                               ModelObjects* model_objs) {
+void ApplyGeomPose(mjrfRenderable* renderable, const mjvGeom& geom) {
+  const mjtGeom geom_type = (mjtGeom)geom.type;
+  switch (geom_type) {
+    case mjGEOM_FLEX:
+    case mjGEOM_SKIN:
+      // Vertices are in global space; the identity transform is set when the
+      // mesh is (re)assigned by ApplyGeomMesh.
+      return;
+    case mjGEOM_PLANE: {
+      // Planes only define an xy size, so set the z-dimension to 1.0f.
+      const float size[3] = {geom.size[0], geom.size[1], 1.0f};
+      mjrf_setRenderableSize(renderable, size);
+      break;
+    }
+    case mjGEOM_SPHERE:
+    case mjGEOM_ELLIPSOID:
+    case mjGEOM_BOX:
+    case mjGEOM_CAPSULE:
+    case mjGEOM_CYLINDER:
+    case mjGEOM_ARROW:
+    case mjGEOM_ARROW1:
+    case mjGEOM_ARROW2:
+    case mjGEOM_LINE:
+    case mjGEOM_LINEBOX:
+    case mjGEOM_TRIANGLE:
+      mjrf_setRenderableSize(renderable, geom.size);
+      break;
+    default:
+      // Mesh-like geoms (mesh, sdf, hfield) bake their size into vertices.
+      break;
+  }
+  mjrf_setRenderableTransform(renderable, geom.pos, geom.mat);
+}
+
+int DiffGeom(const mjvGeom& a, const mjvGeom& b) {
+  int diff = 0;
+
+  // objtype/objid are provenance and do not affect rendering; label, camdist,
+  // modelrbound and transparent are not consumed by this renderer.
+
+  // Shape and asset identity: requires a mesh rebind, which may also change
+  // the material variant (e.g. availability of uv coordinates).
+  if (a.type != b.type || a.dataid != b.dataid) {
+    diff |= kDiffGeomMesh | kDiffGeomMaterial;
+  }
+
+  // Pose fields; size also feeds texture uv scaling.
+  if (std::memcmp(a.pos, b.pos, sizeof(a.pos)) ||
+      std::memcmp(a.mat, b.mat, sizeof(a.mat))) {
+    diff |= kDiffGeomPose;
+  }
+  if (std::memcmp(a.size, b.size, sizeof(a.size))) {
+    diff |= kDiffGeomPose | kDiffGeomMaterial;
+  }
+
+  // Material inputs.
+  if (a.category != b.category || a.matid != b.matid || a.texid != b.texid ||
+      a.texuniform != b.texuniform || a.texcoord != b.texcoord ||
+      a.segid != b.segid ||
+      std::memcmp(a.rgba, b.rgba, sizeof(a.rgba)) ||
+      a.emission != b.emission || a.specular != b.specular ||
+      a.shininess != b.shininess || a.reflectance != b.reflectance ||
+      std::memcmp(a.texrepeat, b.texrepeat, sizeof(a.texrepeat))) {
+    diff |= kDiffGeomMaterial;
+  }
+
+  return diff;
+}
+
+void ApplyGeomMaterial(mjrfRenderable* renderable, const mjvGeom& geom,
+                       ModelObjects* model_objs) {
   const mjModel* model = model_objs->GetModel();
 
   mjrfMaterial material;
@@ -287,8 +355,8 @@ UniquePtr<mjrfRenderable> CreateGeomRenderable(const mjvGeom& geom,
   mjrfRenderableParams params;
   mjrf_defaultRenderableParams(&params);
   auto renderable = CreateRenderable(ctx, params);
-  PrepareGeomMeshes(renderable.get(), geom, model_objs, scene_objs);
-  UpdateGeomMaterial(renderable.get(), geom, model_objs);
+  ApplyGeomMesh(renderable.get(), geom, model_objs, scene_objs);
+  ApplyGeomMaterial(renderable.get(), geom, model_objs);
   return renderable;
 }
 }  // namespace mujoco

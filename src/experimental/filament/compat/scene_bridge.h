@@ -15,9 +15,11 @@
 #ifndef MUJOCO_SRC_EXPERIMENTAL_FILAMENT_COMPAT_SCENE_BRIDGE_H_
 #define MUJOCO_SRC_EXPERIMENTAL_FILAMENT_COMPAT_SCENE_BRIDGE_H_
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include <math/mat4.h>
@@ -62,6 +64,18 @@ class SceneBridge {
   std::optional<filament::math::float3> ClipFromWorld(
       const filament::math::float3& pos) const;
 
+  // Retained state for a model element: the renderable persists across frames
+  // and state is re-applied only when the element's mjvGeom changes.
+  struct KeyedSlot {
+    UniquePtr<mjrfRenderable> renderable{nullptr, mjrf_destroyRenderable};
+    mjvGeom shadow;
+    bool in_scene = false;
+    uint64_t last_seen = 0;
+  };
+
+  // Applies the geom to the slot, creating the renderable on first use.
+  void UpdateKeyedSlot(KeyedSlot& slot, const mjvGeom& geom, bool reapply_all);
+
   mjrfContext* ctx_ = nullptr;
   mjrfScene* scene_ = nullptr;
   std::unique_ptr<ModelObjects> model_objects_;
@@ -69,7 +83,16 @@ class SceneBridge {
   std::unique_ptr<LightManager> light_manager_;
   mjrCamera camera_;
   DrawTextAtFn draw_text_callback_;
-  std::vector<UniquePtr<mjrfRenderable>> renderables_;
+
+  // Model elements, keyed by (objtype, objid); persist across frames.
+  std::unordered_map<uint64_t, KeyedSlot> keyed_;
+  // Everything else (decor, appended geoms); recreated every frame.
+  std::vector<UniquePtr<mjrfRenderable>> frame_renderables_;
+
+  uint64_t frame_ = 0;
+  // Set when uploaded assets replace the underlying mesh/texture objects, so
+  // retained renderable state must be re-resolved.
+  bool reapply_all_ = false;
   filament::math::mat4 clip_from_world_;
 };
 
