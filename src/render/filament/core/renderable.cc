@@ -221,6 +221,11 @@ void Renderable::RemoveFromScene(filament::Scene* scene) {
     scene->remove(part.entity);
   }
   assigned_scene_ = nullptr;
+  // A renderable outside a scene is not re-prepared each frame, so it must
+  // not keep referencing a material instance that the MaterialManager may
+  // destroy; rebind the default instance.
+  SetMaterialInstance(0);
+  curr_state_.material_key = 0;
 }
 
 void Renderable::UpdateMaterial(const mjrfMaterial& material) {
