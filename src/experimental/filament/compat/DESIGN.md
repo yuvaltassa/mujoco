@@ -149,3 +149,76 @@ implementation of `engine_vis_visualize.c`.
 - **Multi-model assets.** Cross-model `addGeoms` keeps today's rule:
   primitives from anywhere; `dataid`/`matid` must resolve in the uploaded
   model.
+
+## Appendix: phase 1 as landed
+
+The commits following this doc, in order (titles as committed):
+
+- **Add mjrf_updateMeshVertexData for in-place mesh updates.**[^bugs] The
+  one mjrf addition: re-upload vertex data into an existing mesh, with the
+  attribute layout fixed at creation, vertex count up to the created
+  capacity, and bounds refreshed. Filament's vertex buffers were always
+  dynamic; mjrf just didn't expose it.
+- **Reconcile model elements against persistent renderables in
+  SceneBridge.** One persistent renderable per model element, keyed on the
+  `(objtype, objid)` that `acquireGeom` already stamps. `DiffGeom`
+  classifies each frame's delta into mesh/pose/material bits against a
+  shadow copy of the last-applied geom; unclaimed elements are swept out of
+  the scene but kept. The fused create-only path in `scene_geom_util` is
+  split into `ApplyGeomMesh` / `ApplyGeomPose` / `ApplyGeomMaterial`.
+- **Pool per-frame renderables in SceneBridge by shape.** Everything
+  without identity (decor, tendon segments, appended/ghost geoms) claims
+  renderables from `(type, dataid)` pools in generation order; the flex
+  vertex/edge swarm gets its own sphere and cylinder pools. Steady state
+  creates and destroys nothing, anywhere.
+- **Update flex and skin meshes in place instead of recreating them.**
+  `SceneObjects` uploads into persistent meshes; recreation happens only
+  when a frame outgrows the buffers, and the active face count is a draw
+  range.
+- **Detach material instances when renderables leave the scene.**[^bugs] A
+  one-line core fix required for any retained consumer.
+- **Add reconciler benchmark and record phase 1 results.** Offscreen
+  trajectory rendering through the mjr compat layer
+  (`MUJOCO_USE_FILAMENT_MJR_COMPAT=ON`): per-stage timings plus frame
+  dumps for cross-build pixel comparison.
+
+Steady-state ms/frame over 100 simulated frames at 512x512, contact decor
+enabled, filament OpenGL backend, Apple M5. "bridge" is `mjr_render`, i.e.
+the SceneBridge update; "old" is the destroy-everything bridge at this
+doc's commit, "new" is the reconciler. The first frame, which creates all
+persistent state, costs about what one old-bridge frame did.
+
+| model                  | ngeom | updateScene | bridge old | bridge new | render+read |
+|------------------------|-------|-------------|------------|------------|-------------|
+| humanoid               |    36 |       0.002 |      0.053 |      0.005 |         1.4 |
+| humanoid100            |   312 |       0.006 |      0.190 |      0.028 |         2.2 |
+| flag (flex)            |     2 |       0.005 |      0.026 |      0.022 |         1.6 |
+| 100_humanoids          |  3641 |       0.084 |      3.514 |      0.439 |        21.2 |
+
+Every compared frame (4 models x 10 frames each) is byte-identical between
+the old and new bridge. Three readings of the table:
+
+- Bridge cost drops 7-10x and now scales with what *changes* rather than
+  what *exists*; render+read (GPU render, sync, readback) is unchanged, as
+  expected -- the churn was CPU/submission-side.
+- `mjv_updateScene` regenerates all 3641 geoms in 0.084 ms, 0.4% of the
+  frame: the stateless producer is measurably not the bottleneck. The
+  contract was.
+- Flex moves least because its remaining cost is producer-side
+  tessellation and the upload itself -- exactly the phase 2 items
+  (capability flags, indexed streams).
+
+[^bugs]: Verification surfaced two latent bugs, both invisible to a bridge
+    that rebuilds everything every frame. (a) `Renderable::RemoveFromScene`
+    kept the entity's material-instance binding, so `MaterialManager`'s
+    per-frame GC could destroy an instance filament still saw attached --
+    a precondition panic in `FEngine::destroy`. Unreachable when every
+    renderable is destroyed each frame; guaranteed eventually for any
+    retained consumer. (b) `Mesh::HasVertexAttribute` scanned the full
+    fixed-size attribute array, whose entries beyond the declared count
+    are uninitialized -- and the interleaved path never set the count --
+    so UV presence, which selects the material variant, could read
+    garbage. Both are fixed in the commits marked with this footnote.
+    Related, not a bug fixed here: windowless contexts panic when the
+    default backend resolves to Vulkan on macOS, so the benchmark
+    requests OpenGL explicitly.
