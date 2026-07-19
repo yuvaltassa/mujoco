@@ -122,14 +122,64 @@ addition:
 6. **Verification:** rendering parity with the current bridge; frame times on
    humanoid / flex-heavy / contact-heavy models in the commit message.
 
-Phase 2 — mjv changes, additive first, breaking last:
+Phase 2 — mjv changes, additive first, breaking last. Not started; specified
+here in enough detail to be picked up independently of the phase 1 authors.
+Roughly one commit each, and each justified separately by the phase 1
+profile:
 
-7. Gate flex/skin fill on catmask.
-8. mjvScene capability flags (skip-skinning + bone poses in scene,
-   skip-flex-tessellation, native-infinite-plane); adopt in reconciler.
-9. Indexed flex/skin streams.
-10. Slotted layout + `visible` flag + arena; segid = slot id; reconciler
-    swaps its hash map for array indexing.
+7. **Gate deformable fill on catmask.** `mjv_updateScene` runs the flex and
+   skin fill whenever the vis options ask for it, regardless of catmask, so
+   a decor-only update pays the full deformable cost. Gate it on
+   `catmask & mjCAT_DYNAMIC`. This makes `mjv_updateScene(..., mjCAT_DECOR)`
+   genuinely cheap and unlocks decor-at-display-rate vs physics-at-sim-rate
+   consumers — the split SceneDecorator wanted and had to fake.
+
+8. **Consumer capability flags on mjvScene.** New fields set by the consumer
+   between makeScene and updateScene; zero (default) = exact classic
+   behavior:
+   - *skip skinning*: mjv does not compute skinned vertices; it publishes
+     per-frame bone poses instead (new fixed-size scene arrays; exact layout
+     to be co-designed against filament's native 4-weight skinning), with
+     bind-pose vertices and weights uploaded once from the model.
+   - *skip flex tessellation*: mjv skips smooth-normal computation and soup
+     emission; it publishes raw per-frame flex vertices with topology fixed
+     at makeScene.
+   - *native infinite plane*: mjv emits the plane without camera-following
+     re-centering; the renderer draws a true infinite plane and the
+     `GetPlaneTileSize` duplication is deleted.
+   The reconciler adopts each flag; classic leaves them all off.
+
+9. **Indexed deformable streams.** Replace the unindexed nine-floats-per-face
+   soup with indexed vertices and an index buffer fixed at makeScene; 3D
+   flex layers become per-layer index ranges, so a layer switch is a draw
+   range change rather than a re-tessellation. Cuts upload bandwidth about
+   3x and feeds mjrf_updateMeshVertexData without conversion.
+
+10. **Slotted layout.** The geom list becomes: slots `[0, nslot)`, one per
+    model element (geoms, sites, flexes, skins), fixed at makeScene, with a
+    `visible` flag replacing omission-from-the-list; then an arena
+    `[nslot, ngeom)` regenerated each frame (decor, tendon segments,
+    appended geoms). `mjv_addGeoms` keeps its exact semantics — it appends,
+    to the arena; only updateScene owns slots — and the manual
+    `mjv_initGeom(scn->geoms + scn->ngeom++)` idiom keeps working because
+    the arena starts where slots end, so the colab ghost/trajectory recipes
+    run verbatim. segid becomes the slot id: stable across frames and
+    aligned with model-indexed renderer schemes. The reconciler swaps its
+    hash map for direct indexing. This is the one breaking change for
+    third-party consumers that iterate `scn->geoms` densely; migration is a
+    visibility check.
+
+Open questions, deliberately left unresolved for co-design:
+
+- Bone-pose layout for GPU skinning: driven by what filament (and future
+  renderers) want to consume.
+- Whether capability flags are new `scn->flags` entries or discrete fields.
+- segid canonicalization changes segmentation images for consumers that
+  relied on list position; needs a changelog note and possibly a
+  transition flag.
+- Instance blocks (see non-goals) if ghosts/trajectories deserve
+  first-class slots — also the only clean path to per-ghost skin
+  deformation.
 
 Endgame: one consumer path. The reconciler *is* RenderableManager's
 architecture — persistent, model-indexed renderables — fed by mjv's output
