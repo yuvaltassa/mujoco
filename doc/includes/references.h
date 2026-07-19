@@ -3409,6 +3409,7 @@ int mjrf_getTextureSamplerType(const mjrfTexture* texture);
 void mjrf_defaultMeshData(mjrfMeshData* data);
 mjrfMesh* mjrf_createMesh(mjrfContext* ctx, const mjrfMeshData* data);
 void mjrf_destroyMesh(mjrfMesh* mesh);
+void mjrf_updateMeshVertexData(mjrfMesh* mesh, const mjrfMeshData* data);
 void mjrf_defaultSceneParams(mjrfSceneParams* params);
 mjrfScene* mjrf_createScene(mjrfContext* ctx, const mjrfSceneParams* params);
 void mjrf_destroyScene(mjrfScene* scene);

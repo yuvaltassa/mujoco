@@ -208,6 +208,17 @@ mjrfMesh* mjrf_createMesh(mjrfContext* ctx, const mjrfMeshData* data);
 // Destroys the mesh.
 void mjrf_destroyMesh(mjrfMesh* mesh);
 
+// Updates the vertex data of an existing mesh. The vertex attribute layout
+// (count, usages, types, interleaving) must match the layout the mesh was
+// created with, and num_vertices must not exceed the created vertex count;
+// vertices beyond num_vertices retain their previous contents. Index data and
+// primitive type are unchanged; num_indices, indices and index_type are
+// ignored. Bounds are taken from bounds_min/bounds_max, or recomputed when
+// compute_bounds is set, and are otherwise left unchanged. Call
+// mjrf_setRenderableMesh again to propagate updated bounds and element counts
+// to renderables using this mesh.
+void mjrf_updateMeshVertexData(mjrfMesh* mesh, const mjrfMeshData* data);
+
 // Parameters for creating a scene (mjrfScene).
 typedef struct mjrfSceneParams_ {
 } mjrfSceneParams;

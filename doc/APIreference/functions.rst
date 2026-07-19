@@ -3264,6 +3264,16 @@ Creates a mesh with the given data.
 
 Destroys the mesh.
 
+.. _mjrf_updateMeshVertexData:
+
+`mjrf_updateMeshVertexData <#mjrf_updateMeshVertexData>`__
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. mujoco-include:: mjrf_updateMeshVertexData
+
+Updates the vertex data of an existing mesh. The vertex attribute layout must match the layout the mesh was created
+with, and ``num_vertices`` must not exceed the created vertex count. Index data and primitive type are unchanged.
+
 .. _mjrf_defaultSceneParams:
 
 `mjrf_defaultSceneParams <#mjrf_defaultSceneParams>`__
