@@ -24,6 +24,7 @@
 
 #include <math/mat4.h>
 #include <math/vec3.h>
+#include <math/vec4.h>
 #include <mujoco/mjrfilament.h>
 #include <mujoco/mjvisualize.h>
 #include <mujoco/mujoco.h>
@@ -64,17 +65,58 @@ class SceneBridge {
   std::optional<filament::math::float3> ClipFromWorld(
       const filament::math::float3& pos) const;
 
-  // Retained state for a model element: the renderable persists across frames
-  // and state is re-applied only when the element's mjvGeom changes.
-  struct KeyedSlot {
+  // Retained state for one renderable: the renderable persists across frames
+  // and state is re-applied only when its mjvGeom changes, judged against a
+  // shadow copy of the last-applied geom.
+  struct Slot {
     UniquePtr<mjrfRenderable> renderable{nullptr, mjrf_destroyRenderable};
     mjvGeom shadow;
     bool in_scene = false;
+  };
+
+  // A model element's slot, claimed at most once per frame by its key.
+  struct KeyedSlot : Slot {
     uint64_t last_seen = 0;
   };
 
+  // Reusable renderables for geoms without cross-frame identity (decor,
+  // appended/ghost geoms), pooled by (type, dataid) and claimed in
+  // generation order. mjv generation order is deterministic, so stable scene
+  // content reclaims the same slots with no re-application needed.
+  struct Pool {
+    std::vector<Slot> slots;
+    size_t used = 0;
+  };
+
+  // Reusable renderables for flex vertex/edge visualization, which is built
+  // from scene flex data rather than from mjvGeoms.
+  struct SwarmSlot {
+    UniquePtr<mjrfRenderable> renderable{nullptr, mjrf_destroyRenderable};
+    filament::math::float4 color{0, 0, 0, -1};
+    bool in_scene = false;
+  };
+  struct SwarmPool {
+    std::vector<SwarmSlot> slots;
+    size_t used = 0;
+  };
+
   // Applies the geom to the slot, creating the renderable on first use.
-  void UpdateKeyedSlot(KeyedSlot& slot, const mjvGeom& geom, bool reapply_all);
+  void ApplySlot(Slot& slot, const mjvGeom& geom, bool reapply_all);
+
+  // Returns the next free slot in the geom's pool, growing it if needed.
+  Slot& ClaimPoolSlot(const mjvGeom& geom);
+
+  // Returns the next free slot in a swarm pool, growing it if needed; new
+  // renderables are assigned a builtin mesh of the given type.
+  SwarmSlot& ClaimSwarmSlot(SwarmPool& pool, int geom_type);
+
+  // Applies pose and color to a swarm slot and ensures it is in the scene.
+  void UpdateSwarmSlot(SwarmSlot& slot, const filament::math::float4& color,
+                       const float* size, const float* pos, const float* rot);
+
+  // Removes unclaimed pooled renderables from the scene and resets claim
+  // counts for the next frame.
+  void SweepPools();
 
   mjrfContext* ctx_ = nullptr;
   mjrfScene* scene_ = nullptr;
@@ -86,8 +128,10 @@ class SceneBridge {
 
   // Model elements, keyed by (objtype, objid); persist across frames.
   std::unordered_map<uint64_t, KeyedSlot> keyed_;
-  // Everything else (decor, appended geoms); recreated every frame.
-  std::vector<UniquePtr<mjrfRenderable>> frame_renderables_;
+  // Everything else (decor, appended geoms), pooled by (type, dataid).
+  std::unordered_map<uint64_t, Pool> pools_;
+  SwarmPool flex_vert_pool_;
+  SwarmPool flex_edge_pool_;
 
   uint64_t frame_ = 0;
   // Set when uploaded assets replace the underlying mesh/texture objects, so

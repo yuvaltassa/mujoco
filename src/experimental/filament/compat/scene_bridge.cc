@@ -14,6 +14,7 @@
 
 #include "experimental/filament/compat/scene_bridge.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -63,10 +64,21 @@ SceneBridge::~SceneBridge() {
     }
   }
   keyed_.clear();
-  for (auto& iter : frame_renderables_) {
-    mjrf_removeRenderableFromScene(scene_, iter.get());
+  for (auto& [key, pool] : pools_) {
+    for (Slot& slot : pool.slots) {
+      if (slot.in_scene) {
+        mjrf_removeRenderableFromScene(scene_, slot.renderable.get());
+      }
+    }
   }
-  frame_renderables_.clear();
+  pools_.clear();
+  for (SwarmPool* pool : {&flex_vert_pool_, &flex_edge_pool_}) {
+    for (SwarmSlot& slot : pool->slots) {
+      if (slot.in_scene) {
+        mjrf_removeRenderableFromScene(scene_, slot.renderable.get());
+      }
+    }
+  }
 }
 
 // Model elements have exact (objtype, objid) identity in the mjvScene; decor
@@ -82,6 +94,12 @@ static bool IsKeyedGeom(const mjvGeom& geom) {
 
 static uint64_t GeomKey(const mjvGeom& geom) {
   return (uint64_t(uint32_t(geom.objtype)) << 32) | uint32_t(geom.objid);
+}
+
+// Pooled renderables are reusable across geoms of the same shape and asset,
+// so the pool key is exactly the mesh-determining fields.
+static uint64_t PoolKey(const mjvGeom& geom) {
+  return (uint64_t(uint32_t(geom.type)) << 32) | uint32_t(geom.dataid);
 }
 
 std::optional<float3> SceneBridge::ClipFromWorld(const float3& pos) const{
@@ -135,13 +153,6 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
   const bool reapply_all = reapply_all_;
   reapply_all_ = false;
 
-  // Remove the previous frame's per-frame renderables (decor, appended
-  // geoms) and prepare new ones. Keyed model elements persist across frames
-  // and are updated in place below.
-  for (auto& iter : frame_renderables_) {
-    mjrf_removeRenderableFromScene(scene_, iter.get());
-  }
-  frame_renderables_.clear();
   for (int i = 0; i < scene->ngeom; ++i) {
     const mjvGeom* geom = scene->geoms + i;
 
@@ -154,15 +165,10 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
     // Draw flex edges and vertices as separate renderables.
     if (geom->type == mjGEOM_FLEX &&
         (!scene->flexskinopt || model->flex_dim[geom->objid] == 1)) {
-      mjrfMaterial material;
-      mjrf_defaultMaterial(&material);
-      material.color[0] = model->flex_rgba[4 * geom->objid + 0];
-      material.color[1] = model->flex_rgba[4 * geom->objid + 1];
-      material.color[2] = model->flex_rgba[4 * geom->objid + 2];
-      material.color[3] = model->flex_rgba[4 * geom->objid + 3];
-
-      mjrfRenderableParams params;
-      mjrf_defaultRenderableParams(&params);
+      const float4 flex_color(model->flex_rgba[4 * geom->objid + 0],
+                              model->flex_rgba[4 * geom->objid + 1],
+                              model->flex_rgba[4 * geom->objid + 2],
+                              model->flex_rgba[4 * geom->objid + 3]);
 
       const int vertadr = scene->flexvertadr[geom->objid];
       const int vertnum = scene->flexvertnum[geom->objid];
@@ -173,13 +179,8 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
         const float rot[] = {1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f};
         const float size[] = {radius, radius, radius};
         for (int v = vertadr; v < vertadr + vertnum; ++v) {
-          auto vertex = CreateRenderable(ctx_, params);
-          mjrf_setRenderableGeomMesh(vertex.get(), mjGEOM_SPHERE, 3, 3, 3);
-          mjrf_setRenderableMaterial(vertex.get(), &material);
-          mjrf_setRenderableSize(vertex.get(), size);
-          mjrf_setRenderableTransform(vertex.get(), scene->flexvert + 3*v, rot);
-          mjrf_addRenderableToScene(scene_, vertex.get());
-          frame_renderables_.push_back(std::move(vertex));
+          SwarmSlot& slot = ClaimSwarmSlot(flex_vert_pool_, mjGEOM_SPHERE);
+          UpdateSwarmSlot(slot, flex_color, size, scene->flexvert + 3*v, rot);
         }
       }
 
@@ -218,13 +219,8 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
           const float len = static_cast<float>(mju_norm3(vec));
           const float size[3] = {radius, radius, len * 0.5f};
 
-          auto vertex = CreateRenderable(ctx_, params);
-          mjrf_setRenderableGeomMesh(vertex.get(), mjGEOM_CYLINDER, 3, 3, 3);
-          mjrf_setRenderableMaterial(vertex.get(), &material);
-          mjrf_setRenderableSize(vertex.get(), size);
-          mjrf_setRenderableTransform(vertex.get(), pos, rot);
-          mjrf_addRenderableToScene(scene_, vertex.get());
-          frame_renderables_.push_back(std::move(vertex));
+          SwarmSlot& slot = ClaimSwarmSlot(flex_edge_pool_, mjGEOM_CYLINDER);
+          UpdateSwarmSlot(slot, flex_color, size, pos, rot);
         }
       }
     }
@@ -240,28 +236,28 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
     if (IsKeyedGeom(*geom)) {
       KeyedSlot& slot = keyed_[GeomKey(*geom)];
       if (slot.last_seen != frame_) {
-        UpdateKeyedSlot(slot, *geom, reapply_all);
+        ApplySlot(slot, *geom, reapply_all);
+        slot.last_seen = frame_;
         continue;
       }
       // The key was already claimed this frame (a ghost copy of a model
-      // element); fall through to the per-frame path.
+      // element); fall through to the pooled path.
     }
 
-    UniquePtr<mjrfRenderable> renderable = CreateGeomRenderable(
-        *geom, ctx_, model_objects_.get(), scene_objects_.get());
-
-    mjrf_addRenderableToScene(scene_, renderable.get());
-    frame_renderables_.push_back(std::move(renderable));
+    // Everything else (decor, appended geoms) claims a pooled renderable.
+    ApplySlot(ClaimPoolSlot(*geom), *geom, reapply_all);
   }
 
   // Sweep: remove keyed renderables that were not claimed this frame, e.g.
-  // geoms hidden by a group toggle. The renderable is kept for re-showing.
+  // geoms hidden by a group toggle, and unclaimed pooled renderables. All
+  // renderables are kept for reuse.
   for (auto& [key, slot] : keyed_) {
     if (slot.last_seen != frame_ && slot.in_scene) {
       mjrf_removeRenderableFromScene(scene_, slot.renderable.get());
       slot.in_scene = false;
     }
   }
+  SweepPools();
 
   mjrfLight* headlight = nullptr;
   bool headlight_enabled = false;
@@ -297,8 +293,8 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
   }
 }
 
-void SceneBridge::UpdateKeyedSlot(KeyedSlot& slot, const mjvGeom& geom,
-                                  bool reapply_all) {
+void SceneBridge::ApplySlot(Slot& slot, const mjvGeom& geom,
+                            bool reapply_all) {
   if (!slot.renderable) {
     mjrfRenderableParams params;
     mjrf_defaultRenderableParams(&params);
@@ -335,11 +331,69 @@ void SceneBridge::UpdateKeyedSlot(KeyedSlot& slot, const mjvGeom& geom,
   }
 
   slot.shadow = geom;
-  slot.last_seen = frame_;
   if (!slot.in_scene) {
     mjrf_addRenderableToScene(scene_, renderable);
     slot.in_scene = true;
   }
+}
+
+SceneBridge::Slot& SceneBridge::ClaimPoolSlot(const mjvGeom& geom) {
+  Pool& pool = pools_[PoolKey(geom)];
+  if (pool.used == pool.slots.size()) {
+    pool.slots.emplace_back();
+  }
+  return pool.slots[pool.used++];
+}
+
+SceneBridge::SwarmSlot& SceneBridge::ClaimSwarmSlot(SwarmPool& pool,
+                                                    int geom_type) {
+  if (pool.used == pool.slots.size()) {
+    SwarmSlot& slot = pool.slots.emplace_back();
+    mjrfRenderableParams params;
+    mjrf_defaultRenderableParams(&params);
+    slot.renderable = CreateRenderable(ctx_, params);
+    mjrf_setRenderableGeomMesh(slot.renderable.get(), geom_type, 3, 3, 3);
+  }
+  return pool.slots[pool.used++];
+}
+
+void SceneBridge::UpdateSwarmSlot(SwarmSlot& slot, const float4& color,
+                                  const float* size, const float* pos,
+                                  const float* rot) {
+  mjrf_setRenderableSize(slot.renderable.get(), size);
+  mjrf_setRenderableTransform(slot.renderable.get(), pos, rot);
+  if (slot.color != color) {
+    mjrfMaterial material;
+    mjrf_defaultMaterial(&material);
+    material.color[0] = color.x;
+    material.color[1] = color.y;
+    material.color[2] = color.z;
+    material.color[3] = color.w;
+    mjrf_setRenderableMaterial(slot.renderable.get(), &material);
+    slot.color = color;
+  }
+  if (!slot.in_scene) {
+    mjrf_addRenderableToScene(scene_, slot.renderable.get());
+    slot.in_scene = true;
+  }
+}
+
+void SceneBridge::SweepPools() {
+  auto sweep = [this](auto& pool) {
+    for (size_t i = pool.used; i < pool.slots.size(); ++i) {
+      auto& slot = pool.slots[i];
+      if (slot.in_scene) {
+        mjrf_removeRenderableFromScene(scene_, slot.renderable.get());
+        slot.in_scene = false;
+      }
+    }
+    pool.used = 0;
+  };
+  for (auto& [key, pool] : pools_) {
+    sweep(pool);
+  }
+  sweep(flex_vert_pool_);
+  sweep(flex_edge_pool_);
 }
 
 void SceneBridge::UploadMesh(const mjModel* model, int id) {
