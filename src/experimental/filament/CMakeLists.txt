@@ -48,3 +48,8 @@ target_link_libraries(${MUJOCO_FILAMENT_EXPERIMENTAL_TARGET_NAME}
 )
 
 add_library(mujoco::filament_experimental ALIAS ${MUJOCO_FILAMENT_EXPERIMENTAL_TARGET_NAME})
+
+if(MUJOCO_USE_FILAMENT_MJR_COMPAT)
+    add_executable(reconciler_benchmark compat/reconciler_benchmark.cc)
+    target_link_libraries(reconciler_benchmark mujoco::filament_experimental mujoco)
+endif()

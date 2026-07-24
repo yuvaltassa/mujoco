@@ -158,6 +158,10 @@ mjrfMesh* mjrf_createMesh(mjrfContext* ctx, const mjrfMeshData* data) {
 
 void mjrf_destroyMesh(mjrfMesh* mesh) { delete mujoco::Mesh::downcast(mesh); }
 
+void mjrf_updateMeshVertexData(mjrfMesh* mesh, const mjrfMeshData* data) {
+  mujoco::Mesh::downcast(mesh)->UpdateVertexData(*data);
+}
+
 mjrfScene* mjrf_createScene(mjrfContext* ctx, const mjrfSceneParams* params) {
   return new mujoco::SceneView(
       mujoco::FilamentContext::downcast(ctx)->GetObjectManager(),

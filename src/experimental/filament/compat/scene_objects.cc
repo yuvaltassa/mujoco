@@ -103,8 +103,8 @@ static std::span<const int> GetIndices(const mjModel* model,
   }
 }
 
-static bool UpdateSkinFlexMeshData(mjrfMeshData* data, const mjModel* model,
-                                   const mjvScene* scene, const mjvGeom& geom) {
+static bool FillSkinFlexMeshData(mjrfMeshData* data, const mjModel* model,
+                                 const mjvScene* scene, const mjvGeom& geom) {
   auto positions = GetPositions(model, scene, geom);
   if (positions.empty()) {
     return false;
@@ -142,27 +142,40 @@ static bool UpdateSkinFlexMeshData(mjrfMeshData* data, const mjModel* model,
 
 SceneObjects::SceneObjects(mjrfContext* ctx) : ctx_(ctx) {}
 
-bool SceneObjects::CreateSkinFlexMesh(const mjvScene* scene,
+bool SceneObjects::UpdateSkinFlexMesh(const mjvScene* scene,
                                       const mjModel* model,
                                       const mjvGeom& geom) {
   mjrfMeshData data;
   mjrf_defaultMeshData(&data);
-  if (!UpdateSkinFlexMeshData(&data, model, scene, geom)) {
+  if (!FillSkinFlexMeshData(&data, model, scene, geom)) {
     return false;
   }
-  if (geom.type == mjGEOM_FLEX) {
-    flexes_.insert_or_assign(geom.objid, CreateMesh(ctx_, data));
-  } else if (geom.type == mjGEOM_SKIN) {
-    skins_.insert_or_assign(geom.objid, CreateMesh(ctx_, data));
-  } else {
+
+  const bool is_flex = geom.type == mjGEOM_FLEX;
+  if (!is_flex && geom.type != mjGEOM_SKIN) {
     mju_error("Unsupported dynamic mesh type: %d", geom.type);
   }
+  DynamicMesh& entry = is_flex ? flexes_[geom.objid] : skins_[geom.objid];
+
+  // (Re)create the mesh when the frame's data does not fit the existing
+  // buffers, and upload in place otherwise. Skin vertex counts are constant
+  // and flex face counts rarely change, so the steady state is an in-place
+  // update; the number of active faces is handled by the draw range.
+  if (!entry.mesh || data.num_vertices > entry.vertex_capacity ||
+      data.num_attributes != entry.num_attributes) {
+    entry.mesh = CreateMesh(ctx_, data);
+    entry.vertex_capacity = data.num_vertices;
+    entry.num_attributes = data.num_attributes;
+  } else {
+    mjrf_updateMeshVertexData(entry.mesh.get(), &data);
+  }
+  entry.num_indices = data.num_indices;
   return true;
 }
 
 const mjrfMesh* SceneObjects::GetFlexMesh(int geom_id) const {
   if (auto it = flexes_.find(geom_id); it != flexes_.end()) {
-    return it->second.get();
+    return it->second.mesh.get();
   }
   mju_error("Unknown flex mesh %d", geom_id);
   return nullptr;
@@ -170,9 +183,17 @@ const mjrfMesh* SceneObjects::GetFlexMesh(int geom_id) const {
 
 const mjrfMesh* SceneObjects::GetSkinMesh(int geom_id) const {
   if (auto it = skins_.find(geom_id); it != skins_.end()) {
-    return it->second.get();
+    return it->second.mesh.get();
   }
   mju_error("Unknown skin mesh %d", geom_id);
   return nullptr;
+}
+
+int SceneObjects::GetFlexIndexCount(int geom_id) const {
+  if (auto it = flexes_.find(geom_id); it != flexes_.end()) {
+    return static_cast<int>(it->second.num_indices);
+  }
+  mju_error("Unknown flex mesh %d", geom_id);
+  return 0;
 }
 }  // namespace mujoco

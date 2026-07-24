@@ -22,6 +22,7 @@
 #include <memory>
 #include <mutex>
 #include <utility>
+#include <vector>
 
 #include <backend/BufferDescriptor.h>
 #include <filament/Box.h>
@@ -180,6 +181,17 @@ void Mesh::BuildVertexBuffer(const mjrfMeshData& data) {
     mju_error("Cannot support normals with interleaved vertex attributes.");
   }
 
+  // Record the layout so that UpdateVertexData can validate against it.
+  vertex_capacity_ = data.num_vertices;
+  interleaved_ = data.interleaved;
+  num_attributes_ = data.num_attributes;
+  total_vertex_size_ = 0;
+  for (int i = 0; i < data.num_attributes; ++i) {
+    attribute_meta_[i] = data.attributes[i];
+    attribute_meta_[i].bytes = nullptr;
+    total_vertex_size_ += VertexAttributeTypeSize(data.attributes[i]);
+  }
+
   // Build the vertex buffer.
   filament::VertexBuffer::Builder vb_builder;
   vb_builder.vertexCount(data.num_vertices);
@@ -189,12 +201,8 @@ void Mesh::BuildVertexBuffer(const mjrfMeshData& data) {
     // contains the data in the order specified by the attributes array,
     // starting from the first attribute's payload.
     vb_builder.bufferCount(1);
-    int total_vertex_size = 0;
-    for (int i = 0; i < data.num_attributes; ++i) {
-      total_vertex_size += VertexAttributeTypeSize(data.attributes[i]);
-    }
     const void* bytes = data.attributes[0].bytes;
-    const size_t nbytes = data.num_vertices * total_vertex_size;
+    const size_t nbytes = data.num_vertices * total_vertex_size_;
 
     // We assume the buffer is tightly packed with no padding between
     // attributes. As such, the stride is equal to the total vertex size and
@@ -204,7 +212,7 @@ void Mesh::BuildVertexBuffer(const mjrfMeshData& data) {
       const mjrVertexAttribute& attrib = data.attributes[i];
       const filament::VertexAttribute usage = GetUsage(attrib);
       filament::VertexBuffer::AttributeType type = GetType(attrib);
-      vb_builder.attribute(usage, 0, type, offset, total_vertex_size);
+      vb_builder.attribute(usage, 0, type, offset, total_vertex_size_);
       if (usage == filament::VertexAttribute::COLOR) {
         vb_builder.normalized(usage);
       }
@@ -233,7 +241,6 @@ void Mesh::BuildVertexBuffer(const mjrfMeshData& data) {
       }
       attributes_[i] = usage;
     }
-    num_attributes_ = data.num_attributes;
     vertex_buffer_ = vb_builder.build(*engine_);
 
     // Assign the individual data buffers.
@@ -290,15 +297,99 @@ void Mesh::BuildIndexBuffer(const mjrfMeshData& data) {
   index_buffer_->setBuffer(*engine_, std::move(desc));
 }
 
-float4* Mesh::BuildOrientationsFromNormals(int num_vertices,
-                                           const mjrVertexAttribute& normals) {
+// Converts float3 normals to the float4 orientation quaternions expected by
+// filament. The caller owns the returned array.
+static float4* ComputeOrientationsFromNormals(int num_vertices,
+                                              const void* normals) {
   float4* orientations = new float4[num_vertices];
-  shared_state_->callbacks.push_back([=]() { delete[] orientations; });
-  const float* normals_ptr = reinterpret_cast<const float*>(normals.bytes);
+  const float* normals_ptr = reinterpret_cast<const float*>(normals);
   for (int i = 0; i < num_vertices; ++i) {
     orientations[i] = CalculateOrientation(ReadFloat3(normals_ptr, i));
   }
   return orientations;
+}
+
+float4* Mesh::BuildOrientationsFromNormals(int num_vertices,
+                                           const mjrVertexAttribute& normals) {
+  float4* orientations =
+      ComputeOrientationsFromNormals(num_vertices, normals.bytes);
+  shared_state_->callbacks.push_back([=]() { delete[] orientations; });
+  return orientations;
+}
+
+namespace {
+// State that must outlive an UpdateVertexData call: conversion scratch
+// buffers and the caller's release callback. Each buffer descriptor passed to
+// filament holds one reference; the last one released frees the scratch
+// buffers and fires the callback.
+struct UpdateState {
+  mjrfCallback release = nullptr;
+  void* user_data = nullptr;
+  std::vector<float4*> scratch;
+  ~UpdateState() {
+    for (float4* buffer : scratch) {
+      delete[] buffer;
+    }
+    if (release) {
+      release(user_data);
+    }
+  }
+};
+}  // namespace
+
+void Mesh::UpdateVertexData(const mjrfMeshData& data) {
+  if (data.num_vertices == 0) {
+    mju_error("mjrfMeshData has no vertices.");
+  }
+  if (data.num_vertices > vertex_capacity_) {
+    mju_error("Vertex count (%lld) exceeds the created vertex count (%lld).",
+              (long long)data.num_vertices, (long long)vertex_capacity_);
+  }
+  if (data.interleaved != interleaved_ ||
+      data.num_attributes != num_attributes_) {
+    mju_error("Vertex layout does not match the layout at mesh creation.");
+  }
+  for (int i = 0; i < num_attributes_; ++i) {
+    if (data.attributes[i].usage != attribute_meta_[i].usage ||
+        data.attributes[i].type != attribute_meta_[i].type) {
+      mju_error("Vertex attribute %d does not match mesh creation.", i);
+    }
+  }
+
+  auto state = std::make_shared<UpdateState>();
+  state->release = data.release;
+  state->user_data = data.user_data;
+
+  auto callback = +[](void* buffer, size_t size, void* user) {
+    delete static_cast<std::shared_ptr<UpdateState>*>(user);
+  };
+
+  if (interleaved_) {
+    const void* bytes = data.attributes[0].bytes;
+    const size_t nbytes = data.num_vertices * total_vertex_size_;
+    auto* user_data = new std::shared_ptr<UpdateState>(state);
+    vertex_buffer_->setBufferAt(*engine_, 0,
+                                {bytes, nbytes, callback, user_data});
+  } else {
+    for (int i = 0; i < num_attributes_; ++i) {
+      const mjrVertexAttribute& attrib = data.attributes[i];
+      const void* bytes = attrib.bytes;
+      size_t nbytes = data.num_vertices * VertexAttributeTypeSize(attrib);
+      if (attrib.usage == mjVERTEX_ATTRIBUTE_USAGE_NORMAL) {
+        // Replace normals with orientations, as at creation.
+        float4* orientations =
+            ComputeOrientationsFromNormals(data.num_vertices, attrib.bytes);
+        state->scratch.push_back(orientations);
+        bytes = orientations;
+        nbytes = data.num_vertices * sizeof(float4);
+      }
+      auto* user_data = new std::shared_ptr<UpdateState>(state);
+      vertex_buffer_->setBufferAt(*engine_, i,
+                                  {bytes, nbytes, callback, user_data});
+    }
+  }
+
+  UpdateBounds(data);
 }
 
 void Mesh::UpdateBounds(const mjrfMeshData& data) {
@@ -350,8 +441,8 @@ filament::RenderableManager::PrimitiveType Mesh::GetPrimitiveType() const {
 
 bool Mesh::HasVertexAttribute(mjrVertexAttributeUsage attrib) const {
   auto fattrib = GetUsage(mjrVertexAttribute{.usage = attrib});
-  auto it = std::find(attributes_.begin(), attributes_.end(), fattrib);
-  return it != attributes_.end();
+  auto end = attributes_.begin() + num_attributes_;
+  return std::find(attributes_.begin(), end, fattrib) != end;
 }
 
 bool Mesh::HasBounds() const { return bounds_.has_value(); }

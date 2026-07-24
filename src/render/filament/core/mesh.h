@@ -43,6 +43,11 @@ class Mesh : public mjrfMesh {
   Mesh(const Mesh&) = delete;
   Mesh& operator=(const Mesh&) = delete;
 
+  // Updates the contents of the vertex buffer. The attribute layout must
+  // match the layout at creation and num_vertices must not exceed the created
+  // vertex count. See mjrf_updateMeshVertexData.
+  void UpdateVertexData(const mjrfMeshData& data);
+
   // Returns the filament IndexBuffer for the mesh.
   filament::IndexBuffer* GetFilamentIndexBuffer() const;
 
@@ -90,6 +95,12 @@ class Mesh : public mjrfMesh {
   std::shared_ptr<SharedState> shared_state_;
   std::array<filament::VertexAttribute, mjMAX_VERTEX_ATTRIBUTES> attributes_;
   int num_attributes_ = 0;
+
+  // Layout recorded at creation, validated against by UpdateVertexData.
+  std::array<mjrVertexAttribute, mjMAX_VERTEX_ATTRIBUTES> attribute_meta_;
+  mjtSize vertex_capacity_ = 0;
+  int total_vertex_size_ = 0;
+  bool interleaved_ = false;
 };
 
 }  // namespace mujoco
