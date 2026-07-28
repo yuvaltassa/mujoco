@@ -2007,7 +2007,7 @@ void mjCMesh::CopyGraph() {
 
 
 
-// make a mesh of a hemisphere (quad projected)
+// make a mesh of a hemisphere (octahedral, rows spaced by arc length)
 void mjCMesh::MakeHemisphere(int res, bool make_faces, bool make_cap) {
   constexpr double kNorthPole[3] = {0, 0, 1};
   constexpr double kEquator[4][3] = {
@@ -2030,28 +2030,28 @@ void mjCMesh::MakeHemisphere(int res, bool make_faces, bool make_cap) {
   // iterate through rows from north pole to equator, compute vertices
   int v = 1;
   for (int row = 0; row <= res; row++) {
+    // polar angle of the row, arc angle between the row's corner points
+    double phi = 0.5 * mjPI * (row + 1) / (res + 1);
+    double sphi = std::sin(phi), cphi = std::cos(phi);
+    double ang = std::acos(cphi * cphi);
+
     // iterate through the four sides
     for (int side = 0; side < 4; side++) {
-      double factor = static_cast<double>(row + 1) / (res + 1);
+      // row endpoints, on the corner meridians at polar angle phi
       double start[3], end[3];
-
-      // start and end points of current arc
       for (int i = 0; i < 3; i++) {
-        start[i] = kNorthPole[i] + factor * (kEquator[side][i] - kNorthPole[i]);
-        end[i] = kNorthPole[i] + factor * (kEquator[(side + 1) % 4][i] - kNorthPole[i]);
+        start[i] = sphi * kEquator[side][i] + cphi * kNorthPole[i];
+        end[i] = sphi * kEquator[(side + 1) % 4][i] + cphi * kNorthPole[i];
       }
 
-      // step size for interpolation along the arc
-      double delta[3];
-      for (int i = 0; i < 3; i++) {
-        delta[i] = (end[i] - start[i]) / (row + 1);
-      }
-
-      // interpolate points along the arc
+      // interpolate along the great-circle arc from start to end
       for (int i = 0; i < row + 1; i++) {
+        double t = static_cast<double>(i) / (row + 1);
+        double w1 = std::sin((1 - t) * ang);
+        double w2 = std::sin(t * ang);
         double p[3];
         for (int j = 0; j < 3; j++) {
-          p[j] = start[j] + i * delta[j];
+          p[j] = w1 * start[j] + w2 * end[j];
         }
 
         // normalize point to lie on hemisphere surface

@@ -12,6 +12,8 @@ General
   subdivision, which has near-uniform triangles. Density is controlled by
   :ref:`numslices<visual-quality-numslices>`, rounded to the nearest multiple of 4;
   :ref:`numstacks<visual-quality-numstacks>` no longer affects these geoms.
+- The vertices of the builtin ``hemisphere`` :ref:`mesh<asset-mesh>` are now spaced by arc length, matching the
+  tessellation of rendered spheres. Vertex and face counts are unchanged.
 
 Version 3.11.0 (July 27, 2026)
 ------------------------------
