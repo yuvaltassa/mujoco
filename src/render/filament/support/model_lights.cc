@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <utility>
 
@@ -136,10 +137,43 @@ void ModelLights::Prepare() {
       params.color[2] = model->light_diffuse[2];
       params.type = (mjtLightType)model->light_type[i];
       params.cast_shadows = model->light_castshadow[i];
-      // The bulb_radius is only used by DPCF or PCSS shadows. For VSM shadows,
-      // we use light_bulbradius to control the blur width.
-      params.bulb_radius = model->light_bulbradius[i];
-      params.vsm_blur_width = model->light_bulbradius[i];
+      // light_bulbradius is the radius of the emitting surface in meters. The
+      // soft shadow types consume it in different units: DPCF/PCSS expect
+      // meters for spot/point lights but tan(angular radius) for directional
+      // lights, and VSM blurs uniformly by a width in shadow map texels
+      // (maximum 125). Angular quantities use the angle the bulb subtends at
+      // the scene center; the texel size of a directional shadow map assumes
+      // the classic renderer's shadow volume, a box of half-width
+      // shadowclip * extent.
+      const float bulb_radius = model->light_bulbradius[i];
+      const float map_size = default_shadow_map_size_;
+      const float3 to_center = ReadFloat3(model->stat.center) -
+                               ReadFloat3(model->light_pos0, i);
+      const float distance = std::max(length(to_center), 1e-6f);
+      const float bulb_angle = bulb_radius / distance;
+      params.bulb_radius = bulb_radius;
+      switch (params.type) {
+        case mjLIGHT_SPOT: {
+          const float fov =
+              2.0f * model->light_cutoff[i] * std::numbers::pi / 180.0f;
+          params.vsm_blur_width = bulb_angle * map_size / fov;
+          break;
+        }
+        case mjLIGHT_POINT:
+          params.vsm_blur_width =
+              bulb_angle * map_size / (0.5f * std::numbers::pi);
+          break;
+        case mjLIGHT_DIRECTIONAL: {
+          const float coverage =
+              2.0f * model->vis.map.shadowclip * model->stat.extent;
+          params.vsm_blur_width = bulb_radius * map_size / coverage;
+          params.bulb_radius = bulb_angle;
+          break;
+        }
+        default:
+          break;
+      }
+      params.vsm_blur_width = std::min(params.vsm_blur_width, 125.0f);
       params.range = model->light_range[i];
       params.intensity = model->light_intensity[i];
       params.shadow_map_size = default_shadow_map_size_;
