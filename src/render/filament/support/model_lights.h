@@ -47,6 +47,7 @@ class ModelLights {
   ModelObjects* model_objects_ = nullptr;
 
   UniquePtr<mjrfLight> fallback_ibl_{nullptr, nullptr};
+  UniquePtr<mjrfLight> fallback_directional_{nullptr, nullptr};
   UniquePtr<mjrfTexture> fallback_ibl_texture_{nullptr, nullptr};
   std::vector<UniquePtr<mjrfLight>> lights_;
   int default_shadow_map_size_ = 2048;

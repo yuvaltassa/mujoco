@@ -97,6 +97,10 @@ ModelLights::~ModelLights() {
     mjrf_removeLightFromScene(scene_, fallback_ibl_.get());
   }
   fallback_ibl_.reset();
+  if (fallback_directional_) {
+    mjrf_removeLightFromScene(scene_, fallback_directional_.get());
+  }
+  fallback_directional_.reset();
 }
 
 void ModelLights::Prepare() {
@@ -104,9 +108,11 @@ void ModelLights::Prepare() {
   const mjModel* model = model_objects_->GetModel();
 
   bool has_image_based_light = false;
+  bool has_directional_light = false;
   float total_light_intensity = 0.0f;
   for (int i = 0; i < model->nlight; ++i) {
     total_light_intensity += model->light_intensity[i];
+    has_directional_light |= model->light_type[i] == mjLIGHT_DIRECTIONAL;
 
     if (model->light_type[i] == mjLIGHT_IMAGE) {
       mjrfLightParams params;
@@ -160,6 +166,23 @@ void ModelLights::Prepare() {
     auto light_obj = CreateLight(ctx, params);
     mjrf_addLightToScene(scene_, light_obj.get());
     lights_.emplace_back(std::move(light_obj));
+  }
+
+  // Workaround for an upstream filament bug, present since 1.74.0
+  // (https://github.com/google/filament/issues/10249): under the non-PCF
+  // shadow types (VSM/DPCF/PCSS), a scene where a punctual (spot/point) light
+  // casts shadows renders fully black unless a directional light is also
+  // present. Mere presence suffices: zero intensity, shadows off. Keep
+  // filament's directional slot occupied with an invisible light whenever the
+  // model has no directional light.
+  if (!has_directional_light) {
+    mjrfLightParams params;
+    mjrf_defaultLightParams(&params);
+    params.type = mjLIGHT_DIRECTIONAL;
+    params.cast_shadows = 0;
+    params.intensity = 0.0f;
+    fallback_directional_ = CreateLight(ctx, params);
+    mjrf_addLightToScene(scene_, fallback_directional_.get());
   }
 
   if (!has_image_based_light && total_light_intensity > 0.0f) {
