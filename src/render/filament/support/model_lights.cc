@@ -14,6 +14,7 @@
 
 #include "render/filament/support/model_lights.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -74,6 +75,9 @@ static UniquePtr<mjrfTexture> CreateFallbackIndirectLightTexture(
 ModelLights::ModelLights(mjrfScene* scene, ModelObjects* model_objects)
     : scene_(scene), model_objects_(model_objects) {
   const mjModel* model = model_objects->GetModel();
+  // Default to the shadow map resolution in mjVisual, like the classic
+  // renderer. Filament clamps shadow map sizes to 2048.
+  default_shadow_map_size_ = std::min(model->vis.quality.shadowsize, 2048);
   default_shadow_map_size_ =
       ReadElement(model, "filament.shadows.map_size", default_shadow_map_size_);
   fallback_head_light_intensity_ =
