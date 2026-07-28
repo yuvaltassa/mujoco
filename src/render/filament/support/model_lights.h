@@ -33,6 +33,11 @@ class ModelLights {
   // Updates the state of the lights in the scene.
   void Update(const mjData* data);
 
+  // Applies changes of mjVisual quality.shadowsize to the lights' shadow
+  // maps. A filament.shadows.map_size custom element remains in effect until
+  // shadowsize is edited.
+  void UpdateShadowMapSize();
+
   // Returns the light with the given index in the mjModel. Note that an extra
   // headlight is assigned of the index `nlight`.
   mjrfLight* GetLight(int index);
@@ -51,6 +56,7 @@ class ModelLights {
   UniquePtr<mjrfTexture> fallback_ibl_texture_{nullptr, nullptr};
   std::vector<UniquePtr<mjrfLight>> lights_;
   int default_shadow_map_size_ = 2048;
+  int shadowsize_ = 0;
   float fallback_head_light_intensity_ = 0.f;
   float fallback_scene_light_intensity_ = 80'000.f;
   float fallback_environment_light_intensity_ = 5'000.f;

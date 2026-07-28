@@ -81,6 +81,7 @@ ModelLights::ModelLights(mjrfScene* scene, ModelObjects* model_objects)
   default_shadow_map_size_ = std::min(model->vis.quality.shadowsize, 2048);
   default_shadow_map_size_ =
       ReadElement(model, "filament.shadows.map_size", default_shadow_map_size_);
+  shadowsize_ = model->vis.quality.shadowsize;
   fallback_head_light_intensity_ =
       ReadElement(model, "filament.fallback.head_light_intensity",
                   fallback_head_light_intensity_);
@@ -264,8 +265,20 @@ void ModelLights::Prepare() {
   mjrf_setSceneSkybox(scene_, model_objects_->GetSkyboxTexture());
 }
 
+void ModelLights::UpdateShadowMapSize() {
+  const mjModel* model = model_objects_->GetModel();
+  if (model->vis.quality.shadowsize != shadowsize_) {
+    shadowsize_ = model->vis.quality.shadowsize;
+    const int map_size = std::min(shadowsize_, 2048);
+    for (auto& light : lights_) {
+      mjrf_setLightShadowMapSize(light.get(), map_size);
+    }
+  }
+}
+
 void ModelLights::Update(const mjData* data) {
   const mjModel* model = model_objects_->GetModel();
+  UpdateShadowMapSize();
   for (int i = 0; i <= model->nlight; ++i) {
     // Light with index nlight is the headlight.
     mjrfLight* light = lights_[i].get();
