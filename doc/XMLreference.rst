@@ -9186,16 +9186,17 @@ visualization should somehow be simplified.
 .. _visual-quality-numslices:
 
 :at:`numslices`: :at-val:`int, "28"`
-   This and the next three attributes specify the density of internally-generated meshes for geometric primitives. Such
+   This and the next two attributes specify the density of internally-generated meshes for geometric primitives. Such
    meshes are only used for rendering, while the collision detector works with the underlying analytic surfaces. This
-   value is passed to the various visualizer functions as the "slices" parameter as used in GLU. It specifies the number
-   of subdivisions around the Z-axis, similar to lines of longitude.
+   value specifies the number of azimuthal subdivisions around the Z-axis, similar to lines of longitude, and is
+   rounded to the nearest multiple of 4. Spheres and capsule caps use octahedral tessellation whose equator has this
+   resolution.
 
 .. _visual-quality-numstacks:
 
 :at:`numstacks`: :at-val:`int, "16"`
-   This value of this attribute is passed to the various visualization functions as the "stacks" parameter as used in
-   GLU. It specifies the number of subdivisions along the Z-axis, similar to lines of latitude.
+   This attribute specifies the number of subdivisions along the Z-axis of cylinders and cones, similar to lines of
+   latitude. It does not affect spheres and capsule caps, whose density is set by :at:`numslices` alone.
 
 .. _visual-quality-numquads:
 

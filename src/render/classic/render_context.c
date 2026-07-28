@@ -519,179 +519,89 @@ void mjr_uploadHField(const mjModel* m, const mjrContext* con, int hfieldid) {
 
 
 
-// set one vertex and normal on sphere, given az, el and sign(top/bottom)
-static void setVertexSphere(float* v, float* n, float az, float el, int sign) {
-  v[0] = cosf(az) * cosf(el);
-  v[1] = sinf(az) * cosf(el);
-  v[2] = sign + sinf(el);
+// set one vertex on octahedral unit hemisphere: ring k (0: pole, K: equator), vertex i in ring
+static void setVertexOcta(float* v, int i, int k, int K) {
+  // pole
+  if (k == 0) {
+    v[0] = 0;
+    v[1] = 0;
+    v[2] = 1;
+    return;
+  }
 
-  n[0] = v[0];
-  n[1] = v[1];
-  n[2] = v[2] - sign;
+  // equator: uniform azimuth, matches cylinder and disk rings exactly
+  if (k == K) {
+    float az = (2.0f*mjPI * i) / (float)(4*K);
+    v[0] = cosf(az);
+    v[1] = sinf(az);
+    v[2] = 0;
+    return;
+  }
+
+  // quadrant, and fraction along the ring arc within the quadrant
+  int q = i / k;
+  float t = (i - q*k) / (float)k;
+
+  // ring endpoints: on the corner meridians of quadrant q, at polar angle phi
+  static const float corner[5][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 0}};
+  float phi = (0.5f*mjPI * k) / (float)K;
+  float sphi = sinf(phi), cphi = cosf(phi);
+  float s[3] = {sphi*corner[q][0], sphi*corner[q][1], cphi};
+  float e[3] = {sphi*corner[q+1][0], sphi*corner[q+1][1], cphi};
+
+  // interpolate along the great-circle arc from s to e (arc angle is acos(cphi^2))
+  float ang = acosf(cphi*cphi);
+  float w1 = sinf((1-t)*ang), w2 = sinf(t*ang);
+  v[0] = w1*s[0] + w2*e[0];
+  v[1] = w1*s[1] + w2*e[1];
+  v[2] = w1*s[2] + w2*e[2];
+  mjr_normalizeVec(v);
 }
 
 
-// make half a unit sphere: +1: top, -1: bottom
-static void halfSphere(int sign, int nSlice, int nStack) {
-  float az1, az2, el1, el2;
-  float v1[3], v2[3], v3[3], v4[3];
-  float n1[3], n2[3], n3[3], n4[3];
-
-  // pole: use triangles
-  glBegin(GL_TRIANGLES);
-  el1 = (mjPI/2.0f * sign * (nStack-1)) / (float)nStack;
-  for (int j=0; j < nSlice; j++) {
-    az1 = (2.0f*mjPI * (j+0.0f)) / (float)nSlice;
-    az2 = (2.0f*mjPI * (j+1.0f)) / (float)nSlice;
-
-    // compute triangle vertices
-    setVertexSphere(v1, n1, az1, el1, sign);
-    setVertexSphere(v2, n2, az2, el1, sign);
-    v3[0] = v3[1] = 0;
-    v3[2] = 2*sign;
-    n3[0] = n3[1] = 0;
-    n3[2] = sign;
-
-    // make triangle
-    if (sign > 0) {
-      glNormal3fv(n1);
-      glVertex3fv(v1);
-      glNormal3fv(n2);
-      glVertex3fv(v2);
-      glNormal3fv(n3);
-      glVertex3fv(v3);
-    } else {
-      glNormal3fv(n3);
-      glVertex3fv(v3);
-      glNormal3fv(n2);
-      glVertex3fv(v2);
-      glNormal3fv(n1);
-      glVertex3fv(v1);
-    }
-  }
-  glEnd();
-
-  // the rest: use quads
-  glBegin(GL_QUADS);
-  for (int i=0; i < nStack-1; i++) {
-    el1 = (mjPI/2.0f * sign * (i+0)) / (float)nStack;
-    el2 = (mjPI/2.0f * sign * (i+1)) / (float)nStack;
-
-    for (int j=0; j < nSlice; j++) {
-      az1 = (2.0f*mjPI * (j+0)) / (float)nSlice;
-      az2 = (2.0f*mjPI * (j+1)) / (float)nSlice;
-
-      // compute quad vertices
-      setVertexSphere(v1, n1, az1, el1, sign);
-      setVertexSphere(v2, n2, az2, el1, sign);
-      setVertexSphere(v3, n3, az2, el2, sign);
-      setVertexSphere(v4, n4, az1, el2, sign);
-
-      // make quad
-      if (sign > 0) {
-        glNormal3fv(n1);
-        glVertex3fv(v1);
-        glNormal3fv(n2);
-        glVertex3fv(v2);
-        glNormal3fv(n3);
-        glVertex3fv(v3);
-        glNormal3fv(n4);
-        glVertex3fv(v4);
-      } else {
-        glNormal3fv(n4);
-        glVertex3fv(v4);
-        glNormal3fv(n3);
-        glVertex3fv(v3);
-        glNormal3fv(n2);
-        glVertex3fv(v2);
-        glNormal3fv(n1);
-        glVertex3fv(v1);
-      }
-    }
-  }
-  glEnd();
+// emit one hemisphere vertex: reflect if sign < 0, offset z
+static void vertexOcta(const float* v, int sign, float zoff) {
+  glNormal3f(v[0], v[1], sign*v[2]);
+  glVertex3f(v[0], v[1], zoff + sign*v[2]);
 }
 
 
+// make octahedral hemisphere with K rings: +1: top, -1: bottom; equator at z = zoff
+static void octaHemisphere(int K, int sign, float zoff) {
+  float va[3], vb[3], vc[3];
 
-// make unit sphere
-static void sphere(int nSlice, int nStack) {
-  float az1, az2, el1, el2;
-  float v1[3], v2[3], v3[3], v4[3];
-  float n1[3], n2[3], n3[3], n4[3];
-
-  // poles: use triangles
   glBegin(GL_TRIANGLES);
-  for (int sign=-1; sign <= 1; sign+=2) {
-    el1 = (0.5*mjPI * sign * (nStack/2-1)) / (float)(nStack/2);
-    for (int j=0; j < nSlice; j++) {
-      az1 = (2.0f*mjPI * (j+0.0f)) / (float)nSlice;
-      az2 = (2.0f*mjPI * (j+1.0f)) / (float)nSlice;
-
-      // compute triangle vertices
-      setVertexSphere(v1, n1, az1, el1, 0);
-      setVertexSphere(v2, n2, az2, el1, 0);
-      v3[0] = v3[1] = 0;
-      v3[2] = sign;
-      n3[0] = n3[1] = 0;
-      n3[2] = sign;
-
-      // make triangle
-      if (sign > 0) {
-        glNormal3fv(n1);
-        glVertex3fv(v1);
-        glNormal3fv(n2);
-        glVertex3fv(v2);
-        glNormal3fv(n3);
-        glVertex3fv(v3);
-      } else {
-        glNormal3fv(n3);
-        glVertex3fv(v3);
-        glNormal3fv(n2);
-        glVertex3fv(v2);
-        glNormal3fv(n1);
-        glVertex3fv(v1);
-      }
-    }
-  }
-  glEnd();
-
-  // the rest: use quads
-  glBegin(GL_QUADS);
-  for (int sign=-1; sign <= 1; sign+=2) {
-    for (int i=0; i < nStack/2-1; i++) {
-      el1 = (0.5*mjPI * sign * (i+0)) / (float)(nStack/2);
-      el2 = (0.5*mjPI * sign * (i+1)) / (float)(nStack/2);
-
-      for (int j=0; j < nSlice; j++) {
-        az1 = (2.0f*mjPI * (j+0)) / (float)nSlice;
-        az2 = (2.0f*mjPI * (j+1)) / (float)nSlice;
-
-        // compute quad vertices
-        setVertexSphere(v1, n1, az1, el1, 0);
-        setVertexSphere(v2, n2, az2, el1, 0);
-        setVertexSphere(v3, n3, az2, el2, 0);
-        setVertexSphere(v4, n4, az1, el2, 0);
-
-        // make quad
+  for (int k=1; k <= K; k++) {
+    for (int q=0; q < 4; q++) {
+      for (int j=0; j < k; j++) {
+        // triangle with edge on ring k, apex on ring k-1
+        setVertexOcta(va, q*k + j, k, K);
+        setVertexOcta(vb, (q*k + j + 1) % (4*k), k, K);
+        setVertexOcta(vc, k > 1 ? (q*(k-1) + j) % (4*(k-1)) : 0, k-1, K);
         if (sign > 0) {
-          glNormal3fv(n1);
-          glVertex3fv(v1);
-          glNormal3fv(n2);
-          glVertex3fv(v2);
-          glNormal3fv(n3);
-          glVertex3fv(v3);
-          glNormal3fv(n4);
-          glVertex3fv(v4);
+          vertexOcta(va, sign, zoff);
+          vertexOcta(vb, sign, zoff);
+          vertexOcta(vc, sign, zoff);
         } else {
-          glNormal3fv(n4);
-          glVertex3fv(v4);
-          glNormal3fv(n3);
-          glVertex3fv(v3);
-          glNormal3fv(n2);
-          glVertex3fv(v2);
-          glNormal3fv(n1);
-          glVertex3fv(v1);
+          vertexOcta(vc, sign, zoff);
+          vertexOcta(vb, sign, zoff);
+          vertexOcta(va, sign, zoff);
+        }
+
+        // triangle with edge on ring k-1, apex on ring k
+        if (j < k-1) {
+          setVertexOcta(va, (q*k + j + 1) % (4*k), k, K);
+          setVertexOcta(vb, (q*(k-1) + j + 1) % (4*(k-1)), k-1, K);
+          setVertexOcta(vc, (q*(k-1) + j) % (4*(k-1)), k-1, K);
+          if (sign > 0) {
+            vertexOcta(va, sign, zoff);
+            vertexOcta(vb, sign, zoff);
+            vertexOcta(vc, sign, zoff);
+          } else {
+            vertexOcta(vc, sign, zoff);
+            vertexOcta(vb, sign, zoff);
+            vertexOcta(va, sign, zoff);
+          }
         }
       }
     }
@@ -971,22 +881,27 @@ static void makeBuiltin(const mjModel* m, mjrContext* con) {
   int numquads  = m->vis.quality.numquads;
   float d = 2.0f/numquads;
 
+  // rings per hemisphere; rounds numslices to the nearest multiple of 4
+  int K = mjMAX(1, (numslices + 2) / 4);
+  numslices = 4*K;
+
   // allocate list
   listAllocate(&con->baseBuiltin, &con->rangeBuiltin, mjrNUM);
 
   // sphere
   glNewList(con->baseBuiltin + mjrSPHERE, GL_COMPILE);
-  sphere(numslices, numstacks);
+  octaHemisphere(K, +1, 0);
+  octaHemisphere(K, -1, 0);
   glEndList();
 
   // sphere top
   glNewList(con->baseBuiltin + mjrSPHERETOP, GL_COMPILE);
-  halfSphere(+1, numslices, numstacks/2);
+  octaHemisphere(K, +1, +1);
   glEndList();
 
   // sphere bottom
   glNewList(con->baseBuiltin + mjrSPHEREBOTTOM, GL_COMPILE);
-  halfSphere(-1, numslices, numstacks/2);
+  octaHemisphere(K, -1, -1);
   glEndList();
 
   // closed cylinder, center at z=0

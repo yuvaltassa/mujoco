@@ -2,6 +2,17 @@
 Changelog
 =========
 
+Upcoming version (not yet released)
+-----------------------------------
+
+General
+^^^^^^^
+
+- Changed the tessellation of spheres and capsule caps in both renderers from latitude/longitude gridding to octahedral
+  subdivision, which has near-uniform triangles. Density is controlled by
+  :ref:`numslices<visual-quality-numslices>`, rounded to the nearest multiple of 4;
+  :ref:`numstacks<visual-quality-numstacks>` no longer affects these geoms.
+
 Version 3.11.0 (July 27, 2026)
 ------------------------------
 

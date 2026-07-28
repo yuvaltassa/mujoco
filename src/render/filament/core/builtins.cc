@@ -14,6 +14,7 @@
 
 #include "render/filament/core/builtins.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -455,95 +456,111 @@ class DiskBuilder : public BuiltinBuilder {
   }
 };
 
+// Position of vertex i on ring k of an octahedral hemisphere with num_rings
+// rings (ring 0 is the pole, ring k has 4k vertices, ring num_rings is the
+// equator). Vertices are spaced by arc length along each ring's great-circle
+// arc, so the equator matches the uniform rings of TubeBuilder and DiskBuilder.
+static float3 OctaVertex(int i, int k, int num_rings) {
+  if (k == 0) {
+    return {0, 0, 1};
+  }
+  if (k == num_rings) {
+    const float az = 2.0f * std::numbers::pi * i / (4 * num_rings);
+    return {std::cos(az), std::sin(az), 0};
+  }
+
+  // Ring endpoints on the corner meridians of quadrant q, at polar angle phi.
+  static constexpr float kCorner[5][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1},
+                                          {1, 0}};
+  const int q = i / k;
+  const float t = static_cast<float>(i - q * k) / k;
+  const float phi = 0.5f * std::numbers::pi * k / num_rings;
+  const float sphi = std::sin(phi);
+  const float cphi = std::cos(phi);
+  const float3 s{sphi * kCorner[q][0], sphi * kCorner[q][1], cphi};
+  const float3 e{sphi * kCorner[q + 1][0], sphi * kCorner[q + 1][1], cphi};
+
+  // Interpolate along the great-circle arc from s to e (arc angle is
+  // acos(cphi^2)).
+  const float ang = std::acos(cphi * cphi);
+  return normalize(std::sin((1 - t) * ang) * s + std::sin(t * ang) * e);
+}
+
+// Index of vertex i on ring k in the octahedral hemisphere vertex layout
+// (pole first, then rings of 4k vertices).
+static int OctaIndex(int i, int k) {
+  return k == 0 ? 0 : 1 + 2 * k * (k - 1) + i;
+}
+
+// Appends the triangles of an octahedral hemisphere. The index function maps
+// (ring, vertex-in-ring) to a vertex buffer index; flip reverses the winding
+// for a -z hemisphere.
+template <typename IndexFn>
+static void AppendOctaIndices(int num_rings, bool flip, const IndexFn& index,
+                              std::vector<uint16_t>& indices) {
+  auto push = [&](int a, int b, int c) {
+    indices.push_back(a);
+    indices.push_back(flip ? c : b);
+    indices.push_back(flip ? b : c);
+  };
+  for (int k = 1; k <= num_rings; ++k) {
+    for (int q = 0; q < 4; ++q) {
+      for (int j = 0; j < k; ++j) {
+        const int a = index(k, q * k + j);
+        const int b = index(k, (q * k + j + 1) % (4 * k));
+        const int c = index(k - 1, k > 1 ? (q * (k - 1) + j) % (4 * (k - 1)) : 0);
+        push(a, b, c);
+        if (j < k - 1) {
+          const int d = index(k - 1, (q * (k - 1) + j + 1) % (4 * (k - 1)));
+          push(b, d, c);
+        }
+      }
+    }
+  }
+}
+
 class SphereBuilder : public BuiltinBuilder {
  public:
-  SphereBuilder(int num_stacks, int num_slices) {
-    static constexpr uint16_t kNorthPoleIndex = 0;
-    static constexpr uint16_t kSouthPoleIndex = 1;
-
-    const int num_vertices = (num_stacks * num_slices) + 2;  // +2 for poles
+  explicit SphereBuilder(int num_rings) {
+    const int num_top = 1 + 2 * num_rings * (num_rings + 1);
+    const int num_vertices = 4 * num_rings * num_rings + 2;
     positions_.reserve(num_vertices);
     orientations_.reserve(num_vertices);
 
-    const float lat_angle_delta =
-        std::numbers::pi / static_cast<float>(num_stacks + 1);
-    const float lon_angle_delta =
-        2.0 * std::numbers::pi / static_cast<float>(num_slices);
-
-    // Add the north and south poles.
-    AppendVert(0, 0, 1);
-    AppendVert(0, 0, -1);
-
-    // Vertices by latitude.
-    for (int lat = 0; lat < num_stacks; ++lat) {
-      // +1 because we handle the north pole (which would be at a lat angle of
-      // 0-degrees) explicitly.
-      const float lat_angle = static_cast<float>(lat + 1) * lat_angle_delta;
-      const float cos_lat_angle = std::cos(lat_angle);
-      const float sin_lat_angle = std::sin(lat_angle);
-      const float z = cos_lat_angle;
-
-      for (int lon = 0; lon < num_slices; ++lon) {
-        const float lon_angle = static_cast<float>(lon) * lon_angle_delta;
-
-        const float cos_lon_angle = std::cos(lon_angle);
-        const float sin_lon_angle = std::sin(lon_angle);
-
-        const float x = sin_lat_angle * cos_lon_angle;
-        const float y = sin_lat_angle * sin_lon_angle;
-        AppendVert(x, y, z);
+    // Top hemisphere: pole and rings 1..num_rings (the equator).
+    for (int k = 0; k <= num_rings; ++k) {
+      for (int i = 0; i < (k ? 4 * k : 1); ++i) {
+        AppendVert(OctaVertex(i, k, num_rings));
       }
     }
 
-    const size_t num_tris_polar_cap = num_slices;
-    const size_t num_quads_body = num_slices * (num_stacks - 1);
-    const int num_indices = (2 * num_tris_polar_cap * kNumIndicesPerTriangle) +
-                            (num_quads_body * kNumIndicesPerQuad);
+    // Bottom hemisphere: pole and rings 1..num_rings-1, mirrored in z; the
+    // equator ring is shared with the top hemisphere.
+    for (int k = 0; k < num_rings; ++k) {
+      for (int i = 0; i < (k ? 4 * k : 1); ++i) {
+        const float3 pt = OctaVertex(i, k, num_rings);
+        AppendVert({pt.x, pt.y, -pt.z});
+      }
+    }
+
+    const int num_indices =
+        2 * 4 * num_rings * num_rings * kNumIndicesPerTriangle;
     indices_.reserve(num_indices);
-
-    // The first two vertices are the poles, so the first vertex in the first
-    // row starts at index 2.
-    uint16_t row_start = kSouthPoleIndex + 1;
-
-    // North polar cap.
-    for (int lon = 0; lon < num_slices; ++lon) {
-      const int next = lon < (num_slices - 1) ? lon + 1 : 0;
-      indices_.push_back(kNorthPoleIndex);
-      indices_.push_back(row_start + lon);
-      indices_.push_back(row_start + next);
-    }
-
-    // Latitudinal triangle strips.
-    for (int lat = 0; lat < num_stacks - 1; lat++) {
-      const uint16_t north_start = row_start;
-      const uint16_t south_start = row_start + num_slices;
-      for (int lon = 0; lon < num_slices; ++lon) {
-        // The offset to the index that is adjacent to the current index.
-        const int adjacent = lon < (num_slices - 1) ? lon + 1 : 0;
-
-        const int i0 = (north_start + lon);
-        const int i1 = (south_start + lon);
-        const int i2 = (south_start + adjacent);
-        const int i3 = (north_start + adjacent);
-        AppendQuadIndices(indices_, i0, i1, i2, i3);
-      }
-      row_start += num_slices;
-    }
-
-    // South polar cap.
-    for (int lon = 0; lon < num_slices; ++lon) {
-      const int adjacent = lon < (num_slices - 1) ? lon + 1 : 0;
-      indices_.push_back(kSouthPoleIndex);
-      indices_.push_back(row_start + adjacent);
-      indices_.push_back(row_start + lon);
-    }
+    AppendOctaIndices(
+        num_rings, false, [](int k, int i) { return OctaIndex(i, k); },
+        indices_);
+    AppendOctaIndices(
+        num_rings, true,
+        [num_top, num_rings](int k, int i) {
+          return k == num_rings ? OctaIndex(i, k) : num_top + OctaIndex(i, k);
+        },
+        indices_);
 
     SetBounds({-1, -1, -1}, {1, 1, 1});
   }
 
  private:
-  void AppendVert(float x, float y, float z) {
-    const float3 pt{x, y, z};
+  void AppendVert(const float3& pt) {
     positions_.push_back(pt);
     orientations_.push_back(CalculateOrientation(pt));
   }
@@ -551,83 +568,28 @@ class SphereBuilder : public BuiltinBuilder {
 
 class DomeBuilder : public BuiltinBuilder {
  public:
-  DomeBuilder(int num_stacks, int num_slices) {
-    static constexpr uint16_t kPoleIndex = 0;
-
-    const int num_vertices = (num_stacks * num_slices) + 1;  // +1 for poles
+  explicit DomeBuilder(int num_rings) {
+    const int num_vertices = 1 + 2 * num_rings * (num_rings + 1);
     positions_.reserve(num_vertices);
     orientations_.reserve(num_vertices);
 
-    const float lat_angle_delta =
-        0.5 * std::numbers::pi / static_cast<float>(num_stacks);
-    const float lon_angle_delta =
-        2.0 * std::numbers::pi / static_cast<float>(num_slices);
-
-    // Add the pole.
-    AppendVert(0, 0, 1);
-
-    // Vertices by latitude.
-    for (int lat = 0; lat < num_stacks; ++lat) {
-      // +1 because we handle the north pole (which would be at a lat angle of
-      // 0-degrees) explicitly.
-      const float lat_angle = static_cast<float>(lat + 1) * lat_angle_delta;
-      const float cos_lat_angle = std::cos(lat_angle);
-      const float sin_lat_angle = std::sin(lat_angle);
-      const float z = cos_lat_angle;
-
-      for (int lon = 0; lon < num_slices; ++lon) {
-        const float lon_angle = static_cast<float>(lon) * lon_angle_delta;
-        const float cos_lon_angle = std::cos(lon_angle);
-        const float sin_lon_angle = std::sin(lon_angle);
-
-        const float x = sin_lat_angle * cos_lon_angle;
-        const float y = sin_lat_angle * sin_lon_angle;
-        AppendVert(x, y, z);
+    for (int k = 0; k <= num_rings; ++k) {
+      for (int i = 0; i < (k ? 4 * k : 1); ++i) {
+        AppendVert(OctaVertex(i, k, num_rings));
       }
     }
 
-    const size_t num_tris_polar_cap = num_slices;
-    const size_t num_quads_body = num_slices * (num_stacks - 1);
-    const int num_indices = (num_tris_polar_cap * kNumIndicesPerTriangle) +
-                            (num_quads_body * kNumIndicesPerQuad);
+    const int num_indices = 4 * num_rings * num_rings * kNumIndicesPerTriangle;
     indices_.reserve(num_indices);
-
-    // The first vertex is the poles, so the first vertex in the first row
-    // starts at index 1.
-    uint16_t row_start = kPoleIndex + 1;
-
-    // North polar cap.
-    for (int lon = 0; lon < num_slices; ++lon) {
-      const int next = lon < (num_slices - 1) ? lon + 1 : 0;
-      indices_.push_back(kPoleIndex);
-      indices_.push_back(row_start + lon);
-      indices_.push_back(row_start + next);
-    }
-
-    // Latitudinal quad strips.  The first "stack" was handled above, so we
-    // only need to iterate over N-1 stacks.
-    for (int lat = 0; lat < num_stacks - 1; lat++) {
-      const int north_start = row_start;
-      const int south_start = row_start + num_slices;
-      for (int lon = 0; lon < num_slices; ++lon) {
-        // The offset to the index that is adjacent to the current index.
-        const int adjacent = lon < (num_slices - 1) ? lon + 1 : 0;
-
-        const int i0 = (north_start + lon);
-        const int i1 = (south_start + lon);
-        const int i2 = (south_start + adjacent);
-        const int i3 = (north_start + adjacent);
-        AppendQuadIndices(indices_, i0, i1, i2, i3);
-      }
-      row_start += num_slices;
-    }
+    AppendOctaIndices(
+        num_rings, false, [](int k, int i) { return OctaIndex(i, k); },
+        indices_);
 
     SetBounds({-1, -1, 0}, {1, 1, 1});
   }
 
  private:
-  void AppendVert(float x, float y, float z) {
-    const float3 pt{x, y, z};
+  void AppendVert(const float3& pt) {
     positions_.push_back(pt);
     orientations_.push_back(CalculateOrientation(pt));
   }
@@ -635,15 +597,20 @@ class DomeBuilder : public BuiltinBuilder {
 
 Builtins::Builtins(filament::Engine* engine, int nstack, int nslice,
                    int nquad) {
+  // Rings per octahedral hemisphere; rounds nslice to the nearest multiple of
+  // 4 so that sphere and dome equators match the tube and disk rings.
+  const int nring = std::max(1, (nslice + 2) / 4);
+  nslice = 4 * nring;
+
   line_ = BuiltinBuilder::Create<LineBuilder>(engine);
   plane_ = BuiltinBuilder::Create<PlaneBuilder>(engine, nquad);
   triangle_ = BuiltinBuilder::Create<TriangleBuilder>(engine);
   box_ = BuiltinBuilder::Create<BoxBuilder>(engine, nquad);
   line_box_ = BuiltinBuilder::Create<LineBoxBuilder>(engine);
-  sphere_ = BuiltinBuilder::Create<SphereBuilder>(engine, nstack, nslice);
+  sphere_ = BuiltinBuilder::Create<SphereBuilder>(engine, nring);
   tube_ = BuiltinBuilder::Create<TubeBuilder>(engine, nstack, nslice);
   disk_ = BuiltinBuilder::Create<DiskBuilder>(engine, nslice);
-  dome_ = BuiltinBuilder::Create<DomeBuilder>(engine, nstack, nslice);
+  dome_ = BuiltinBuilder::Create<DomeBuilder>(engine, nring);
   cone_ = BuiltinBuilder::Create<ConeBuilder>(engine, nstack, nslice);
 }
 
