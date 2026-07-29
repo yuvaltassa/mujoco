@@ -10,6 +10,9 @@ Bug fixes
 
 1. Fixed a bug in the GJK simplex distance computation which could flip the sign of the distance reported by
    :ref:`mj_geomDistance`, returning deep penetration for well-separated geoms. Most easily triggered by thin boxes.
+2. The native convex collider no longer runs EPA when GJK has found a separating hyperplane for geoms closer than
+   :ref:`ccd_tolerance<option-ccd_tolerance>`. Previously, EPA could report large spurious penetration depths for such
+   barely-separated pairs. Most easily triggered by thin boxes.
 
 Version 3.11.0 (July 27, 2026)
 ------------------------------

@@ -2062,6 +2062,80 @@ TEST_F(MjGjkTest, ThinBoxSeparated) {
   EXPECT_NEAR(dist, 0.011757469772747348, kTolerance);
 }
 
+TEST_F(MjGjkTest, ThinBoxGrazing) {
+  // thin boxes separated by +7.6933e-7, below the ccd_tolerance of 1e-6; EPA
+  // used to run on this separated configuration where the polytope does not
+  // contain the origin, reporting a spurious penetration of -1.2e-4
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <geom name="geom1" type="box" size="0.015108062742470629 0.00020768330936692047 0.00033708479398415232"/>
+      <geom name="geom2" type="box" size="0.0022889234034685867 0.00039019141130537644 0.00066943745945985227"/>
+    </worldbody>
+  </mujoco>)";
+
+  MjModelPtr model = LoadModelFromString(xml);
+  MjDataPtr data = MakeData(model);
+  mj_forward(model.get(), data.get());
+
+  int g1 = mj_name2id(model.get(), mjOBJ_GEOM, "geom1");
+  int g2 = mj_name2id(model.get(), mjOBJ_GEOM, "geom2");
+
+  mjtNum q1[4] = {0.0069267823129474928, 0.84183758329630409,
+                  0.43965390389996545, -0.3129951242785533};
+  mjtNum q2[4] = {0.37523931185419196, -0.55003982981469723,
+                  -0.70777023813363815, 0.23603587538521445};
+  mju_quat2Mat(data->geom_xmat + 9*g1, q1);
+  mju_quat2Mat(data->geom_xmat + 9*g2, q2);
+
+  mjtNum* xpos = data->geom_xpos + 3*g2;
+  xpos[0] = -0.0045224108719272319;
+  xpos[1] = -0.0099558526994404459;
+  xpos[2] = 0.00749543399075938;
+
+  mjtNum dist = mj_geomDistance(model.get(), data.get(), g1, g2, 1, nullptr);
+
+  // gaps below ccd_tolerance may be reported as touching but never as penetration
+  EXPECT_GE(dist, 0);
+  EXPECT_LE(dist, model->opt.ccd_tolerance);
+}
+
+TEST_F(MjGjkTest, ThinBoxGrazing2) {
+  // as above with a true gap of +7.0770e-7; the reported penetration was -1.7e-3
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <geom name="geom1" type="box" size="0.001744190608988095 0.00071505133620319958 0.00073912754623366053"/>
+      <geom name="geom2" type="box" size="6.6955935082454215e-06 0.005434029270580891 0.01001629073474259"/>
+    </worldbody>
+  </mujoco>)";
+
+  MjModelPtr model = LoadModelFromString(xml);
+  MjDataPtr data = MakeData(model);
+  mj_forward(model.get(), data.get());
+
+  int g1 = mj_name2id(model.get(), mjOBJ_GEOM, "geom1");
+  int g2 = mj_name2id(model.get(), mjOBJ_GEOM, "geom2");
+
+  mjtNum q1[4] = {-0.12873727010549196, 0.68440846733965577,
+                  0.19109541445246991, -0.69173282970725603};
+  mjtNum q2[4] = {0.31016790358469382, 0.21626682518633172,
+                  0.35925192905803854, 0.85320723354750039};
+  mju_quat2Mat(data->geom_xmat + 9*g1, q1);
+  mju_quat2Mat(data->geom_xmat + 9*g2, q2);
+
+  mjtNum* xpos = data->geom_xpos + 3*g2;
+  xpos[0] = -0.0033039673898364983;
+  xpos[1] = -0.0015831863351024567;
+  xpos[2] = 0.00049256551105367739;
+
+  mjtNum dist = mj_geomDistance(model.get(), data.get(), g1, g2, 1, nullptr);
+
+  // gaps below ccd_tolerance may be reported as touching but never as penetration
+  EXPECT_GE(dist, 0);
+  EXPECT_LE(dist, model->opt.ccd_tolerance);
+}
+
 TEST_F(MjGjkTest, EllipsoidEllipsoidIntersect) {
   static constexpr char xml[] = R"(
   <mujoco>

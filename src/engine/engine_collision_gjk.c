@@ -2385,6 +2385,22 @@ mjtNum mjc_ccd(const mjCCDConfig* config, mjCCDStatus* status, mjCCDObj* obj1, m
   }
 
   if (status->dist <= config->tolerance && status->nsimplex > 1 && config->buffer) {
+    // GJK can converge to a positive distance below tolerance for a strictly separated pair;
+    // running EPA in that case can report large spurious penetrations since the polytope does
+    // not contain the origin; check for a separating hyperplane normal to the witness direction
+    // (certificate of separation) before assuming touching contact
+    if (status->dist > 0) {
+      mjtNum x_k[3];
+      sub3(x_k, status->x1, status->x2);
+      mjtNum x_norm = norm3(x_k);
+      if (x_norm > 0) {
+        Vertex s_k;
+        gjkSupport(&s_k, obj1, obj2, x_k, x_norm);
+        if (dot3(x_k, s_k.vert) > 0) {
+          return status->dist;  // origin strictly outside the Minkowski difference
+        }
+      }
+    }
     status->dist = 0;  // assume touching
     Polytope pt;
     pt.nfaces = pt.nmap = pt.nverts = pt.horizon.nedges = 0;
