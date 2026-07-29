@@ -811,6 +811,8 @@ void App::HandleKeyboardEvents() {
     ToggleFlag(vis_options_.flags[mjVIS_COM]);
   } else if (!is_freecam_wasd && ImGui_IsChordJustPressed(ImGuiKey_D)) {
     ToggleFlag(vis_options_.flags[mjVIS_STATIC]);
+  } else if (!is_freecam_wasd && ImGui_IsChordJustPressed(ImGuiKey_W)) {
+    ToggleFlag(renderer_->GetRenderFlags()[mjRND_WIREFRAME]);
   } else if (ImGui_IsChordJustPressed(ImGuiKey_Semicolon)) {
     ToggleFlag(vis_options_.flags[mjVIS_SKIN]);
   } else if (ImGui_IsChordJustPressed(ImGuiKey_GraveAccent)) {
@@ -2117,6 +2119,7 @@ void App::HelpGui() {
   ImGui::Text("Tendon");
   ImGui::Text("Texture");
   ImGui::Text("Transparent");
+  ImGui::Text("Wireframe");
 
   ImGui::NextColumn();
   ImGui::Indent(indent);
@@ -2144,6 +2147,7 @@ void App::HelpGui() {
   ImGui::Text("V");
   ImGui::Text("X");
   ImGui::Text("T");
+  ImGui::Text("W");
 
   ImGui::Columns();
 }
