@@ -2026,6 +2026,42 @@ static constexpr char xml[] = R"(
   ASSERT_EQ(ncons, 4);
 }
 
+TEST_F(MjGjkTest, ThinBoxSeparated) {
+  // separated thin boxes with a true gap of +1.1757e-2 (verified with an exact
+  // 15-axis SAT); a degenerate tetrahedron in the GJK distance computation used
+  // to flip the sign of the reported distance
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <geom name="geom1" type="box" size="0.00034820061482369245 0.019185701921047401 0.014761996202854564"/>
+      <geom name="geom2" type="box" size="0.00077450133003519972 0.0025775295554971048 0.11492914732049458"/>
+    </worldbody>
+  </mujoco>)";
+
+  MjModelPtr model = LoadModelFromString(xml);
+  MjDataPtr data = MakeData(model);
+  mj_forward(model.get(), data.get());
+
+  int g1 = mj_name2id(model.get(), mjOBJ_GEOM, "geom1");
+  int g2 = mj_name2id(model.get(), mjOBJ_GEOM, "geom2");
+
+  mjtNum q1[4] = {-0.74676731632565674, -0.54847693475561099,
+                  0.34742493665979629, 0.14424819130859953};
+  mjtNum q2[4] = {-0.15188202895616157, 0.10063346892175809,
+                  0.9465165498549476, -0.2662915227032579};
+  mju_quat2Mat(data->geom_xmat + 9*g1, q1);
+  mju_quat2Mat(data->geom_xmat + 9*g2, q2);
+
+  mjtNum* xpos = data->geom_xpos + 3*g2;
+  xpos[0] = -0.020305467528193247;
+  xpos[1] = 0.0049531030526580233;
+  xpos[2] = -0.015700798986895168;
+
+  mjtNum dist = mj_geomDistance(model.get(), data.get(), g1, g2, 1, nullptr);
+
+  EXPECT_NEAR(dist, 0.011757469772747348, kTolerance);
+}
+
 TEST_F(MjGjkTest, EllipsoidEllipsoidIntersect) {
   static constexpr char xml[] = R"(
   <mujoco>

@@ -2,6 +2,15 @@
 Changelog
 =========
 
+Upcoming version (not yet released)
+-----------------------------------
+
+Bug fixes
+^^^^^^^^^
+
+1. Fixed a bug in the GJK simplex distance computation which could flip the sign of the distance reported by
+   :ref:`mj_geomDistance`, returning deep penetration for well-separated geoms. Most easily triggered by thin boxes.
+
 Version 3.11.0 (July 27, 2026)
 ------------------------------
 
