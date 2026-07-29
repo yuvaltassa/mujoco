@@ -6,9 +6,8 @@ Visualization
 .. admonition:: MuJoCo Studio
    :class: note
 
-   We are actively developing a new visualizer platform called
-   `MuJoCo Studio <https://github.com/google-deepmind/mujoco/blob/main/src/experimental/studio>`__. We will update this
-   section once it becomes more established.
+   We are actively developing a new visualizer platform called :ref:`MuJoCo Studio<Studio>`, based on the new
+   :ref:`Filament renderer<FilamentRendering>`.
 
 MuJoCo has a native 3D visualizer. Its use is illustrated in the :ref:`simulate.cc <saSimulate>` code sample and in
 the simpler :ref:`basic.cc <saBasic>` code sample. While it is not a full-featured rendering engine, it is a
@@ -487,20 +486,4 @@ for OpenGL error checking. They simply call glFinish and glGetError internally. 
 drawing functions above is meant to provide enough functionality so that most users will not need to write OpenGL
 code. Of course we cannot achieve this in all cases, short of providing wrappers for all of OpenGL.
 
-
-.. _FilamentRendering:
-
-Filament Rendering
-~~~~~~~~~~~~~~~~~~
-
-MuJoCo also provides a `Filament <https://github.com/google/filament>`_ based renderer for 3D visualization of its
-simulations.
-
-Filament is a real-time physically based rendering (PBR) engine developed by Google. It is designed to be as small as
-possible and as efficient as possible, while still providing high-quality results. It works across all major platforms
-(Linux, Windows, macOS, Android, iOS, Web) and supports OpenGL, Vulkan, and Metal.
-
-MuJoCo's current integration with the Filament renderer is done by setting `MUJOCO_USE_FILAMENT` to 1 in the CMake Build
-configuration. This effectively replaces the OpenGL-based `mjr` function implementations with Filament-based ones. It
-also makes the underlying Filament `mjrf` :ref:`types <tyFilamentRenderStructure>` and
-:ref:`functions <FilamentRenderingApi>` available for use.
+MuJoCo also provides a modern physically based renderer, described in the :doc:`Filament Rendering<filament>` chapter.
