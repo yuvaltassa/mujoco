@@ -2030,10 +2030,14 @@ void App::SpecEditorGui() {
 }
 
 void App::HelpGui() {
+  // With ConfigMacOSXBehaviors, imgui swaps the Cmd and Ctrl keys, so
+  // ImGuiMod_Ctrl chords and io.KeyCtrl match the Command key on macOS.
+  const char* mod = ImGui::GetIO().ConfigMacOSXBehaviors ? "Cmd" : "Ctrl";
+
   const float pad = ImGui::GetStyle().ItemSpacing.x;
   const float indent = pad * 2;
-  const float col0 = ImGui::CalcTextSize("Toggle Visc Pause").x + pad;
-  const float col1 = ImGui::CalcTextSize("Ctrl+Spc").x + pad + indent;
+  const float col0 = ImGui::CalcTextSize("Toggle Fullscreen").x + pad;
+  const float col1 = ImGui::CalcTextSize("Ctrl+R-Dblclick").x + pad + indent;
   const float col2 = ImGui::CalcTextSize("Center of Mass").x + pad + indent;
   const float col3 = ImGui::CalcTextSize("M").x + pad + indent;
   ImGui::Dummy(ImVec2(col0 + col1 + col2 + col3, 0));
@@ -2049,9 +2053,8 @@ void App::HelpGui() {
   ImGui::Text("Cycle Frames");
   ImGui::Text("Cycle Labels");
   ImGui::Text("Toggle Fullscreen");
-  ImGui::Text("Free Camera");
+  ImGui::Text("Tumble Camera");
   ImGui::Text("Toggle Pause");
-  ImGui::Text("Toggle Visc Pause");
   ImGui::Text("Reset Sim");
   ImGui::Text("Toggle Left UI");
   ImGui::Text("Toggle Right UI");
@@ -2064,8 +2067,18 @@ void App::HelpGui() {
   ImGui::Text("Select Parent");
   ImGui::Text("Align Camera");
   ImGui::Text("Copy Keyframe");
+  ImGui::Text("Font Bigger");
+  ImGui::Text("Font Smaller");
   ImGui::Text("Geom Group");
   ImGui::Text("Site Group");
+  ImGui::Text("Select");
+  ImGui::Text("Center Camera");
+  ImGui::Text("Track Camera");
+  ImGui::Text("Orbit Camera");
+  ImGui::Text("Pan Camera");
+  ImGui::Text("Zoom Camera");
+  ImGui::Text("Rotate Object");
+  ImGui::Text("Move Object");
 
   ImGui::NextColumn();
   ImGui::Indent(indent);
@@ -2077,7 +2090,6 @@ void App::HelpGui() {
   ImGui::Text("F11");
   ImGui::Text("Esc");
   ImGui::Text("Spc");
-  ImGui::Text("Ctrl+Spc");
   ImGui::Text("Bksp");
   ImGui::Text("Tab");
   ImGui::Text("Sh+Tab");
@@ -2088,10 +2100,20 @@ void App::HelpGui() {
   ImGui::Text("Left");
   ImGui::Text("Right");
   ImGui::Text("PgUp");
-  ImGui::Text("Ctrl+A");
-  ImGui::Text("Ctrl+C");
+  ImGui::Text("%s+A", mod);
+  ImGui::Text("%s+C", mod);
+  ImGui::Text("%s+=", mod);
+  ImGui::Text("%s+-", mod);
   ImGui::Text("0-5");
   ImGui::Text("Sh+0-5");
+  ImGui::Text("Dblclick");
+  ImGui::Text("R-Dblclick");
+  ImGui::Text("%s+R-Dblclick", mod);
+  ImGui::Text("L-Drag");
+  ImGui::Text("[Sh+]R-Drag");
+  ImGui::Text("Scroll");
+  ImGui::Text("%s+L-Drag", mod);
+  ImGui::Text("%s+R-Drag", mod);
 
   ImGui::NextColumn();
   ImGui::Indent(indent);
@@ -2099,6 +2121,7 @@ void App::HelpGui() {
   ImGui::Text("Auto Connect");
   ImGui::Text("Body Tree");
   ImGui::Text("Mesh Tree");
+  ImGui::Text("Inertia");
   ImGui::Text("Scale Inertia");
   ImGui::Text("Skin");
   ImGui::Text("Actuator");
@@ -2124,26 +2147,27 @@ void App::HelpGui() {
   ImGui::NextColumn();
   ImGui::Indent(indent);
   ImGui::Text(",");
-  ImGui::Text("K");
+  ImGui::Text("A");
   ImGui::Text("`");
   ImGui::Text("\\");
-  ImGui::Text("\"");
+  ImGui::Text("I");
+  ImGui::Text("'");
   ImGui::Text(";");
   ImGui::Text("U");
-  ImGui::Text("L");
+  ImGui::Text("Q");
   ImGui::Text("M");
   ImGui::Text("F");
   ImGui::Text("C");
   ImGui::Text("P");
   ImGui::Text("H");
+  ImGui::Text("E");
   ImGui::Text("N");
-  ImGui::Text("I");
   ImGui::Text("J");
   ImGui::Text("Z");
   ImGui::Text("B");
   ImGui::Text("O");
   ImGui::Text("Y");
-  ImGui::Text("G");
+  ImGui::Text("D");
   ImGui::Text("V");
   ImGui::Text("X");
   ImGui::Text("T");
