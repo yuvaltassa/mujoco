@@ -122,6 +122,46 @@ class DocTest(googletest.TestCase):
       if source != file.read():
         self.fail("The file 'mjcf_read_table.inc' needs to be updated.")
 
+  def test_read_table_consumed(self):
+    """Checks that every generated row array is consumed, and none is stale.
+
+    Elements are auto-included in the read table unless excluded by
+    NOT_TABLE_DRIVEN, so a new bound element whose OneX() reader was never
+    migrated would get rows that nothing reads; unused inline constexpr
+    arrays do not even warn. Conversely, a stale NOT_TABLE_DRIVEN entry
+    (e.g. after an element rename) silently stops excluding.
+    """
+    schema = mjcf_schema.parse_file(
+        os.path.join(_REPO_ROOT, 'src', 'xml', 'mjcf.schema'))
+    sources = ''
+    for filename in ('xml_native_reader.cc', 'xml_native_writer.cc'):
+      path = os.path.join(_REPO_ROOT, 'src', 'xml', filename)
+      with open(path, 'r', encoding='utf-8') as file:
+        sources += file.read()
+    errors = []
+    dispatched = set(generate_read_table.SENSOR_DISPATCH)
+    for name in generate_read_table.table_driven_elements(schema):
+      if name in dispatched:
+        continue  # consumed through kSensorDispatch
+      array = generate_read_table.array_name(name)
+      if array not in sources:
+        errors.append(
+            f"array '{array}' for element '{name}' is generated but never "
+            'consumed: migrate its reader to ReadAttrTable or add the '
+            'element to NOT_TABLE_DRIVEN')
+    if 'kSensorDispatch' not in sources:
+      errors.append("'kSensorDispatch' is never consumed")
+    for _, array in generate_read_table.EMIT_GROUPS.values():
+      if array not in sources:
+        errors.append(f"group array '{array}' is generated but never "
+                      'consumed')
+    stale = generate_read_table.NOT_TABLE_DRIVEN - set(schema.elements)
+    for name in sorted(stale):
+      errors.append(f"NOT_TABLE_DRIVEN entry '{name}' does not name a "
+                    'schema element')
+    if errors:
+      self.fail('read-table coverage:\n' + '\n'.join(errors))
+
   def test_schema_enum_coverage(self):
     """Checks schema enums against the C enums they bind.
 
