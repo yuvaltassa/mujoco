@@ -1496,6 +1496,42 @@ TEST_F(XMLReaderTest, ParseReplicatePartialReference) {
   EXPECT_THAT(m->nsensor, 2);
 }
 
+TEST_F(XMLReaderTest, ReplicateCannotHaveJoints) {
+  static constexpr char joint_xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <replicate count="2" offset="2 0 0">
+        <joint type="hinge"/>
+        <geom size=".1"/>
+      </replicate>
+    </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr model = LoadModelFromString(joint_xml, error.data(), error.size());
+  ASSERT_THAT(model.get(), IsNull());
+  EXPECT_THAT(error.data(),
+              HasSubstr("joint cannot be a direct child of replicate"));
+  EXPECT_THAT(error.data(), HasSubstr("line 5"));
+
+  static constexpr char freejoint_xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="b">
+        <replicate count="2" offset="2 0 0">
+          <freejoint/>
+          <geom size=".1"/>
+        </replicate>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  model = LoadModelFromString(freejoint_xml, error.data(), error.size());
+  ASSERT_THAT(model.get(), IsNull());
+  EXPECT_THAT(error.data(),
+              HasSubstr("joint cannot be a direct child of replicate"));
+}
+
 TEST_F(XMLReaderTest, ParseReplicateDefaultPropagate) {
   static constexpr char xml[] = R"(
   <mujoco>
