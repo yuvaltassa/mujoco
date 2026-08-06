@@ -42,6 +42,15 @@ Engine
   threshold. Flexes with :ref:`elastic2d<flex-elasticity-elastic2d>` stretch stiffness step roughly twice as fast;
   bending-only flexes keep the exact constant factor and are unchanged.
 
+- Rewrote the box-box collider. The contact manifold is now the incident face clipped against the reference face,
+  with every depth measured along the reference normal, replacing a cascade of candidate generators, out-of-range
+  clamping and post-hoc contact removal. Tall aligned stacks that previously collapsed now settle, stacks of plates
+  come to rest two to three orders of magnitude quieter, and a dense box pile steps about 7% faster. Where a face
+  axis and an edge axis are within five percent of each other the face is now chosen, so a reported depth can
+  exceed the exact minimum by that fraction. Under single precision the collider no longer misses overlaps that are
+  representable: the only pairs it now reports as separated are those overlapping by less than the rounding error
+  of their own support evaluation.
+
 .. admonition:: Breaking API changes
    :class: attention
 
