@@ -3912,7 +3912,8 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .value("mjBUILTIN_NONE", mjBUILTIN_NONE)
     .value("mjBUILTIN_GRADIENT", mjBUILTIN_GRADIENT)
     .value("mjBUILTIN_CHECKER", mjBUILTIN_CHECKER)
-    .value("mjBUILTIN_FLAT", mjBUILTIN_FLAT);
+    .value("mjBUILTIN_FLAT", mjBUILTIN_FLAT)
+    .value("mjBUILTIN_NOISE", mjBUILTIN_NOISE);
   enum_<mjtButton>("mjtButton")
     .value("mjBUTTON_NONE", mjBUTTON_NONE)
     .value("mjBUTTON_LEFT", mjBUTTON_LEFT)
@@ -6049,6 +6050,7 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .property("data", &MjsTexture::data, reference())
     .property("element", &MjsTexture::element, reference())
     .property("file", &MjsTexture::file, &MjsTexture::set_file, reference())
+    .property("gain", &MjsTexture::gain, &MjsTexture::set_gain)
     .property("gridlayout", &MjsTexture::gridlayout)
     .property("gridsize", &MjsTexture::gridsize)
     .property("height", &MjsTexture::height, &MjsTexture::set_height)
@@ -6057,9 +6059,11 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .property("mark", &MjsTexture::mark, &MjsTexture::set_mark)
     .property("markrgb", &MjsTexture::markrgb)
     .property("nchannel", &MjsTexture::nchannel, &MjsTexture::set_nchannel)
+    .property("octaves", &MjsTexture::octaves, &MjsTexture::set_octaves)
     .property("random", &MjsTexture::random, &MjsTexture::set_random)
     .property("rgb1", &MjsTexture::rgb1)
     .property("rgb2", &MjsTexture::rgb2)
+    .property("seed", &MjsTexture::seed, &MjsTexture::set_seed)
     .property("type", &MjsTexture::type, &MjsTexture::set_type)
     .property("vflip", &MjsTexture::vflip, &MjsTexture::set_vflip)
     .property("width", &MjsTexture::width, &MjsTexture::set_width);

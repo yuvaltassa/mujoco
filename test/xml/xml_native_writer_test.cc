@@ -1338,6 +1338,30 @@ TEST_F(XMLWriterLocaleTest, IgnoresLocale) {
   EXPECT_EQ(std::string(formatted), "3,9375");
 }
 
+TEST_F(XMLWriterTest, NoiseTextureAttributes) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <asset>
+      <texture name="tuned" type="2d" builtin="noise" octaves="6" gain="0.7" seed="3"
+               width="16" height="16"/>
+      <texture name="default" type="2d" builtin="noise" width="16" height="16"/>
+    </asset>
+  </mujoco>
+  )";
+  MjModelPtr model = LoadModelFromString(xml);
+  ASSERT_THAT(model.get(), NotNull());
+
+  std::string saved_xml = SaveAndReadXml(model.get());
+  EXPECT_THAT(saved_xml, HasSubstr("octaves=\"6\""));
+  EXPECT_THAT(saved_xml, HasSubstr("gain=\"0.7\""));
+  EXPECT_THAT(saved_xml, HasSubstr("seed=\"3\""));
+
+  // defaults are not written
+  EXPECT_THAT(saved_xml, Not(HasSubstr("octaves=\"4\"")));
+  EXPECT_THAT(saved_xml, Not(HasSubstr("gain=\"0.5\"")));
+  EXPECT_THAT(saved_xml, Not(HasSubstr("seed=\"0\"")));
+}
+
 TEST_F(XMLWriterTest, NonRGBTextures) {
   const std::string xml_path = GetTestDataFilePath(kNonRgbTextureXMLPath);
   std::array<char, 1024> error;

@@ -702,6 +702,7 @@ ENUMS: Mapping[str, EnumDecl] = dict([
              ('mjBUILTIN_GRADIENT', 1),
              ('mjBUILTIN_CHECKER', 2),
              ('mjBUILTIN_FLAT', 3),
+             ('mjBUILTIN_NOISE', 4),
          ]),
      )),
     ('mjtMark',

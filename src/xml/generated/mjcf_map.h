@@ -218,8 +218,9 @@ inline constexpr mjMap builtin_map[] = {
   {"gradient",  mjBUILTIN_GRADIENT},
   {"checker",   mjBUILTIN_CHECKER},
   {"flat",      mjBUILTIN_FLAT},
+  {"noise",     mjBUILTIN_NOISE},
 };
-inline constexpr int builtin_sz = 4;
+inline constexpr int builtin_sz = 5;
 
 // enum mark
 inline constexpr mjMap mark_map[] = {

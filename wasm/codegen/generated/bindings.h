@@ -3425,6 +3425,24 @@ struct MjsTexture {
   void set_random(double value) {
     ptr_->random = value;
   }
+  int octaves() const {
+    return ptr_->octaves;
+  }
+  void set_octaves(int value) {
+    ptr_->octaves = value;
+  }
+  double gain() const {
+    return ptr_->gain;
+  }
+  void set_gain(double value) {
+    ptr_->gain = value;
+  }
+  int seed() const {
+    return ptr_->seed;
+  }
+  void set_seed(int value) {
+    ptr_->seed = value;
+  }
   int height() const {
     return ptr_->height;
   }

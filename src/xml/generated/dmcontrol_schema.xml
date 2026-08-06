@@ -1158,12 +1158,15 @@
             <attribute name="filedown" type="file" path_namespace="texture"/>
             <attribute name="filefront" type="file" path_namespace="texture"/>
             <attribute name="fileback" type="file" path_namespace="texture"/>
-            <attribute name="builtin" type="keyword" valid_values="none gradient checker flat"/>
+            <attribute name="builtin" type="keyword" valid_values="none gradient checker flat noise"/>
             <attribute name="rgb1" type="array" array_type="float" array_size="3" default="0.8 0.8 0.8"/>
             <attribute name="rgb2" type="array" array_type="float" array_size="3" default="0.5 0.5 0.5"/>
             <attribute name="mark" type="keyword" valid_values="none edge cross random"/>
             <attribute name="markrgb" type="array" array_type="float" array_size="3"/>
             <attribute name="random" type="float" default="0.01"/>
+            <attribute name="octaves" type="int" default="4"/>
+            <attribute name="gain" type="float" default="0.5"/>
+            <attribute name="seed" type="int" default="0"/>
             <attribute name="width" type="int"/>
             <attribute name="height" type="int"/>
             <attribute name="hflip" type="keyword" valid_values="false true"/>

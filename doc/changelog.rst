@@ -129,6 +129,14 @@ Models
 Rendering
 ^^^^^^^^^
 
+- Added the ``noise`` :ref:`builtin<asset-texture-builtin>` texture: fractal noise interpolating from
+  :ref:`rgb1<asset-texture-rgb1>` to :ref:`rgb2<asset-texture-rgb2>`, controlled by the new
+  :ref:`octaves<asset-texture-octaves>`, :ref:`gain<asset-texture-gain>` and :ref:`seed<asset-texture-seed>`
+  attributes. 2d noise textures tile seamlessly; cube and skybox noise is sampled along the direction of each
+  texel and is continuous across the edges of the cube. Generation is deterministic. Assigning a noise texture
+  to a :ref:`layer<material-layer>` with a role such as roughness or occlusion breaks up the uniform appearance
+  of physically based materials without requiring an image asset.
+
 .. admonition:: Breaking API changes
    :class: attention
 

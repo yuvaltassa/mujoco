@@ -1046,6 +1046,79 @@ TEST_F(MujocoTest, TextureFromBuffer) {
   mj_deleteSpec(spec);
 }
 
+// compiles a single builtin-noise texture and returns its pixel data
+static std::vector<mjtByte> NoiseTexture(mjtTexture type, int width, int height,
+                                           int octaves, double gain, int seed) {
+  mjSpec* spec = mj_makeSpec();
+  mjsTexture* texture = mjs_addTexture(spec);
+  mjs_setName(texture->element, "noise");
+  texture->type = type;
+  texture->builtin = mjBUILTIN_NOISE;
+  texture->width = width;
+  texture->height = height;
+  texture->octaves = octaves;
+  texture->gain = gain;
+  texture->seed = seed;
+  for (int j=0; j < 3; j++) {
+    texture->rgb1[j] = 0;
+    texture->rgb2[j] = 1;
+  }
+  mjModel* model = mj_compile(spec, 0);
+  EXPECT_THAT(model, NotNull()) << mjs_getError(spec);
+  std::vector<mjtByte> data(model->tex_data + model->tex_adr[0],
+                              model->tex_data + model->tex_adr[0] + model->tex_nchannel[0]*
+                              model->tex_width[0]*model->tex_height[0]);
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+  return data;
+}
+
+TEST_F(MujocoTest, NoiseTextureIsDeterministic) {
+  EXPECT_EQ(NoiseTexture(mjTEXTURE_2D, 32, 32, 4, 0.5, 0),
+            NoiseTexture(mjTEXTURE_2D, 32, 32, 4, 0.5, 0));
+}
+
+TEST_F(MujocoTest, NoiseTextureRespondsToParameters) {
+  std::vector<mjtByte> base = NoiseTexture(mjTEXTURE_2D, 32, 32, 4, 0.5, 0);
+  EXPECT_NE(base, NoiseTexture(mjTEXTURE_2D, 32, 32, 4, 0.5, 1));  // seed
+  EXPECT_NE(base, NoiseTexture(mjTEXTURE_2D, 32, 32, 6, 0.5, 0));  // octaves
+  EXPECT_NE(base, NoiseTexture(mjTEXTURE_2D, 32, 32, 4, 0.8, 0));  // gain
+}
+
+TEST_F(MujocoTest, NoiseTextureTiles) {
+  // the texture wraps, so opposite edges continue into each other as smoothly
+  // as neighboring rows and columns do inside the texture
+  constexpr int kWidth = 64;
+  std::vector<mjtByte> data = NoiseTexture(mjTEXTURE_2D, kWidth, kWidth, 4, 0.5, 0);
+  auto pixel = [&](int r, int c) { return (int)data[3*(r*kWidth + c)]; };
+
+  double wrap = 0, interior = 0;
+  for (int i=0; i < kWidth; i++) {
+    wrap += std::abs(pixel(i, kWidth-1) - pixel(i, 0));
+    wrap += std::abs(pixel(kWidth-1, i) - pixel(0, i));
+    interior += std::abs(pixel(i, kWidth/2) - pixel(i, kWidth/2 - 1));
+    interior += std::abs(pixel(kWidth/2, i) - pixel(kWidth/2 - 1, i));
+  }
+  EXPECT_LT(wrap, 1.5*interior) << "texture does not tile seamlessly";
+}
+
+TEST_F(MujocoTest, NoiseCubeIsSeamless) {
+  // sampled along the face direction, so the shared edge of the right (+X) and
+  // front (+Z) faces agrees from both sides
+  constexpr int kWidth = 32;
+  std::vector<mjtByte> data = NoiseTexture(mjTEXTURE_CUBE, kWidth, kWidth, 4, 0.5, 0);
+  auto pixel = [&](int face, int r, int c) {
+    return (int)data[3*(face*kWidth*kWidth + r*kWidth + c)];
+  };
+
+  double seam = 0, interior = 0;
+  for (int r=0; r < kWidth; r++) {
+    seam += std::abs(pixel(0, r, 0) - pixel(4, r, kWidth-1));
+    interior += std::abs(pixel(0, r, 1) - pixel(0, r, 0));
+  }
+  EXPECT_LT(seam, 1.5*interior) << "cube faces do not meet seamlessly";
+}
+
 TEST_F(MujocoTest, TestTextureFlip) {
   mjSpec* spec = mj_makeSpec();
   EXPECT_THAT(spec, NotNull());

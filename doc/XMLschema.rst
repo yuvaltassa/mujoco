@@ -591,6 +591,15 @@
                :ref:`random<asset-texture-random>`
 
             .. grid-item::
+               :ref:`octaves<asset-texture-octaves>`
+
+            .. grid-item::
+               :ref:`gain<asset-texture-gain>`
+
+            .. grid-item::
+               :ref:`seed<asset-texture-seed>`
+
+            .. grid-item::
                :ref:`width<asset-texture-width>`
 
             .. grid-item::

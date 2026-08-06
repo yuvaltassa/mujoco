@@ -274,6 +274,8 @@ void mjs_defaultTexture(mjsTexture* texture) {
   texture->rgb1[0] = texture->rgb1[1] = texture->rgb1[2] = 0.8;
   texture->rgb2[0] = texture->rgb2[1] = texture->rgb2[2] = 0.5;
   texture->random                                        = 0.01;
+  texture->octaves                                       = 4;
+  texture->gain                                          = 0.5;
   texture->gridsize[0] = texture->gridsize[1]     = 1;
   texture->nchannel                               = 3;
   char defaultlayout[sizeof(texture->gridlayout)] = "............";

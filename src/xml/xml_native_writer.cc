@@ -1413,6 +1413,9 @@ void mjXWriter::Asset(XMLElement* root) {
       WriteAttr(elem, "rgb2", 3, texture->rgb2, deftex.rgb2);
       WriteAttr(elem, "markrgb", 3, texture->markrgb, deftex.markrgb);
       WriteAttr(elem, "random", 1, &texture->random, &deftex.random);
+      WriteAttrInt(elem, "octaves", texture->octaves, deftex.octaves);
+      WriteAttr(elem, "gain", 1, &texture->gain, &deftex.gain);
+      WriteAttrInt(elem, "seed", texture->seed, deftex.seed);
       WriteAttrInt(elem, "width", texture->width);
       WriteAttrInt(elem, "height", texture->height);
     }

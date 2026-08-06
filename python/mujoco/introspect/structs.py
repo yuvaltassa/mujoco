@@ -9079,6 +9079,21 @@ STRUCTS: Mapping[str, StructDecl] = dict([
                  doc='probability of random dots',
              ),
              StructFieldDecl(
+                 name='octaves',
+                 type=ValueType(name='int'),
+                 doc='number of noise octaves',
+             ),
+             StructFieldDecl(
+                 name='gain',
+                 type=ValueType(name='double'),
+                 doc='noise amplitude ratio between octaves',
+             ),
+             StructFieldDecl(
+                 name='seed',
+                 type=ValueType(name='int'),
+                 doc='noise random seed',
+             ),
+             StructFieldDecl(
                  name='height',
                  type=ValueType(name='int'),
                  doc='height in pixels (square for cube and skybox)',

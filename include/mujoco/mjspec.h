@@ -87,7 +87,8 @@ typedef enum mjtBuiltin {          // type of built-in procedural texture
   mjBUILTIN_NONE = 0,              // no built-in texture
   mjBUILTIN_GRADIENT,              // gradient: rgb1->rgb2
   mjBUILTIN_CHECKER,               // checker pattern: rgb1, rgb2
-  mjBUILTIN_FLAT                   // 2d: rgb1; cube: rgb1-up, rgb2-side, rgb3-down
+  mjBUILTIN_FLAT,                  // 2d: rgb1; cube: rgb1-up, rgb2-side, rgb3-down
+  mjBUILTIN_NOISE                  // fractal noise: rgb1->rgb2
 } mjtBuiltin;
 
 
@@ -591,6 +592,9 @@ typedef struct mjsTexture_ {       // texture specification
   double rgb2[3];                  // second color for builtin
   double markrgb[3];               // mark color
   double random;                   // probability of random dots
+  int octaves;                     // number of noise octaves
+  double gain;                     // noise amplitude ratio between octaves
+  int seed;                        // noise random seed
   int height;                      // height in pixels (square for cube and skybox)
   int width;                       // width in pixels
   int nchannel;                    // number of channels

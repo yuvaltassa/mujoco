@@ -217,6 +217,7 @@ enum builtin : mjtBuiltin {
   gradient   = mjBUILTIN_GRADIENT
   checker    = mjBUILTIN_CHECKER
   flat       = mjBUILTIN_FLAT
+  noise      = mjBUILTIN_NOISE
 }
 
 enum mark : mjtMark {
@@ -919,6 +920,9 @@ element texture : mjsTexture {
   mark               : enum<mark>
   markrgb            : double[3]
   random             : double = 0.01
+  octaves            : int = 4
+  gain               : double = 0.5
+  seed               : int = 0
   width              : int
   height             : int
   hflip              : bool

@@ -4812,6 +4812,129 @@ static void checker(
 }
 
 
+
+// integer hash, deterministic on all platforms
+static uint32_t noisehash(uint32_t x) {
+  x ^= x >> 16;
+  x *= 0x7feb352du;
+  x ^= x >> 15;
+  x *= 0x846ca68bu;
+  x ^= x >> 16;
+  return x;
+}
+
+
+
+// smootherstep: 6t^5 - 15t^4 + 10t^3
+static double fade(double t) {
+  return t*t*t*(t*(t*6 - 15) + 10);
+}
+
+
+
+// dot product of the lattice gradient at (i, j, k) with the offset (x, y, z);
+// gradients are the 12 edge midpoints of a cube, as in Perlin's improved noise
+static double gradient(int i, int j, int k, int seed, double x, double y, double z) {
+  uint32_t h = noisehash((uint32_t)i*73856093u ^ (uint32_t)j*19349663u ^
+                         (uint32_t)k*83492791u ^ (uint32_t)seed*2654435761u);
+  switch (h % 12) {
+    case 0:  return  x + y;
+    case 1:  return -x + y;
+    case 2:  return  x - y;
+    case 3:  return -x - y;
+    case 4:  return  x + z;
+    case 5:  return -x + z;
+    case 6:  return  x - z;
+    case 7:  return -x - z;
+    case 8:  return  y + z;
+    case 9:  return -y + z;
+    case 10: return  y - z;
+    default: return -y - z;
+  }
+}
+
+
+
+// Perlin noise, periodic with the given integer lattice period
+static double perlin(double x, double y, double z, int period, int seed) {
+  int i = (int)floor(x), j = (int)floor(y), k = (int)floor(z);
+  double fx = x - i, fy = y - j, fz = z - k;
+  double u = fade(fx), v = fade(fy), w = fade(fz);
+
+  // wrap the lattice so that the noise tiles
+  int i0 = ((i % period) + period) % period, i1 = (((i + 1) % period) + period) % period;
+  int j0 = ((j % period) + period) % period, j1 = (((j + 1) % period) + period) % period;
+  int k0 = ((k % period) + period) % period, k1 = (((k + 1) % period) + period) % period;
+
+  // corner gradients
+  double n000 = gradient(i0, j0, k0, seed, fx,   fy,   fz);
+  double n100 = gradient(i1, j0, k0, seed, fx-1, fy,   fz);
+  double n010 = gradient(i0, j1, k0, seed, fx,   fy-1, fz);
+  double n110 = gradient(i1, j1, k0, seed, fx-1, fy-1, fz);
+  double n001 = gradient(i0, j0, k1, seed, fx,   fy,   fz-1);
+  double n101 = gradient(i1, j0, k1, seed, fx-1, fy,   fz-1);
+  double n011 = gradient(i0, j1, k1, seed, fx,   fy-1, fz-1);
+  double n111 = gradient(i1, j1, k1, seed, fx-1, fy-1, fz-1);
+
+  // trilinear blend
+  double x00 = n000 + u*(n100 - n000), x10 = n010 + u*(n110 - n010);
+  double x01 = n001 + u*(n101 - n001), x11 = n011 + u*(n111 - n011);
+  double y0 = x00 + v*(x10 - x00), y1 = x01 + v*(x11 - x01);
+  return y0 + w*(y1 - y0);
+}
+
+
+
+// fractal noise in [0, 1]: octaves of Perlin noise with amplitude ratio gain,
+// the lowest octave spanning one period of the given base lattice
+static double fbm(double x, double y, double z, int octaves, double gain, int seed,
+                  int baseperiod) {
+  double sum = 0, amplitude = 1, total = 0;
+  int frequency = 1;
+  for (int o=0; o < octaves; o++) {
+    sum += amplitude * perlin(x*frequency, y*frequency, z*frequency,
+                              baseperiod*frequency, seed + o);
+    total += amplitude;
+    amplitude *= gain;
+    frequency *= 2;
+  }
+
+  // Perlin noise stays well inside [-1, 1] and the octave average narrows it
+  // further; rescale so that the result spans most of the color range
+  double value = 0.5 + 1.4*sum/total;
+  return value < 0 ? 0 : (value > 1 ? 1 : value);
+}
+
+
+
+// linear interpolation between colors, alpha in [0, 1]
+static void lerprgb(std::byte* rgb, const double* rgb1, const double* rgb2, double alpha) {
+  for (int j=0; j < 3; j++) {
+    rgb[j] = (std::byte)(255*((1-alpha)*rgb1[j] + alpha*rgb2[j]));
+  }
+}
+
+
+
+// direction of the cube face texel, in the standard cube map layout: faces are
+// ordered +X, -X, +Y, -Y, +Z, -Z, matching the upload order in the renderers
+static void facedir(double* dir, int face, double s, double t) {
+  switch (face) {
+    case 0: dir[0] =  1; dir[1] = -t; dir[2] = -s; break;  // right
+    case 1: dir[0] = -1; dir[1] = -t; dir[2] =  s; break;  // left
+    case 2: dir[0] =  s; dir[1] =  1; dir[2] =  t; break;  // up
+    case 3: dir[0] =  s; dir[1] = -1; dir[2] = -t; break;  // down
+    case 4: dir[0] =  s; dir[1] = -t; dir[2] =  1; break;  // front
+    default: dir[0] = -s; dir[1] = -t; dir[2] = -1; break;  // back
+  }
+  double norm = sqrt(dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]);
+  dir[0] /= norm;
+  dir[1] /= norm;
+  dir[2] /= norm;
+}
+
+
+
 // make builtin: 2D
 void mjCTexture::Builtin2D(void) {
   std::byte RGB1[3], RGB2[3], RGBm[3];
@@ -4848,6 +4971,16 @@ void mjCTexture::Builtin2D(void) {
   else if (builtin == mjBUILTIN_FLAT) {
     for (int r = 0; r < height; r++) {
       for (int c = 0; c < width; c++) { memcpy(data_.data() + 3 * (r * width + c), RGB1, 3); }
+    }
+  }
+
+  // noise
+  else if (builtin == mjBUILTIN_NOISE) {
+    for (int r=0; r < height; r++) {
+      for (int c=0; c < width; c++) {
+        double value = fbm(c/(double)width, r/(double)height, 0, octaves, gain, seed, 1);
+        lerprgb(data_.data()+3*(r*width+c), rgb1, rgb2, value);
+      }
     }
   }
 
@@ -4952,6 +5085,20 @@ void mjCTexture::BuiltinCube(void) {
 
         // set down
         memcpy(data_.data() + 3 * 3 * ww + 3 * (r * w + c), RGB2, 3);
+      }
+    }
+  }
+
+  // noise: sampled along the face direction, so it is seamless across edges
+  else if (builtin == mjBUILTIN_NOISE) {
+    for (int face = 0; face < 6; face++) {
+      for (int r = 0; r < w; r++) {
+        for (int c = 0; c < w; c++) {
+          double dir[3];
+          facedir(dir, face, 2 * (c + 0.5) / w - 1, 2 * (r + 0.5) / w - 1);
+          double value = fbm(dir[0], dir[1], dir[2], octaves, gain, seed, 1 << 12);
+          lerprgb(data_.data() + face * 3 * ww + 3 * (r * w + c), rgb1, rgb2, value);
+        }
       }
     }
   }

@@ -198,6 +198,7 @@
       <xs:enumeration value="gradient"/>
       <xs:enumeration value="checker"/>
       <xs:enumeration value="flat"/>
+      <xs:enumeration value="noise"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -1999,6 +2000,9 @@
     <xs:attribute name="mark" type="kw_mark"/>
     <xs:attribute name="markrgb" type="double3"/>
     <xs:attribute name="random" type="xs:double" default="0.01"/>
+    <xs:attribute name="octaves" type="xs:int" default="4"/>
+    <xs:attribute name="gain" type="xs:double" default="0.5"/>
+    <xs:attribute name="seed" type="xs:int" default="0"/>
     <xs:attribute name="width" type="xs:int"/>
     <xs:attribute name="height" type="xs:int"/>
     <xs:attribute name="hflip" type="kw_bool"/>

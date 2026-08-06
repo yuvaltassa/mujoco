@@ -1779,7 +1779,7 @@ Only ``image/png`` and ``image/ktx`` are supported.
 
 .. _asset-texture-builtin:
 
-:at:`builtin`: :at-val:`[none, gradient, checker, flat], "none"`
+:at:`builtin`: :at-val:`[none, gradient, checker, flat, noise], "none"`
    This and the remaining attributes control the generation of procedural textures. If the value of this attribute is
    different from "none", the texture is treated as procedural and any file names are ignored. The keywords have the
    following meaning:
@@ -1798,6 +1798,31 @@ Only ``image/png`` and ``image/ktx`` are supported.
    **flat**
       Fills the entire texture with rgb1, except for the bottom face of cube and skybox textures which is
       filled with rgb2.
+
+   **noise**
+      Sums :ref:`octaves<asset-texture-octaves>` of `Perlin noise
+      <https://en.wikipedia.org/wiki/Perlin_noise>`__, each octave at twice the frequency and
+      :ref:`gain<asset-texture-gain>` times the amplitude of the one before it, and interpolates
+      from rgb1 to rgb2. This construction is known as `fractional Brownian motion
+      <https://en.wikipedia.org/wiki/Fractional_Brownian_motion>`__. The lowest octave spans the
+      texture exactly once, so the coarse structure is independent of the number of octaves.
+
+      .. image:: images/XMLreference/noise.png
+         :width: 700px
+         :align: center
+
+      Labelled with (:at:`octaves`, :at:`gain`); each image changes one of the two. Octaves add
+      finer detail and gain sets how much weight that detail carries, so the two work together:
+      octaves scaled by a small gain contribute little, and a large gain has nothing to amplify
+      unless there are octaves to carry it. The coarse structure is the same throughout, since it
+      comes from the lowest octave.
+
+      2d textures tile seamlessly, so they can be repeated with
+      :ref:`texrepeat<asset-material-texrepeat>` like the checker pattern; for cube and skybox
+      textures the noise is sampled along the direction of each texel, and is therefore continuous
+      across the edges of the cube. Assigning a noise texture to a :ref:`layer<material-layer>` with
+      a role such as roughness or occlusion is an inexpensive way to break up the uniform appearance
+      of physically based materials.
 
 .. _asset-texture-rgb1:
 
@@ -1830,6 +1855,26 @@ Only ``image/png`` and ``image/ktx`` are supported.
    that larger textures have more pixels, and the probability here is applied independently to each pixel -- thus the
    texture size and probability need to be adjusted jointly. Together with a gradient skybox texture, this can create
    the appearance of a night sky with stars. The random number generator is initialized with a fixed seed.
+
+.. _asset-texture-octaves:
+
+:at:`octaves`: :at-val:`int, "4"`
+   The number of octaves summed by the "noise" builtin. Each successive octave doubles the spatial
+   frequency, the lowest spanning the texture exactly once, so larger values add finer detail
+   without changing the coarse structure.
+
+.. _asset-texture-gain:
+
+:at:`gain`: :at-val:`real, "0.5"`
+   The ratio of the amplitudes of successive octaves of the "noise" builtin. The default halves the
+   amplitude at each octave, giving smooth, cloud-like noise; larger values make the fine octaves
+   more prominent and the result rougher. This attribute has no effect when :at:`octaves` is 1.
+
+.. _asset-texture-seed:
+
+:at:`seed`: :at-val:`int, "0"`
+   The random seed of the "noise" builtin. Noise generation is deterministic: the same seed always
+   produces the same texture. Change it to obtain a different pattern with the same statistics.
 
 .. _asset-texture-width:
 
