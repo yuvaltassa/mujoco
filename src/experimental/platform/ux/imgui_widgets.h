@@ -562,15 +562,31 @@ struct ImGuiOpts {
 // Options can be used to specify step sizes, clamp ranges, and formatting.
 template <typename T>
 bool ImGui_InputN(const char* name, T* value, int num, ImGuiOpts<T> opts = {}) {
-  bool res = false;
   if (opts.width) {
     ImGui::SetNextItemWidth(opts.width.value());
   }
+
+  // Scalar inputs are applied on enter or focus change, not on every keystroke:
+  // the widget edits a scratch copy, which is written back to `value` only when
+  // it is deactivated. This avoids feeding half-typed numbers to the live model
+  // (e.g. a momentary timestep of 0). Multi-component inputs stay immediate.
+  const bool deferred = num == 1;
+  static std::unordered_map<ImGuiID, T> scratch_by_id;
+  const ImGuiID id = deferred ? ImGui::GetID(name) : 0;
+  T scratch = *value;
+  T* target = value;
+  if (deferred) {
+    auto it = scratch_by_id.find(id);
+    if (it != scratch_by_id.end()) scratch = it->second;
+    target = &scratch;
+  }
+
+  bool res = false;
   if constexpr (std::is_same_v<T, int>) {
     const int step = opts.step.value_or(1);
     const int step_fast = opts.step_fast.value_or(100);
     const char* format = opts.format;
-    res = ImGui::InputScalarN(name, ImGuiDataType_S32, value, num, &step,
+    res = ImGui::InputScalarN(name, ImGuiDataType_S32, target, num, &step,
                               &step_fast, format);
 
   } else if constexpr (std::is_same_v<T, float>) {
@@ -579,7 +595,7 @@ bool ImGui_InputN(const char* name, T* value, int num, ImGuiOpts<T> opts = {}) {
     const float* pstep = opts.step.has_value() ? &step : nullptr;
     const float* pstep_fast = opts.step_fast.has_value() ? &step_fast : nullptr;
     const char* format = opts.format ? opts.format : "%.3f";
-    res = ImGui::InputScalarN(name, ImGuiDataType_Float, value, num, pstep,
+    res = ImGui::InputScalarN(name, ImGuiDataType_Float, target, num, pstep,
                               pstep_fast, format);
 
   } else if constexpr (std::is_same_v<T, double>) {
@@ -589,10 +605,25 @@ bool ImGui_InputN(const char* name, T* value, int num, ImGuiOpts<T> opts = {}) {
     const double* pstep_fast =
         opts.step_fast.has_value() ? &step_fast : nullptr;
     const char* format = opts.format ? opts.format : "%.3f";
-    res = ImGui::InputScalarN(name, ImGuiDataType_Double, value, num, pstep,
+    res = ImGui::InputScalarN(name, ImGuiDataType_Double, target, num, pstep,
                               pstep_fast, format);
   } else {
     static_assert(dependent_false<T>::value, "Unsupported type");
+  }
+
+  if (deferred) {
+    // Keep the scratch alive while editing, commit it on deactivation.
+    res = false;
+    if (ImGui::IsItemActive()) {
+      scratch_by_id[id] = scratch;
+    }
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
+      *value = scratch;
+      res = true;
+    }
+    if (ImGui::IsItemDeactivated()) {
+      scratch_by_id.erase(id);
+    }
   }
 
   if (opts.min.has_value()) {
