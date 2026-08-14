@@ -36,9 +36,10 @@
 #include "engine/engine_util_sparse.h"
 
 // position-dependent computations
-void mj_invPosition(const mjModel* m, mjData* d) {
+mjtStatus mj_invPosition(const mjModel* m, mjData* d) {
   TM_START1;
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
 
   // clear flag for lazy evaluation
   d->flg_energypos = 0;
@@ -50,20 +51,29 @@ void mj_invPosition(const mjModel* m, mjData* d) {
   mj_tendon(m, d);
   TM_END(mjTIMER_POS_KINEMATICS);
 
-  mj_makeM(m, d);      // timed internally (POS_INERTIA)
-  mj_factorM(m, d);    // timed internally (POS_INERTIA)
+  mj_makeM(m, d);                // timed internally (POS_INERTIA)
+  status |= mj_factorM(m, d);    // timed internally (POS_INERTIA)
+  if (mji_stop(m, status)) {
+    return (d->status = status);
+  }
 
-  mj_collision(m, d);  // timed internally (POS_COLLISION)
+  status |= mj_collision(m, d);  // timed internally (POS_COLLISION)
+  if (mji_stop(m, status)) {
+    return (d->status = status);
+  }
 
   TM_RESTART;
-  mj_makeConstraint(m, d);
+  status |= mj_makeConstraint(m, d);
   TM_END(mjTIMER_POS_MAKE);
 
   // compute exact diagonal if enabled
   if (mjENABLED(mjENBL_DIAGEXACT)) {
     TM_RESTART;
-    mj_projectConstraint(m, d);
+    status |= mj_projectConstraint(m, d);
     TM_END(mjTIMER_POS_PROJECT);
+  }
+  if (mji_stop(m, status)) {
+    return (d->status = status);
   }
 
   TM_RESTART;
@@ -74,12 +84,13 @@ void mj_invPosition(const mjModel* m, mjData* d) {
   mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/0);
 
   TM_END1(mjTIMER_POSITION);
+  return (d->status = status);
 }
 
 
 // velocity-dependent computations
-void mj_invVelocity(const mjModel* m, mjData* d) {
-  mj_fwdVelocity(m, d);
+mjtStatus mj_invVelocity(const mjModel* m, mjData* d) {
+  return mj_fwdVelocity(m, d);
 }
 
 
@@ -193,7 +204,7 @@ static void mj_discreteAcc(const mjModel* m, mjData* d) {
 
 
 // inverse constraint solver
-void mj_invConstraint(const mjModel* m, mjData* d) {
+mjtStatus mj_invConstraint(const mjModel* m, mjData* d) {
   TM_START;
   int nefc = d->nefc;
 
@@ -201,7 +212,7 @@ void mj_invConstraint(const mjModel* m, mjData* d) {
   if (!nefc) {
     mju_zero(d->qfrc_constraint, m->nv);
     TM_END(mjTIMER_CONSTRAINT);
-    return;
+    return (d->status = mjSTATUS_OK);
   }
 
   mj_markStack(d);
@@ -216,13 +227,15 @@ void mj_invConstraint(const mjModel* m, mjData* d) {
 
   mj_freeStack(d);
   TM_END(mjTIMER_CONSTRAINT);
+  return (d->status = mjSTATUS_OK);
 }
 
 
 // inverse dynamics with skip; skipstage is mjtStage
-void mj_inverseSkip(const mjModel* m, mjData* d,
-                    int skipstage, int skipsensor) {
+mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
+                         int skipstage, int skipsensor) {
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
   mj_markStack(d);
   mjtNum* qacc;
   int nv = m->nv;
@@ -232,7 +245,11 @@ void mj_inverseSkip(const mjModel* m, mjData* d,
 
   // position-dependent
   if (skipstage < mjSTAGE_POS) {
-    mj_invPosition(m, d);
+    status |= mj_invPosition(m, d);
+    if (mji_stop(m, status)) {
+      mj_freeStack(d);
+      return (d->status = status);
+    }
     if (!skipsensor) {
       mj_sensorPos(m, d);
     }
@@ -243,7 +260,7 @@ void mj_inverseSkip(const mjModel* m, mjData* d,
 
   // velocity-dependent
   if (skipstage < mjSTAGE_VEL) {
-    mj_invVelocity(m, d);
+    status |= mj_invVelocity(m, d);
     if (!skipsensor) {
       mj_sensorVel(m, d);
     }
@@ -269,7 +286,7 @@ void mj_inverseSkip(const mjModel* m, mjData* d,
   }
 
   // acceleration-dependent
-  mj_invConstraint(m, d);
+  status |= mj_invConstraint(m, d);
 
   // sum of bias forces in qfrc_inverse = centripetal + Coriolis + tendon bias
   mj_rne(m, d, 0, d->qfrc_inverse);
@@ -320,12 +337,13 @@ void mj_inverseSkip(const mjModel* m, mjData* d,
 
   mj_freeStack(d);
   TM_END(mjTIMER_INVERSE);
+  return (d->status = status);
 }
 
 
 // inverse dynamics
-void mj_inverse(const mjModel* m, mjData* d) {
-  mj_inverseSkip(m, d, mjSTAGE_NONE, 0);
+mjtStatus mj_inverse(const mjModel* m, mjData* d) {
+  return mj_inverseSkip(m, d, mjSTAGE_NONE, 0);
 }
 
 

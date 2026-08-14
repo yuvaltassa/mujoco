@@ -24,48 +24,48 @@
 extern "C" {
 #endif
 // check positions, velocities, accelerations; reset if bad
-MJAPI void mj_checkPos(const mjModel* m, mjData* d);
-MJAPI void mj_checkVel(const mjModel* m, mjData* d);
-MJAPI void mj_checkAcc(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_checkPos(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_checkVel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_checkAcc(const mjModel* m, mjData* d);
 
 
 //-------------------------------- top-level API ---------------------------------------------------
 
 // advance simulation: use control callback, no external force, RK4 available
-MJAPI void mj_step(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_step(const mjModel* m, mjData* d);
 
 // advance simulation in two steps: before external force/control is set by user
-MJAPI void mj_step1(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_step1(const mjModel* m, mjData* d);
 
 // advance simulation in two steps: after external force/control is set by user
-MJAPI void mj_step2(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_step2(const mjModel* m, mjData* d);
 
 // forward dynamics
-MJAPI void mj_forward(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_forward(const mjModel* m, mjData* d);
 
 // forward dynamics with skip; skipstage is mjtStage
-MJAPI void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
+MJAPI mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
 
 
 //-------------------------------- integrators -----------------------------------------------------
 
 // Runge Kutta explicit order-N integrator
-MJAPI void mj_RungeKutta(const mjModel* m, mjData* d, int N);
+MJAPI mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N);
 
 // Euler integrator, semi-implicit in velocity
-MJAPI void mj_Euler(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_Euler(const mjModel* m, mjData* d);
 
 // Euler integrator, semi-implicit in velocity, possibly skipping factorisation
-MJAPI void mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor);
+MJAPI mjtStatus mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor);
 
 // fully implicit in velocity
-MJAPI void mj_implicit(const mjModel *m, mjData *d);
+MJAPI mjtStatus mj_implicit(const mjModel *m, mjData *d);
 
 // fully implicit in velocity, possibly skipping factorization
-MJAPI void mj_implicitSkip(const mjModel *m, mjData *d, int skipfactor);
+MJAPI mjtStatus mj_implicitSkip(const mjModel *m, mjData *d, int skipfactor);
 
 // discrete integrator: the solver's qacc is the step map, advance directly
-void mj_discrete(const mjModel* m, mjData* d);
+mjtStatus mj_discrete(const mjModel* m, mjData* d);
 
 // runtime option validation for the discrete integrator: mjERROR on unsupported combinations
 void mj_checkDiscrete(const mjModel* m);
@@ -76,19 +76,19 @@ void mj_checkDiscrete(const mjModel* m);
 MJAPI void mj_fwdKinematics(const mjModel* m, mjData* d);
 
 // computations that depend only on qpos
-MJAPI void mj_fwdPosition(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdPosition(const mjModel* m, mjData* d);
 
 // computations that depend only on qpos and qvel
-MJAPI void mj_fwdVelocity(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdVelocity(const mjModel* m, mjData* d);
 
 // compute actuator force
-MJAPI void mj_fwdActuation(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdActuation(const mjModel* m, mjData* d);
 
 // add up all non-constraint forces, compute qacc_smooth
-MJAPI void mj_fwdAcceleration(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d);
 
 // forward constraint
-MJAPI void mj_fwdConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d);
 
 #ifdef __cplusplus
 }

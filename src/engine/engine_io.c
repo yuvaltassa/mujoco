@@ -1337,6 +1337,7 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
   // clear solver diagnostics
   memset(d->warning, 0, mjNWARNING*sizeof(mjWarningStat));
   memset(d->timer, 0, mjNTIMER*sizeof(mjTimerStat));
+  d->status = 0;
   memset(d->solver, 0, mjNSOLVER*mjNISLAND*sizeof(mjSolverStat));
   mju_zeroInt(d->solver_niter, mjNISLAND);
   mju_zeroInt(d->solver_nnz, mjNISLAND);

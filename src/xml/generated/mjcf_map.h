@@ -168,6 +168,14 @@ inline constexpr mjMap cone_map[] = {
 };
 inline constexpr int cone_sz = 2;
 
+// enum onwarn
+inline constexpr mjMap onwarn_map[] = {
+  {"auto",      mjONWARN_AUTO},
+  {"continue",  mjONWARN_CONTINUE},
+  {"stop",      mjONWARN_STOP},
+};
+inline constexpr int onwarn_sz = 3;
+
 // enum jacobian
 inline constexpr mjMap jacobian_map[] = {
   {"dense",   mjJAC_DENSE},

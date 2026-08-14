@@ -133,6 +133,20 @@ Engine
    than a fixed threshold. Flexes with :ref:`elastic2d<flex-elasticity-elastic2d>` stretch stiffness step roughly twice
    as fast; bending-only flexes keep the exact constant factor and are unchanged.
 8. :commit:`86e98601` Rewrote cleaner box-box SAT collider.
+- Added the :ref:`onwarn<option-onwarn>` option, selecting the engine's response to
+  :ref:`simulation warnings<siSimWarning>`: :at-val:`auto` (default) applies the per-warning automatic recovery as
+  before, :at-val:`continue` records the warning without resetting the state, and the new :at-val:`stop` mode stops
+  the top-level call at the first warning, leaving the state available for inspection.
+- The top-level simulation functions (:ref:`mj_step` and ~28 related pipeline functions) now return
+  :ref:`mjtStatus`, a bitmask reporting which simulation warnings occurred during the call; 0 means none. The status
+  of the most recently completed top-level call is also stored in the new ``mjData.status``. Changing ``void``
+  functions to return a value is source and binary compatible for existing callers; the one exception is code
+  storing these functions in ``void``-returning function-pointer variables, which no longer compiles.
+- The near-singular inertia warning is now also raised by the modified-inertia (``qH``) factorizations of the
+  :at:`implicit`, :at:`implicitfast` and damped-:at:`Euler` integrators, previously silent.
+- Python: the pipeline functions return :ref:`mjtStatus` as above, and enums gained value-based truthiness matching
+  ``enum.IntEnum`` — a zero-valued member like ``mjSTATUS_OK`` is now falsy, so ``if mujoco.mj_step(m, d):``
+  detects impaired steps. Previously ``bool()`` of any enum member was ``True``.
 
 .. admonition:: Breaking API changes
    :class: attention
@@ -158,6 +172,12 @@ Engine
        :ref:`parent-child collision filtering<SurprisingCollisions>`; mocap bodies no longer count as static geometry
        for ray casting, and contact-matching sensors aggregate their contacts under the mocap body rather than the
        world; and geom pairs where neither body can move no longer generate contacts.
+   - Removed the ``autoreset`` :ref:`flag<option-flag>`, subsumed by :ref:`onwarn<option-onwarn>`: replace
+     :at-val:`autoreset="disable"` with :at-val:`onwarn="continue"` (the enabled default corresponds to
+     :at-val:`onwarn="auto"`). ``mjDSBL_AUTORESET`` is removed from ``mjtDisableBit`` and the subsequent enum
+     values are renumbered.
+   - :ref:`mj_addContact` now returns :ref:`mjtStatus` (``mjSTATUS_CONTACTFULL`` when the contact buffer is full)
+     instead of 0/1; boolean uses are unaffected.
 
 Models
 ^^^^^^

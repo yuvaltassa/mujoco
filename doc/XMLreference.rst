@@ -516,6 +516,19 @@ adjust it properly through the XML.
 :at:`ccd_tolerance`: :at-val:`real, "1e-6"`
    Tolerance threshold used for early termination of the convex collision algorithm.
 
+.. _option-onwarn:
+
+:at:`onwarn`: :at-val:`[auto, continue, stop], "auto"`
+   Response to :ref:`simulation warnings<siSimWarning>`. In the default :at-val:`auto` mode the engine applies the
+   per-warning automatic recovery and continues: divergence (bad values in ``qpos``, ``qvel`` or ``qacc``) resets the
+   state to defaults, bad controls are zeroed, contacts and constraints that do not fit in memory are dropped, and
+   near-singular inertia pivots are clamped. In :at-val:`continue` mode the warning is recorded but no reset is
+   performed; the inline saves (control zeroing, dropping, clamping) still apply. In :at-val:`stop` mode the top-level
+   pipeline function stops at the first warning and returns a nonzero :ref:`mjtStatus`, leaving the state available
+   for inspection. In all three modes the warning is counted in ``mjData.warning`` and returned in the status bitmask.
+   This attribute subsumes the removed :at:`autoreset` flag: :at-val:`auto` corresponds to the old default and
+   :at-val:`continue` to the disabled flag.
+
 .. _option-sleep_tolerance:
 
 :at:`sleep_tolerance`: :at-val:`real, "1e-3"`
@@ -672,11 +685,6 @@ from its default.
 :at:`eulerdamp`: :at-val:`[disable, enable], "enable"`
    This flag disables implicit integration with respect to joint damping in the Euler integrator. See the
    :ref:`Numerical Integration<geIntegration>` section for more details.
-
-.. _option-flag-autoreset:
-
-:at:`autoreset`: :at-val:`[disable, enable], "enable"`
-   This flag disables the automatic resetting of the simulation state when numerical issues are detected.
 
 .. _option-flag-override:
 

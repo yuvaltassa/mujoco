@@ -193,8 +193,8 @@ void scanPluginLibraries() {
 
 //------------------------------------------- simulation -------------------------------------------
 
-const char* Diverged(int disableflags, const mjData* d) {
-  if (disableflags & mjDSBL_AUTORESET) {
+const char* Diverged(int onwarn, const mjData* d) {
+  if (onwarn != mjONWARN_AUTO) {
     for (mjtWarning w : {mjWARN_BADQACC, mjWARN_BADQVEL, mjWARN_BADQPOS}) {
       if (d->warning[w].number > 0) { return mju_warningText(w, d->warning[w].lastinfo); }
     }
@@ -392,7 +392,7 @@ void PhysicsLoop(mj::Simulate& sim) {
 
             // run single step, let next iteration deal with timing
             mj_step(m, d);
-            const char* message = Diverged(m->opt.disableflags, d);
+            const char* message = Diverged(m->opt.onwarn, d);
             if (message) {
               sim.run = 0;
               mju::strcpy_arr(sim.load_error, message);
@@ -423,7 +423,7 @@ void PhysicsLoop(mj::Simulate& sim) {
 
               // call mj_step
               mj_step(m, d);
-              const char* message = Diverged(m->opt.disableflags, d);
+              const char* message = Diverged(m->opt.onwarn, d);
               if (message) {
                 sim.run = 0;
                 mju::strcpy_arr(sim.load_error, message);
@@ -499,7 +499,6 @@ __attribute__((used, visibility("default"))) extern "C" void _mj_rosettaError(co
 
 // run event loop
 int main(int argc, char** argv) {
-
   // display an error if running on macOS under Rosetta 2
 #if defined(__APPLE__) && defined(__AVX__)
   if (rosetta_error_msg) {
@@ -527,12 +526,11 @@ int main(int argc, char** argv) {
   mjv_defaultPerturb(&pert);
 
   // simulate object encapsulates the UI
-  auto sim = std::make_unique<mj::Simulate>(
-          std::make_unique<mj::GlfwAdapter>(),
-      &cam,
-      &opt,
-      &pert,
-      /* is_passive = */ false);
+  auto sim = std::make_unique<mj::Simulate>(std::make_unique<mj::GlfwAdapter>(),
+                                            &cam,
+                                            &opt,
+                                            &pert,
+                                            /* is_passive = */ false);
 
   const char* filename = nullptr;
   if (argc > 1) { filename = argv[1]; }

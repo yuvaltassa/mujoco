@@ -104,6 +104,7 @@ typedef struct mjData_ {
   // diagnostics
   mjWarningStat warning[mjNWARNING];          // warning statistics (mutable)
   mjTimerStat   timer[mjNTIMER];              // timer statistics
+  int           status;                       // status of last top-level call (mjtStatus)
 
   // variable sizes
   int     ncon;              // number of detected contacts
@@ -476,6 +477,7 @@ typedef struct mjOption_ {        // physics options
   int ls_iterations;              // maximum number of CG/Newton linesearch iterations
   int noslip_iterations;          // maximum number of noslip solver iterations
   int ccd_iterations;             // maximum number of convex collision solver iterations
+  int onwarn;                     // response to simulation warnings (mjtOnWarn)
   int disableflags;               // bit flags for disabling standard features
   int enableflags;                // bit flags for enabling optional features
   int disableactuator;            // bit flags for disabling actuators by group id
@@ -2398,12 +2400,11 @@ typedef enum mjtDisableBit {      // disable default feature bitflags
   mjDSBL_SENSOR       = 1<<13,    // sensors
   mjDSBL_MIDPHASE     = 1<<14,    // mid-phase collision filtering
   mjDSBL_EULERDAMP    = 1<<15,    // implicit integration of joint damping in Euler integrator
-  mjDSBL_AUTORESET    = 1<<16,    // automatic reset when numerical issues are detected
-  mjDSBL_NATIVECCD    = 1<<17,    // native convex collision detection
-  mjDSBL_ISLAND       = 1<<18,    // constraint island discovery
-  mjDSBL_MULTICCD     = 1<<19,    // multiple CCD contact points
+  mjDSBL_NATIVECCD    = 1<<16,    // native convex collision detection
+  mjDSBL_ISLAND       = 1<<17,    // constraint island discovery
+  mjDSBL_MULTICCD     = 1<<18,    // multiple CCD contact points
 
-  mjNDISABLE          = 20        // number of disable flags
+  mjNDISABLE          = 19        // number of disable flags
 } mjtDisableBit;
 typedef enum mjtEnableBit {       // enable optional feature bitflags
   mjENBL_OVERRIDE     = 1<<0,     // override contact parameters
@@ -2815,6 +2816,22 @@ typedef enum mjtWarning {           // warning types
 
   mjNWARNING                        // number of warnings
 } mjtWarning;
+typedef enum mjtStatus {            // status bitmask returned by pipeline functions
+  mjSTATUS_OK          = 0,                          // nothing to report
+
+  mjSTATUS_INERTIA     = 1 << mjWARN_INERTIA,        // (near) singular inertia matrix
+  mjSTATUS_CONTACTFULL = 1 << mjWARN_CONTACTFULL,    // too many contacts in contact list
+  mjSTATUS_CNSTRFULL   = 1 << mjWARN_CNSTRFULL,      // too many constraints
+  mjSTATUS_BADQPOS     = 1 << mjWARN_BADQPOS,        // bad number in qpos
+  mjSTATUS_BADQVEL     = 1 << mjWARN_BADQVEL,        // bad number in qvel
+  mjSTATUS_BADQACC     = 1 << mjWARN_BADQACC,        // bad number in qacc
+  mjSTATUS_BADCTRL     = 1 << mjWARN_BADCTRL         // bad number in ctrl
+} mjtStatus;
+typedef enum mjtOnWarn {            // response to simulation warnings
+  mjONWARN_AUTO = 0,                // apply per-warning automatic recovery and continue
+  mjONWARN_CONTINUE,                // record the warning and continue without recovery
+  mjONWARN_STOP                     // stop: return from the top-level call
+} mjtOnWarn;
 typedef enum mjtTimer {             // internal timers
   // main api
   mjTIMER_STEP           = 0,       // step
@@ -3462,7 +3479,6 @@ const char* mjDISABLESTRING[mjNDISABLE] = {
   "Sensor",
   "Midphase",
   "Eulerdamp",
-  "AutoReset",
   "NativeCCD",
   "Island",
   "MultiCCD"
@@ -3664,13 +3680,13 @@ void mj_freeLastXML(void);
 int mj_saveXMLString(const mjSpec* s, char* xml, int xml_sz, char* error, int error_sz);
 int mj_saveXML(const mjSpec* s, const char* filename, char* error, int error_sz);
 void mju_getXMLDependencies(const char* filename, mjStringVec* dependencies);
-void mj_step(const mjModel* m, mjData* d);
-void mj_step1(const mjModel* m, mjData* d);
-void mj_step2(const mjModel* m, mjData* d);
-void mj_forward(const mjModel* m, mjData* d);
-void mj_inverse(const mjModel* m, mjData* d);
-void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
-void mj_inverseSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
+mjtStatus mj_step(const mjModel* m, mjData* d);
+mjtStatus mj_step1(const mjModel* m, mjData* d);
+mjtStatus mj_step2(const mjModel* m, mjData* d);
+mjtStatus mj_forward(const mjModel* m, mjData* d);
+mjtStatus mj_inverse(const mjModel* m, mjData* d);
+mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
+mjtStatus mj_inverseSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
 void mj_defaultLROpt(mjLROpt* opt);
 void mj_defaultSolRefImp(mjtNum* solref, mjtNum* solimp);
 void mj_defaultOption(mjOption* opt);
@@ -3717,26 +3733,26 @@ void mj_printScene(const mjvScene* s, const char* filename);
 void mj_printFormattedScene(const mjvScene* s, const char* filename,
                             const char* float_format);
 void mj_fwdKinematics(const mjModel* m, mjData* d);
-void mj_fwdPosition(const mjModel* m, mjData* d);
-void mj_fwdVelocity(const mjModel* m, mjData* d);
-void mj_fwdActuation(const mjModel* m, mjData* d);
-void mj_fwdAcceleration(const mjModel* m, mjData* d);
-void mj_fwdConstraint(const mjModel* m, mjData* d);
-void mj_Euler(const mjModel* m, mjData* d);
-void mj_RungeKutta(const mjModel* m, mjData* d, int N);
-void mj_implicit(const mjModel* m, mjData* d);
-void mj_invPosition(const mjModel* m, mjData* d);
-void mj_invVelocity(const mjModel* m, mjData* d);
-void mj_invConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_fwdPosition(const mjModel* m, mjData* d);
+mjtStatus mj_fwdVelocity(const mjModel* m, mjData* d);
+mjtStatus mj_fwdActuation(const mjModel* m, mjData* d);
+mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d);
+mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_Euler(const mjModel* m, mjData* d);
+mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N);
+mjtStatus mj_implicit(const mjModel* m, mjData* d);
+mjtStatus mj_invPosition(const mjModel* m, mjData* d);
+mjtStatus mj_invVelocity(const mjModel* m, mjData* d);
+mjtStatus mj_invConstraint(const mjModel* m, mjData* d);
 void mj_compareFwdInv(const mjModel* m, mjData* d);
 void mj_sensorPos(const mjModel* m, mjData* d);
 void mj_sensorVel(const mjModel* m, mjData* d);
 void mj_sensorAcc(const mjModel* m, mjData* d);
 void mj_energyPos(const mjModel* m, mjData* d);
 void mj_energyVel(const mjModel* m, mjData* d);
-void mj_checkPos(const mjModel* m, mjData* d);
-void mj_checkVel(const mjModel* m, mjData* d);
-void mj_checkAcc(const mjModel* m, mjData* d);
+mjtStatus mj_checkPos(const mjModel* m, mjData* d);
+mjtStatus mj_checkVel(const mjModel* m, mjData* d);
+mjtStatus mj_checkAcc(const mjModel* m, mjData* d);
 void mj_kinematics(const mjModel* m, mjData* d);
 void mj_comPos(const mjModel* m, mjData* d);
 void mj_camlight(const mjModel* m, mjData* d);
@@ -3745,7 +3761,7 @@ void mj_tendon(const mjModel* m, mjData* d);
 void mj_transmission(const mjModel* m, mjData* d);
 void mj_crb(const mjModel* m, mjData* d);
 void mj_makeM(const mjModel* m, mjData* d);
-void mj_factorM(const mjModel* m, mjData* d);
+mjtStatus mj_factorM(const mjModel* m, mjData* d);
 void mj_solveM(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y, int n);
 void mj_solveM2(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y,
                 const mjtNum* sqrtInvD, int n);
@@ -3755,11 +3771,11 @@ void mj_subtreeVel(const mjModel* m, mjData* d);
 void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result);
 void mj_rnePostConstraint(const mjModel* m, mjData* d);
 int mj_maxContact(const mjModel* m, int g1, int g2, int has_margin);
-void mj_collision(const mjModel* m, mjData* d);
-void mj_makeConstraint(const mjModel* m, mjData* d);
-void mj_island(const mjModel* m, mjData* d);
-void mj_projectConstraint(const mjModel* m, mjData* d);
-void mj_referenceConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_collision(const mjModel* m, mjData* d);
+mjtStatus mj_makeConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_island(const mjModel* m, mjData* d);
+mjtStatus mj_projectConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_referenceConstraint(const mjModel* m, mjData* d);
 void mj_constraintUpdate(const mjModel* m, mjData* d, const mjtNum* jar,
                          mjtNum cost[1], int flg_coneHessian);
 int mj_stateSize(const mjModel* m, int sig);
@@ -3776,7 +3792,7 @@ void mj_initCtrlHistory(const mjModel* m, mjData* d, int id,
 void mj_initSensorHistory(const mjModel* m, mjData* d, int id,
                           const mjtNum* times, const mjtNum* values, mjtNum phase);
 void mj_setKeyframe(mjModel* m, const mjData* d, int k);
-int mj_addContact(const mjModel* m, mjData* d, const mjContact* con);
+mjtStatus mj_addContact(const mjModel* m, mjData* d, const mjContact* con);
 int mj_isPyramidal(const mjModel* m);
 int mj_isSparse(const mjModel* m);
 int mj_isDual(const mjModel* m);
@@ -3946,7 +3962,7 @@ void mju_info(int topic, const char* msg, ...) mjPRINTFLIKE(2, 3);
 void mju_message(const mjLogMessage* msg);
 void* mju_malloc(size_t size);
 void mju_free(void* ptr);
-void mj_warning(mjData* d, int warning, int info);
+mjtStatus mj_warning(mjData* d, int warning, int info);
 void mju_writeLog(const char* type, const char* msg);
 const char* mjs_getError(mjSpec* s);
 const double* mjs_getTimer(mjSpec* s);

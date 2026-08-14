@@ -81,6 +81,7 @@ static const mjXDefaultEntry kDefaults_mjOption[] = {
   {"ls_iterations", (int)offsetof(mjOption, ls_iterations), 2, 1, 1, 0, {50.0}},
   {"noslip_iterations", (int)offsetof(mjOption, noslip_iterations), 2, 1, 0, 0, {0}},
   {"ccd_iterations", (int)offsetof(mjOption, ccd_iterations), 2, 1, 1, 0, {35.0}},
+  {"onwarn", (int)offsetof(mjOption, onwarn), 2, 1, 1, 0, {(double)mjONWARN_AUTO}},
   {"sdf_iterations", (int)offsetof(mjOption, sdf_iterations), 2, 1, 1, 0, {10.0}},
   {"sdf_initpoints", (int)offsetof(mjOption, sdf_initpoints), 2, 1, 1, 0, {40.0}},
 };

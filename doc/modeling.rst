@@ -1813,7 +1813,8 @@ inertia matrix, computed once at compile time from the initial configuration ``q
 
 In the vast majority of models this approximation is entirely adequate. However, in certain situations—such as models
 with highly anisotropic inertias, complex kinematic chains, or bodies operating far from ``qpos0``—the approximation
-may become inaccurate. This can occasionally manifest as unexplained solver divergence (``badqacc`` warnings),
+may become inaccurate. This can occasionally manifest as unexplained solver divergence (``badqacc``
+:ref:`simulation warnings<siSimWarning>`),
 excessive penetration, unrealistic slip, or poor solver convergence. A useful diagnostic is the
 :ref:`fwdinv<option-flag-fwdinv>` flag: if the forward-inverse discrepancy is large, inaccurate constraint scaling may
 be a contributing factor.

@@ -116,6 +116,7 @@ typedef struct mjOption_ {        // physics options
   int ls_iterations;              // maximum number of CG/Newton linesearch iterations
   int noslip_iterations;          // maximum number of noslip solver iterations
   int ccd_iterations;             // maximum number of convex collision solver iterations
+  int onwarn;                     // response to simulation warnings (mjtOnWarn)
   int disableflags;               // bit flags for disabling standard features
   int enableflags;                // bit flags for enabling optional features
   int disableactuator;            // bit flags for disabling actuators by group id

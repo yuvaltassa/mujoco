@@ -55,7 +55,7 @@ void mj_assignFriction(const mjModel* m, mjtNum* target, const mjtNum* source);
 mjtNum mj_assignMargin(const mjModel* m, mjtNum source);
 
 // add contact to d->contact list; return 0 if success; 1 if buffer full
-MJAPI int mj_addContact(const mjModel* m, mjData* d, const mjContact* con);
+MJAPI mjtStatus mj_addContact(const mjModel* m, mjData* d, const mjContact* con);
 
 //-------------------------- constraint instantiation ----------------------------------------------
 
@@ -100,16 +100,16 @@ void mj_makeImpedance(const mjModel* m, mjData* d);
 //---------------------------- top-level API for constraint construction ---------------------------
 
 // main driver: call all functions above
-MJAPI void mj_makeConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_makeConstraint(const mjModel* m, mjData* d);
 
 // compute efc_AR
-MJAPI void mj_projectConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_projectConstraint(const mjModel* m, mjData* d);
 
 // compute efc_vel
 void mj_velocityConstraint(const mjModel* m, mjData* d);
 
 // compute efc_vel, efc_aref
-MJAPI void mj_referenceConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_referenceConstraint(const mjModel* m, mjData* d);
 
 // compute efc_diagA (approximate or exact), efc_R, efc_D, efc_KBIP in the solve metric
 void mj_regularizeConstraint(const mjModel* m, mjData* d, int flg_AR);

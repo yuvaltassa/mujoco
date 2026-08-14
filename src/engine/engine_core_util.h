@@ -149,7 +149,12 @@ MJAPI mjtNum mj_actuatorDamping(const mjModel* m, mjtObj type, int id, mjtNum po
 MJAPI mjtNum mj_actuatorArmature(const mjModel* m, mjtObj type, int id);
 
 // high-level warning function: count warnings in mjData, print only the first time
-MJAPI void mj_warning(mjData* d, int warning, int info);
+MJAPI mjtStatus mj_warning(mjData* d, int warning, int info);
+
+// nonzero status under stop policy: pipeline drivers should unwind
+static inline int mji_stop(const mjModel* m, mjtStatus status) {
+  return status && m->opt.onwarn == mjONWARN_STOP;
+}
 
 
 //-------------------------- effective-metric predicates ------------------------------------------

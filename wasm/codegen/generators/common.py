@@ -96,6 +96,7 @@ def is_struct_value_type(
   if isinstance(t, ast_nodes.ValueType):
     return (
         t.name not in constants.PRIMITIVE_TYPES
+        and t.name not in constants.ENUM_TYPES
         and t.name != "void"
         and not t.name.startswith("mjf")
     )

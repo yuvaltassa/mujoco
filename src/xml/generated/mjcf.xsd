@@ -148,6 +148,14 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="kw_onwarn">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="auto"/>
+      <xs:enumeration value="continue"/>
+      <xs:enumeration value="stop"/>
+    </xs:restriction>
+  </xs:simpleType>
+
   <xs:simpleType name="kw_jacobian">
     <xs:restriction base="xs:string">
       <xs:enumeration value="dense"/>
@@ -768,6 +776,7 @@
     <xs:attribute name="ls_iterations" type="xs:int" default="50"/>
     <xs:attribute name="noslip_iterations" type="xs:int"/>
     <xs:attribute name="ccd_iterations" type="xs:int" default="35"/>
+    <xs:attribute name="onwarn" type="kw_onwarn" default="auto"/>
     <xs:attribute name="sdf_iterations" type="xs:int" default="10"/>
     <xs:attribute name="sdf_initpoints" type="xs:int" default="40"/>
     <xs:attribute name="actuatorgroupdisable" type="intlist">
@@ -1165,7 +1174,6 @@
     <xs:attribute name="sensor" type="kw_enable" default="enable"/>
     <xs:attribute name="midphase" type="kw_enable" default="enable"/>
     <xs:attribute name="eulerdamp" type="kw_enable" default="enable"/>
-    <xs:attribute name="autoreset" type="kw_enable" default="enable"/>
     <xs:attribute name="nativeccd" type="kw_enable" default="enable"/>
     <xs:attribute name="island" type="kw_enable" default="enable"/>
     <xs:attribute name="multiccd" type="kw_enable" default="enable"/>

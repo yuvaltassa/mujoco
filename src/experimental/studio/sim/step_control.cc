@@ -165,7 +165,7 @@ StepControl::Status StepControl::Advance(mjModel* m, mjData* d) {
       post_step_(m, d);
     }
 
-    if (mjDISABLED(mjDSBL_AUTORESET)) {
+    if (m->opt.onwarn != mjONWARN_AUTO) {
       for (mjtWarning w : kDivergedWarnings) {
         if (d->warning[w].number > 0) {
           // Stop stepping if the simulation diverged.

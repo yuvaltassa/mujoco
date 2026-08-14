@@ -606,6 +606,27 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     np.testing.assert_allclose(contact_copy[2].pos[:2], [0.1, 0.1])
     np.testing.assert_allclose(contact_copy[3].pos[:2], [-0.1, 0.1])
 
+  def test_mj_step_status(self):
+    status = mujoco.mj_step(self.model, self.data)
+    self.assertEqual(status, mujoco.mjtStatus.mjSTATUS_OK)
+    self.assertFalse(status)
+
+    # enum truthiness follows the underlying value
+    self.assertFalse(mujoco.mjtWarning.mjWARN_INERTIA)
+    self.assertTrue(mujoco.mjtWarning.mjWARN_BADQPOS)
+
+    # divergence: the returned status carries the corresponding bit
+    self.data.qpos[0] = float('nan')
+    status = mujoco.mj_step(self.model, self.data)
+    self.assertTrue(status)
+    self.assertEqual(status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    self.assertTrue(status & mujoco.mjtStatus.mjSTATUS_BADQPOS)
+
+    # the status of the last top-level call is mirrored in mjData.status
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    mujoco.mj_resetData(self.model, self.data)
+    self.assertEqual(self.data.status, 0)
+
   def test_mj_step(self):
     displacement = 0.25
     self.data.qpos[2] += displacement
@@ -1045,7 +1066,7 @@ Return the current version of MuJoCo as a null-terminated string.
     )
     self.assertEqual(
         mujoco.mj_Euler.__doc__,
-        """mj_Euler(m: mujoco._structs.MjModel, d: mujoco._structs.MjData) -> None
+        """mj_Euler(m: mujoco._structs.MjModel, d: mujoco._structs.MjData) -> mujoco._enums.mjtStatus
 
 Euler integrator, semi-implicit in velocity.
 """,

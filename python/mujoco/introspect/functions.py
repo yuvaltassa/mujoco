@@ -687,7 +687,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_step',
      FunctionDecl(
          name='mj_step',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -707,7 +707,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_step1',
      FunctionDecl(
          name='mj_step1',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -727,7 +727,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_step2',
      FunctionDecl(
          name='mj_step2',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -747,7 +747,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_forward',
      FunctionDecl(
          name='mj_forward',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -767,7 +767,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_inverse',
      FunctionDecl(
          name='mj_inverse',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -787,7 +787,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_forwardSkip',
      FunctionDecl(
          name='mj_forwardSkip',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -815,7 +815,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_inverseSkip',
      FunctionDecl(
          name='mj_inverseSkip',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1704,7 +1704,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_fwdPosition',
      FunctionDecl(
          name='mj_fwdPosition',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1724,7 +1724,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_fwdVelocity',
      FunctionDecl(
          name='mj_fwdVelocity',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1744,7 +1744,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_fwdActuation',
      FunctionDecl(
          name='mj_fwdActuation',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1764,7 +1764,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_fwdAcceleration',
      FunctionDecl(
          name='mj_fwdAcceleration',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1784,7 +1784,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_fwdConstraint',
      FunctionDecl(
          name='mj_fwdConstraint',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1804,7 +1804,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_Euler',
      FunctionDecl(
          name='mj_Euler',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1824,7 +1824,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_RungeKutta',
      FunctionDecl(
          name='mj_RungeKutta',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1848,7 +1848,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_implicit',
      FunctionDecl(
          name='mj_implicit',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1868,7 +1868,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_invPosition',
      FunctionDecl(
          name='mj_invPosition',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1888,7 +1888,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_invVelocity',
      FunctionDecl(
          name='mj_invVelocity',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1908,7 +1908,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_invConstraint',
      FunctionDecl(
          name='mj_invConstraint',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2048,7 +2048,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_checkPos',
      FunctionDecl(
          name='mj_checkPos',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2068,7 +2068,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_checkVel',
      FunctionDecl(
          name='mj_checkVel',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2088,7 +2088,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_checkAcc',
      FunctionDecl(
          name='mj_checkAcc',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2268,7 +2268,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_factorM',
      FunctionDecl(
          name='mj_factorM',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2502,7 +2502,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_collision',
      FunctionDecl(
          name='mj_collision',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2522,7 +2522,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_makeConstraint',
      FunctionDecl(
          name='mj_makeConstraint',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2542,7 +2542,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_island',
      FunctionDecl(
          name='mj_island',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2562,7 +2562,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_projectConstraint',
      FunctionDecl(
          name='mj_projectConstraint',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2582,7 +2582,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_referenceConstraint',
      FunctionDecl(
          name='mj_referenceConstraint',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2956,7 +2956,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_addContact',
      FunctionDecl(
          name='mj_addContact',
-         return_type=ValueType(name='int'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2977,7 +2977,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
                  ),
              ),
          ),
-         doc='Add contact to d->contact list; return 0 if success; 1 if buffer full.',  # pylint: disable=line-too-long
+         doc='Add contact to d->contact list; return mjSTATUS_OK on success, mjSTATUS_CONTACTFULL if full.',  # pylint: disable=line-too-long
      )),
     ('mj_isPyramidal',
      FunctionDecl(
@@ -6495,7 +6495,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_warning',
      FunctionDecl(
          name='mj_warning',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='d',
@@ -6512,7 +6512,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
                  type=ValueType(name='int'),
              ),
          ),
-         doc='High-level warning function: count warnings in mjData, print only the first.',  # pylint: disable=line-too-long
+         doc='High-level warning function: count warnings in mjData, print only the first, return the corresponding status bit.',  # pylint: disable=line-too-long
      )),
     ('mju_writeLog',
      FunctionDecl(
