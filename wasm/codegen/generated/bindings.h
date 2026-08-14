@@ -734,6 +734,12 @@ struct MjOption {
   void set_ccd_iterations(int value) {
     ptr_->ccd_iterations = value;
   }
+  int onwarn() const {
+    return ptr_->onwarn;
+  }
+  void set_onwarn(int value) {
+    ptr_->onwarn = value;
+  }
   int disableflags() const {
     return ptr_->disableflags;
   }
@@ -6742,6 +6748,12 @@ struct MjData {
   }
   emscripten::val solver_fwdinv() const {
     return emscripten::val(emscripten::typed_memory_view(2, ptr_->solver_fwdinv));
+  }
+  int status() const {
+    return ptr_->status;
+  }
+  void set_status(int value) {
+    ptr_->status = value;
   }
   int ncon() const {
     return ptr_->ncon;

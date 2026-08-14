@@ -116,9 +116,14 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
           [](const MjModelWrapper& m, MjDataWrapper& d, int nstep) {
             const raw::MjModel* const m_ptr = m.get();
             raw::MjData* const d_ptr = d.get();
+            mjtStatus status = mjSTATUS_OK;
             for (int i = 0; i < nstep; ++i) {
-              ::mj_step(m_ptr, d_ptr);
+              status = static_cast<mjtStatus>(status | ::mj_step(m_ptr, d_ptr));
+              if (status && m_ptr->opt.onwarn == mjONWARN_STOP) {
+                break;
+              }
             }
+            return status;
           }),
       py::arg("m"), py::arg("d"), py::arg_v("nstep", 1),
       py::doc((std::string(traits::mj_step::doc) +

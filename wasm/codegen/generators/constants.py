@@ -15,6 +15,7 @@
 """Constants used in the code generation process."""
 
 from typing import Dict, Set
+from introspect import enums as introspect_enums
 from introspect import structs as introspect_structs
 
 PRIMITIVE_TYPES: Set[str] = {
@@ -43,6 +44,9 @@ PRIMITIVE_TYPES: Set[str] = {
     "void",
     # go/keep-sorted end
 }
+
+# C enum type names; passed and returned as raw values (embind registers all enums)
+ENUM_TYPES: Set[str] = set(introspect_enums.ENUMS.keys())
 
 _SKIPPED_PLUGIN_FUNCTIONS: tuple[str, ...] = (
     # go/keep-sorted start

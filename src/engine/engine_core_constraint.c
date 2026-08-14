@@ -386,8 +386,8 @@ static int mj_vertBodyWeight(const mjModel* m, const mjData* d, int f, int* v,
 }
 
 
-// add contact to d->contact list; return 0 if success; 1 if buffer full
-int mj_addContact(const mjModel* m, mjData* d, const mjContact* con) {
+// add contact to d->contact list; return mjSTATUS_OK on success, mjSTATUS_CONTACTFULL if full
+mjtStatus mj_addContact(const mjModel* m, mjData* d, const mjContact* con) {
   // move arena pointer back to the end of the existing contact array and invalidate efc_ arrays
   d->parena = d->ncon * sizeof(mjContact);
 #ifdef mjUSEASAN
@@ -399,14 +399,13 @@ int mj_addContact(const mjModel* m, mjData* d, const mjContact* con) {
   // copy contact
   mjContact* dst = mj_arenaAllocByte(d, sizeof(mjContact), _Alignof(mjContact));
   if (!dst) {
-    mj_warning(d, mjWARN_CONTACTFULL, d->ncon);
-    return 1;
+    return mj_warning(d, mjWARN_CONTACTFULL, d->ncon);
   }
   *dst = *con;
 
   // increase counter, return success
   d->ncon++;
-  return 0;
+  return mjSTATUS_OK;
 }
 
 
@@ -2302,9 +2301,9 @@ void mj_makeImpedance(const mjModel* m, mjData* d) {
 
 
 // forward declarations (defined in the projection section below)
-static void mj_makeYSymbolic(const mjModel* m, mjData* d);
+static mjtStatus mj_makeYSymbolic(const mjModel* m, mjData* d);
 static void mj_makeYNumeric(const mjModel* m, mjData* d, int flg_diagexact);
-static void mj_makeARSymbolic(const mjModel* m, mjData* d);
+static mjtStatus mj_makeARSymbolic(const mjModel* m, mjData* d);
 static void mj_makeARNumeric(const mjModel* m, mjData* d);
 
 // compute constraint regularization in the current solve metric: efc_diagA (approximate,
@@ -2930,13 +2929,13 @@ static void computeY_backsub(mjtNum* Y, const int* Y_rownnz, const int* Y_rowadr
 //---------------------------- top-level API for constraint construction ---------------------------
 
 // driver: call all functions above
-void mj_makeConstraint(const mjModel* m, mjData* d) {
+mjtStatus mj_makeConstraint(const mjModel* m, mjData* d) {
   // clear sizes
   d->ne = d->nf = d->nl = d->nefc = d->nJ = d->nA = d->nY = 0;
 
   // disabled or Jacobian not allocated: return
   if (mjDISABLED(mjDSBL_CONSTRAINT)) {
-    return;
+    return (d->status = mjSTATUS_OK);
   }
 
   // precount sizes for constraint Jacobian matrices
@@ -2953,7 +2952,7 @@ void mj_makeConstraint(const mjModel* m, mjData* d) {
 
   // allocate efc arrays on arena
   if (!arenaAllocEfc(m, d)) {
-    return;
+    return (d->status = mjSTATUS_CNSTRFULL);
   }
 
   // clear tendon_efcadr
@@ -3002,7 +3001,7 @@ void mj_makeConstraint(const mjModel* m, mjData* d) {
 
   // no constraints: return
   if (!d->nefc) {
-    return;
+    return (d->status = mjSTATUS_OK);
   }
 
   // compute supernodes of J
@@ -3019,13 +3018,14 @@ void mj_makeConstraint(const mjModel* m, mjData* d) {
     // compute KBIP, D, R, adjust diagA
     mj_makeImpedance(m, d);
   }
+  return (d->status = mjSTATUS_OK);
 }
 
 
 // symbolic phase of Y = J*M^{-1/2}: the sparsity pattern and its arena allocation.
 // The pattern depends only on efc_J and the tree factor's pattern (M's), both fixed at
 // the position stage, so this runs once per step in mj_projectConstraint
-static void mj_makeYSymbolic(const mjModel* m, mjData* d) {
+static mjtStatus mj_makeYSymbolic(const mjModel* m, mjData* d) {
   int nefc = d->nefc, nv = m->nv;
 
   // sparse: pre-counted pattern
@@ -3037,7 +3037,7 @@ static void mj_makeYSymbolic(const mjModel* m, mjData* d) {
       mj_warning(d, mjWARN_CNSTRFULL, d->narena);
       mj_clearEfc(d);
       d->parena = d->ncon * sizeof(mjContact);
-      return;
+      return mjSTATUS_CNSTRFULL;
     }
 
     // pre-count Y_rownnz, Y_rowadr, nY (total nonzeros)
@@ -3055,7 +3055,7 @@ static void mj_makeYSymbolic(const mjModel* m, mjData* d) {
       mj_warning(d, mjWARN_CNSTRFULL, d->narena);
       mj_clearEfc(d);
       d->parena = d->ncon * sizeof(mjContact);
-      return;
+      return mjSTATUS_CNSTRFULL;
     }
 
     // under discrete the numeric phase is deferred to the actuation stage, but
@@ -3076,9 +3076,10 @@ static void mj_makeYSymbolic(const mjModel* m, mjData* d) {
       mj_warning(d, mjWARN_CNSTRFULL, d->narena);
       mj_clearEfc(d);
       d->parena = d->ncon * sizeof(mjContact);
-      return;
+      return mjSTATUS_CNSTRFULL;
     }
   }
+  return mjSTATUS_OK;
 }
 
 
@@ -3153,7 +3154,7 @@ static void mj_makeYNumeric(const mjModel* m, mjData* d, int flg_diagexact) {
 // symbolic phase of AR = Y*Y' + diag(R): the sparsity pattern and its arena allocation.
 // The pattern depends only on Y's pattern, so this runs once per step in
 // mj_projectConstraint, after mj_makeYSymbolic
-static void mj_makeARSymbolic(const mjModel* m, mjData* d) {
+static mjtStatus mj_makeARSymbolic(const mjModel* m, mjData* d) {
   int nefc = d->nefc, nv = m->nv;
 
   // sparse: symbolic square from Y's pattern
@@ -3179,7 +3180,7 @@ static void mj_makeARSymbolic(const mjModel* m, mjData* d) {
       mj_clearEfc(d);
       d->parena = d->ncon * sizeof(mjContact);
       mj_freeStack(d);
-      return;
+      return mjSTATUS_CNSTRFULL;
     }
 
     int* diagind = mjSTACKALLOC(d, nefc, int);
@@ -3196,7 +3197,7 @@ static void mj_makeARSymbolic(const mjModel* m, mjData* d) {
       mj_clearEfc(d);
       d->parena = d->ncon * sizeof(mjContact);
       mj_freeStack(d);
-      return;
+      return mjSTATUS_CNSTRFULL;
     }
 
     // A = Y * Y': symbolic phase
@@ -3216,9 +3217,10 @@ static void mj_makeARSymbolic(const mjModel* m, mjData* d) {
       mj_warning(d, mjWARN_CNSTRFULL, d->narena);
       mj_clearEfc(d);
       d->parena = d->ncon * sizeof(mjContact);
-      return;
+      return mjSTATUS_CNSTRFULL;
     }
   }
+  return mjSTATUS_OK;
 }
 
 
@@ -3292,12 +3294,13 @@ static void mj_makeARNumeric(const mjModel* m, mjData* d) {
 
 
 // compute efc_Y, optionally efc_diagA, optionally efc_AR
-void mj_projectConstraint(const mjModel* m, mjData* d) {
+mjtStatus mj_projectConstraint(const mjModel* m, mjData* d) {
   int nefc = d->nefc;
+  mjtStatus status = mjSTATUS_OK;
 
   // nothing to do
   if (!nefc) {
-    return;
+    return (d->status = mjSTATUS_OK);
   }
 
   int isDual = mj_isDual(m);
@@ -3311,19 +3314,22 @@ void mj_projectConstraint(const mjModel* m, mjData* d) {
   // allocation-free
   if (mj_isMetric(m)) {
     if (isDual || diagexact) {
-      mj_makeYSymbolic(m, d);
+      status |= mj_makeYSymbolic(m, d);
       if (isDual && d->nefc) {
-        mj_makeARSymbolic(m, d);
+        status |= mj_makeARSymbolic(m, d);
       }
     }
-    return;
+    return (d->status = status);
   }
 
   // compute Y = J*M^{-1/2}; overwrite diagApprox if diagexact
   if (isDual || diagexact) {
-    mj_makeYSymbolic(m, d);
+    status |= mj_makeYSymbolic(m, d);
     if (d->nefc) {
       mj_makeYNumeric(m, d, diagexact);
+    }
+    if (mji_stop(m, status)) {
+      return (d->status = status);
     }
   }
 
@@ -3340,11 +3346,12 @@ void mj_projectConstraint(const mjModel* m, mjData* d) {
 
   // assemble AR for dual solver
   if (isDual && d->nefc) {
-    mj_makeARSymbolic(m, d);
+    status |= mj_makeARSymbolic(m, d);
     if (d->nefc) {
       mj_makeARNumeric(m, d);
     }
   }
+  return (d->status = status);
 }
 
 
@@ -3460,7 +3467,7 @@ void mj_velocityConstraint(const mjModel* m, mjData* d) {
 
 
 // compute efc_vel, efc_aref
-void mj_referenceConstraint(const mjModel* m, mjData* d) {
+mjtStatus mj_referenceConstraint(const mjModel* m, mjData* d) {
   int nefc = d->nefc;
   const mjtNum* KBIP = d->efc_KBIP;
   int metric = mj_isMetric(m);
@@ -3495,6 +3502,7 @@ void mj_referenceConstraint(const mjModel* m, mjData* d) {
   // bias adhesive contact rows: a force offset (D*R*edge = edge), independent of the row factor,
   // so it is added after the division
   mj_adhesionRef(m, d);
+  return (d->status = mjSTATUS_OK);
 }
 
 

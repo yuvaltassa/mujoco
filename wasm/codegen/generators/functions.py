@@ -209,7 +209,10 @@ def get_compatible_return_code(func: ast_nodes.FunctionDecl) -> str:
   if isinstance(func.return_type, ast_nodes.ValueType):
     if func.return_type.name == "void":
       return f"{c_call};"
-    if func.return_type.name in constants.PRIMITIVE_TYPES:
+    if (
+        func.return_type.name in constants.PRIMITIVE_TYPES
+        or func.return_type.name in constants.ENUM_TYPES
+    ):
       return f"return {c_call};"
     if common.is_struct_value_type(func.return_type):
       struct_name = func.return_type.name
@@ -243,9 +246,9 @@ def get_compatible_return_type(func: ast_nodes.FunctionDecl) -> str:
     if inner_type.name not in constants.PRIMITIVE_TYPES:
       const_qualifier = get_const_qualifier(func)
       return f"""{const_qualifier}std::optional<{common.capitalize(inner_type.name)}>"""
-  if (
-      isinstance(func.return_type, ast_nodes.ValueType)
-      and func.return_type.name in constants.PRIMITIVE_TYPES
+  if isinstance(func.return_type, ast_nodes.ValueType) and (
+      func.return_type.name in constants.PRIMITIVE_TYPES
+      or func.return_type.name in constants.ENUM_TYPES
   ):
     return f"{func.return_type.name}"
   if common.is_struct_value_type(func.return_type):
