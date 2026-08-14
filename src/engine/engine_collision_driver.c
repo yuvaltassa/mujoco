@@ -601,6 +601,7 @@ static int filterCollisionPair(const mjModel* m, mjData* d, int g1, int g2, int 
 // main collision function
 void mj_collision(const mjModel* m, mjData* d) {
   TM_START1;
+  mjENTER(d);
 
   int nexclude = m->nexclude, npair = m->npair, nbody = m->nbody;
   int nbodyflex = m->nbody + m->nflex;
@@ -614,6 +615,7 @@ void mj_collision(const mjModel* m, mjData* d) {
   // return if disabled
   if (mjDISABLED(mjDSBL_CONSTRAINT) || mjDISABLED(mjDSBL_CONTACT) || nbodyflex < 2) {
     TM_END1(mjTIMER_POS_COLLISION);
+    mjLEAVE(d);
     return;
   }
 
@@ -642,6 +644,11 @@ void mj_collision(const mjModel* m, mjData* d) {
   size_t parena = alignArena(d, _Alignof(int));
 
   for (int i=0; i < nbfpair; i++) {
+    // stop policy: abandon collision detection
+    if (mji_stop(m, d)) {
+      break;
+    }
+
     // reconstruct bodyflex pair ids
     int bf1 = broadphasepair[i].hi;
     int bf2 = broadphasepair[i].lo;
@@ -821,7 +828,7 @@ void mj_collision(const mjModel* m, mjData* d) {
       }
     }
   }
-  mj_freeStack(d);
+  mjSTAGE(mj_freeStack(d));
 
   // finish merging predefined geom pairs
   for (; pairadr < npair; pairadr++) {
@@ -840,6 +847,11 @@ void mj_collision(const mjModel* m, mjData* d) {
 
   // flex self-collisions
   for (int f=0; f < m->nflex; f++) {
+    // stop policy: abandon collision detection
+    if (mji_stop(m, d)) {
+      break;
+    }
+
     if (!m->flex_rigid[f] && (m->flex_contype[f] & m->flex_conaffinity[f])) {
       // skip if flex is asleep
       if (sleep_filter && mj_sleepState(m, d, mjOBJ_FLEX, f) == mjS_ASLEEP) continue;
@@ -890,6 +902,7 @@ void mj_collision(const mjModel* m, mjData* d) {
   // end narrowphase and midphase timer
   TM_END(mjTIMER_COL_NARROW);
   TM_END1(mjTIMER_POS_COLLISION);
+  mjLEAVE(d);
 }
 
 
@@ -1056,6 +1069,11 @@ static void mj_collideTree(const mjModel* m, mjData* d, int bf1, int bf2,
 
   // collide trees
   while (nstack) {
+    // stop policy: abandon traversal
+    if (mji_stop(m, d)) {
+      break;
+    }
+
     // pop from stack
     nstack--;
     int node1 = stack[nstack].node1;
@@ -2366,6 +2384,9 @@ void mj_collideFlexSAP(const mjModel* m, mjData* d, int f) {
     int e1 = elid[sappair[i].hi];
     int e2 = elid[sappair[i].lo];
     mj_collideElems(m, d, f, e1, f, e2);
+    if (mji_stop(m, d)) {
+      break;
+    }
   }
 
   mj_freeStack(d);

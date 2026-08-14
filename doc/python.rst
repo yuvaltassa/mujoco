@@ -454,6 +454,12 @@ The Python bindings utilizes longjmp to allow it to convert irrecoverable MuJoCo
 callback in a thread-local manner using a currently private API, thus allowing for concurrent calls into MuJoCo from
 multiple threads.
 
+Recoverable :ref:`simulation warnings<siSimWarning>` do not raise exceptions: after ``mujoco.mj_step`` and the
+related pipeline functions, ``data.status`` holds the :ref:`mjtStatus` of the call, ``mjSTATUS_OK`` (0) when it
+completed unimpaired. Together with the :ref:`onwarn<option-onwarn>` option this permits explicit handling, e.g.
+``mujoco.mj_step(m, d); if d.status: reset()``. With the ``nstep`` argument, ``mujoco.mj_step`` reports the first
+warning of all the steps taken.
+
 .. _PyCallbacks:
 
 Callbacks

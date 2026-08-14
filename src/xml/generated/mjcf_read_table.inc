@@ -86,6 +86,7 @@ inline constexpr mjXAttr kOptionAttrs[] = {
   {"ls_iterations", mjXAttr::kInt, 1, true, false, false, false, (int)offsetof(mjOption, ls_iterations)},
   {"noslip_iterations", mjXAttr::kInt, 1, true, false, false, false, (int)offsetof(mjOption, noslip_iterations)},
   {"ccd_iterations", mjXAttr::kInt, 1, true, false, false, false, (int)offsetof(mjOption, ccd_iterations)},
+  {"onwarn", mjXAttr::kEnum, 1, true, false, false, false, (int)offsetof(mjOption, onwarn), onwarn_map, onwarn_sz},
   {"sdf_iterations", mjXAttr::kInt, 1, true, false, false, false, (int)offsetof(mjOption, sdf_iterations)},
   {"sdf_initpoints", mjXAttr::kInt, 1, true, false, false, false, (int)offsetof(mjOption, sdf_initpoints)},
 };

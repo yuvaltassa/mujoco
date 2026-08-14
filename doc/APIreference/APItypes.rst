@@ -537,10 +537,34 @@ These values are used by the solver internally to keep track of the constraint s
 mjtWarning
 ~~~~~~~~~~
 
-Warning types. The number of warning types is given by ``mjNWARNING`` which is also the length of the array
-``mjData.warning``.
+:ref:`Simulation warning<siDiagnostics>` types. The number of warning types is given by ``mjNWARNING`` which is also
+the length of the array ``mjData.warning``.
 
 .. mujoco-include:: mjtWarning
+
+
+.. _mjtStatus:
+
+mjtStatus
+~~~~~~~~~
+
+Status of a pipeline call (:ref:`mj_step` and related), stored in ``mjData.status``. The value 0 (``mjSTATUS_OK``)
+means the call completed without :ref:`simulation warnings<siSimWarning>`; a positive value names the first warning
+raised during the call, in the order of :ref:`mjtWarning` (``mjSTATUS_INERTIA`` is ``mjWARN_INERTIA + 1``). Negative
+values are reserved for errors. The macro :ref:`mjOK` tests the status; per-warning statistics remain in
+``mjData.warning``.
+
+.. mujoco-include:: mjtStatus
+
+
+.. _mjtOnWarn:
+
+mjtOnWarn
+~~~~~~~~~
+
+Response to :ref:`simulation warnings<siDiagnostics>`, set by the :ref:`onwarn<option-onwarn>` option.
+
+.. mujoco-include:: mjtOnWarn
 
 
 .. _mjtTimer:

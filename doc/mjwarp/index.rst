@@ -1215,11 +1215,12 @@ exceptions:
 - Contact :ref:`override <option-flag-override>` parameters :ref:`o_margin <option-o_margin>`,
   :ref:`o_solref <option-o_solref>`, :ref:`o_solimp <option-o_solimp>`, and :ref:`o_friction <option-o_friction>` are
   not available.
+- :ref:`onwarn <option-onwarn>` is not available. MJWarp lets invalid values propagate rather than resetting the
+  state, which corresponds to ``continue``.
 
 :ref:`disableflags <option-flag>` has the following differences:
 
 - :ref:`mjDSBL_MIDPHASE <mjtDisablebit>` is not available.
-- :ref:`mjDSBL_AUTORESET <mjtDisablebit>` is not available.
 - :ref:`mjDSBL_NATIVECCD <mjtDisablebit>` changes the default box-box collider from CCD to a primitive collider.
 
 :ref:`enableflags <option-flag>` has the following differences:

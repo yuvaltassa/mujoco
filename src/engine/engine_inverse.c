@@ -39,6 +39,7 @@
 void mj_invPosition(const mjModel* m, mjData* d) {
   TM_START1;
   TM_START;
+  mjENTER(d);
 
   // clear flag for lazy evaluation
   d->flg_energypos = 0;
@@ -50,10 +51,10 @@ void mj_invPosition(const mjModel* m, mjData* d) {
   mj_tendon(m, d);
   TM_END(mjTIMER_POS_KINEMATICS);
 
-  mj_makeM(m, d);      // timed internally (POS_INERTIA)
-  mj_factorM(m, d);    // timed internally (POS_INERTIA)
+  mj_makeM(m, d);                // timed internally (POS_INERTIA)
+  mjSTAGE(mj_factorM(m, d));  // timed internally (POS_INERTIA)
 
-  mj_collision(m, d);  // timed internally (POS_COLLISION)
+  mjSTAGE(mj_collision(m, d));  // timed internally (POS_COLLISION)
 
   TM_RESTART;
   mj_makeConstraint(m, d);
@@ -62,7 +63,7 @@ void mj_invPosition(const mjModel* m, mjData* d) {
   // compute exact diagonal if enabled
   if (mjENABLED(mjENBL_DIAGEXACT)) {
     TM_RESTART;
-    mj_projectConstraint(m, d);
+    mjSTAGE(mj_projectConstraint(m, d));
     TM_END(mjTIMER_POS_PROJECT);
   }
 
@@ -74,12 +75,15 @@ void mj_invPosition(const mjModel* m, mjData* d) {
   mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/0);
 
   TM_END1(mjTIMER_POSITION);
+  mjLEAVE(d);
 }
 
 
 // velocity-dependent computations
 void mj_invVelocity(const mjModel* m, mjData* d) {
+  mjENTER(d);
   mj_fwdVelocity(m, d);
+  mjLEAVE(d);
 }
 
 
@@ -195,12 +199,14 @@ static void mj_discreteAcc(const mjModel* m, mjData* d) {
 // inverse constraint solver
 void mj_invConstraint(const mjModel* m, mjData* d) {
   TM_START;
+  mjENTER(d);
   int nefc = d->nefc;
 
   // no constraints: clear, return
   if (!nefc) {
     mju_zero(d->qfrc_constraint, m->nv);
     TM_END(mjTIMER_CONSTRAINT);
+    mjLEAVE(d);
     return;
   }
 
@@ -216,6 +222,7 @@ void mj_invConstraint(const mjModel* m, mjData* d) {
 
   mj_freeStack(d);
   TM_END(mjTIMER_CONSTRAINT);
+  mjLEAVE(d);
 }
 
 
@@ -223,6 +230,7 @@ void mj_invConstraint(const mjModel* m, mjData* d) {
 void mj_inverseSkip(const mjModel* m, mjData* d,
                     int skipstage, int skipsensor) {
   TM_START;
+  mjENTER(d);
   mj_markStack(d);
   mjtNum* qacc;
   int nv = m->nv;
@@ -232,7 +240,7 @@ void mj_inverseSkip(const mjModel* m, mjData* d,
 
   // position-dependent
   if (skipstage < mjSTAGE_POS) {
-    mj_invPosition(m, d);
+    mjSTAGE_(mj_invPosition(m, d), mj_freeStack(d));
     if (!skipsensor) {
       mj_sensorPos(m, d);
     }
@@ -320,12 +328,15 @@ void mj_inverseSkip(const mjModel* m, mjData* d,
 
   mj_freeStack(d);
   TM_END(mjTIMER_INVERSE);
+  mjLEAVE(d);
 }
 
 
 // inverse dynamics
 void mj_inverse(const mjModel* m, mjData* d) {
+  mjENTER(d);
   mj_inverseSkip(m, d, mjSTAGE_NONE, 0);
+  mjLEAVE(d);
 }
 
 

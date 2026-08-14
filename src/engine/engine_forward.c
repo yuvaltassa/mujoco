@@ -53,24 +53,32 @@
 
 // check positions, reset if bad
 void mj_checkPos(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nq = m->nq;
   const mjtNum* qpos = d->qpos;
   for (int i=0; i < nq; i++) {
     if (mju_isBad(qpos[i])) {
       mj_warning(d, mjWARN_BADQPOS, i);
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
+
+        // restore the warning statistics, status and in-progress flag wiped by the reset
+        d->warning[mjWARN_BADQPOS].number++;
+        d->warning[mjWARN_BADQPOS].lastinfo = i;
+        d->status = mjSTATUS_BADQPOS;
+        d->nested = 1;
       }
-      d->warning[mjWARN_BADQPOS].number++;
-      d->warning[mjWARN_BADQPOS].lastinfo = i;
+      mjLEAVE(d);
       return;
     }
   }
+  mjLEAVE(d);
 }
 
 
 // check velocities, reset if bad
 void mj_checkVel(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
   int nv = sleep_filter ? d->nv_awake : m->nv;
 
@@ -79,19 +87,26 @@ void mj_checkVel(const mjModel* m, mjData* d) {
 
     if (mju_isBad(d->qvel[i])) {
       mj_warning(d, mjWARN_BADQVEL, i);
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
+
+        // restore the warning statistics, status and in-progress flag wiped by the reset
+        d->warning[mjWARN_BADQVEL].number++;
+        d->warning[mjWARN_BADQVEL].lastinfo = i;
+        d->status = mjSTATUS_BADQVEL;
+        d->nested = 1;
       }
-      d->warning[mjWARN_BADQVEL].number++;
-      d->warning[mjWARN_BADQVEL].lastinfo = i;
+      mjLEAVE(d);
       return;
     }
   }
+  mjLEAVE(d);
 }
 
 
 // check accelerations, reset if bad
 void mj_checkAcc(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
   int nv = sleep_filter ? d->nv_awake : m->nv;
 
@@ -100,17 +115,23 @@ void mj_checkAcc(const mjModel* m, mjData* d) {
 
     if (mju_isBad(d->qacc[i])) {
       mj_warning(d, mjWARN_BADQACC, i);
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
-      }
-      d->warning[mjWARN_BADQACC].number++;
-      d->warning[mjWARN_BADQACC].lastinfo = i;
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+
+        // restore the warning statistics, status and in-progress flag wiped by the reset
+        d->warning[mjWARN_BADQACC].number++;
+        d->warning[mjWARN_BADQACC].lastinfo = i;
+        d->status = mjSTATUS_BADQACC;
+        d->nested = 1;
+
+        // recompute forward dynamics from the reset state
         mj_forward(m, d);
       }
+      mjLEAVE(d);
       return;
     }
   }
+  mjLEAVE(d);
 }
 
 
@@ -131,6 +152,7 @@ void mj_fwdKinematics(const mjModel* m, mjData* d) {
 // position-dependent computations
 void mj_fwdPosition(const mjModel* m, mjData* d) {
   TM_START1;
+  mjENTER(d);
 
   // clear position-dependent flags for lazy evaluation
   d->flg_energypos = 0;
@@ -142,14 +164,14 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
 
   // inertia, timed internally (POS_INERTIA)
   mj_makeM(m, d);
-  mj_factorM(m, d);
+  mjSTAGE(mj_factorM(m, d));
 
   // collision, timed internally (POS_COLLISION)
-  mj_collision(m, d);
+  mjSTAGE(mj_collision(m, d));
 
   if (mj_wakeCollision(m, d)) {
     mj_updateSleep(m, d);
-    mj_collision(m, d);
+    mjSTAGE(mj_collision(m, d));
   }
 
   if (mj_wakeEquality(m, d)) {
@@ -162,7 +184,7 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   TM_END(mjTIMER_POS_MAKE);
 
   TM_RESTART;
-  mj_projectConstraint(m, d);
+  mjSTAGE(mj_projectConstraint(m, d));
   TM_END(mjTIMER_POS_PROJECT);
 
   TM_RESTART;
@@ -175,12 +197,14 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/1);
 
   TM_END1(mjTIMER_POSITION);
+  mjLEAVE(d);
 }
 
 
 // velocity-dependent computations
 void mj_fwdVelocity(const mjModel* m, mjData* d) {
   TM_START;
+  mjENTER(d);
 
   // clear velocity-dependent flags for lazy evaluation
   d->flg_subtreevel = 0;
@@ -232,6 +256,7 @@ void mj_fwdVelocity(const mjModel* m, mjData* d) {
   mjd_effShift(m, d);
 
   TM_END(mjTIMER_VELOCITY);
+  mjLEAVE(d);
 }
 
 
@@ -362,6 +387,7 @@ static mjtNum slewLimit(mjtNum u, mjtNum u_prev, mjtNum slew_s, mjtNum dt,
 // (qpos, qvel, ctrl, act) => (qfrc_actuator, actuator_force, act_dot)
 void mj_fwdActuation(const mjModel* m, mjData* d) {
   TM_START;
+  mjENTER(d);
   int nv = m->nv, nu = m->nu, nactuator = m->nactuator, nout = m->nout, ntendon = m->ntendon;
   mjtNum gain, bias, tau;
   mjtNum *force = d->actuator_force;
@@ -375,6 +401,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   if (nactuator == 0 || mjDISABLED(mjDSBL_ACTUATION)) {
     mju_zero(d->qfrc_actuator, nv);
     TM_END(mjTIMER_ACTUATION);
+    mjLEAVE(d);
     return;
   }
 
@@ -406,6 +433,16 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   for (int i=0; i < nu; i++) {
     if (mju_isBad(ctrl[i])) {
       mj_warning(d, mjWARN_BADCTRL, i);
+
+      // stop: return before applying controls
+      if (m->opt.onwarn == mjONWARN_STOP) {
+        mj_freeStack(d);
+        TM_END(mjTIMER_ACTUATION);
+        mjLEAVE(d);
+        return;
+      }
+
+      // auto/continue: zero all controls and proceed
       mju_zero(ctrl, nu);
       break;
     }
@@ -1010,11 +1047,13 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
   mj_freeStack(d);
   TM_END(mjTIMER_ACTUATION);
+  mjLEAVE(d);
 }
 
 
 // add up all non-constraint forces, compute qacc_smooth
 void mj_fwdAcceleration(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
   int nv;
   const int* index;
@@ -1063,6 +1102,7 @@ void mj_fwdAcceleration(const mjModel* m, mjData* d) {
       mju_copyInd(d->qacc_smooth, qacc_eff, index, nv);
     }
     mj_freeStack(d);
+    mjLEAVE(d);
     return;
   }
 
@@ -1076,6 +1116,7 @@ void mj_fwdAcceleration(const mjModel* m, mjData* d) {
   // qacc_smooth = M \ qfrc_smooth
   mj_solveLD(d->qacc_smooth, d->qLD, d->qLDiagInv, nv, 1,
              m->M_rownnz, m->M_rowadr, m->M_colind, index);
+  mjLEAVE(d);
 }
 
 
@@ -1222,6 +1263,7 @@ static void mj_discreteGyro(const mjModel* m, mjData* d) {
 // compute efc_b, efc_force, qfrc_constraint; update qacc
 void mj_fwdConstraint(const mjModel* m, mjData* d) {
   TM_START;
+  mjENTER(d);
   int nv = m->nv, nefc = d->nefc, nisland = d->nisland, nidof;
 
   // always clear qfrc_constraint
@@ -1234,6 +1276,7 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
     mju_zeroInt(d->solver_niter, mjNISLAND);
     mj_discreteGyro(m, d);
     TM_END(mjTIMER_CONSTRAINT);
+    mjLEAVE(d);
     return;
   }
 
@@ -1324,6 +1367,7 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
 
   mj_discreteGyro(m, d);
   TM_END(mjTIMER_CONSTRAINT);
+  mjLEAVE(d);
 }
 
 
@@ -1531,6 +1575,11 @@ void mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
                                m->M_rownnz, m->M_rowadr, m->M_colind, dof_awake_ind);
       if (clamped >= 0) {
         mj_warning(d, mjWARN_INERTIA, clamped);
+        if (m->opt.onwarn == mjONWARN_STOP) {
+          mj_freeStack(d);
+          TM_END(mjTIMER_ADVANCE);
+          return;
+        }
       }
     }
 
@@ -1557,7 +1606,9 @@ void mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
 
 // Euler integrator, semi-implicit in velocity
 void mj_Euler(const mjModel* m, mjData* d) {
+  mjENTER(d);
   mj_EulerSkip(m, d, 0);
+  mjLEAVE(d);
 }
 
 
@@ -1584,6 +1635,7 @@ const mjtNum RK4_B[4] = {
 // Runge Kutta explicit order-N integrator
 //  (A,B) is the tableau, C is set to row_sum(A)
 void mj_RungeKutta(const mjModel* m, mjData* d, int N) {
+  mjENTER(d);
   int nv = m->nv, nq = m->nq, na = m->na;
   mjtNum h = m->opt.timestep, time = d->time;
   mjtNum C[9], T[9], *X[10], *F[10], *dX;
@@ -1648,6 +1700,18 @@ void mj_RungeKutta(const mjModel* m, mjData* d, int N) {
 
     // evaluate F[i]
     mj_forwardSkip(m, d, mjSTAGE_NONE, 1);  // 1: do not recompute sensors and energy
+
+    // stop: restore state and time, return
+    if (mji_stop(m, d)) {
+      d->time = time;
+      mju_copy(d->qpos, X[0], nq);
+      mju_copy(d->qvel, X[0]+nq, nv);
+      mju_copy(d->act, X[0]+nq+nv, na);
+      mj_freeStack(d);
+      mjLEAVE(d);
+      return;
+    }
+
     mju_copy(F[i], d->qacc, nv);
     if (na) {
       mju_copy(F[i]+nv, d->act_dot, na);
@@ -1671,6 +1735,7 @@ void mj_RungeKutta(const mjModel* m, mjData* d, int N) {
   mj_advance(m, d, dX+2*nv, dX+nv, dX);
 
   mj_freeStack(d);
+  mjLEAVE(d);
 }
 
 
@@ -1801,6 +1866,11 @@ void mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
     // warn if a near-singular pivot was clamped
     if (clamped >= 0) {
       mj_warning(d, mjWARN_INERTIA, clamped);
+      if (m->opt.onwarn == mjONWARN_STOP) {
+        mj_freeStack(d);
+        TM_END(mjTIMER_ADVANCE);
+        return;
+      }
     }
   }
 
@@ -1851,7 +1921,9 @@ void mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
 
 // fully implicit in velocity
 void mj_implicit(const mjModel* m, mjData* d) {
+  mjENTER(d);
   mj_implicitSkip(m, d, 0);
+  mjLEAVE(d);
 }
 
 
@@ -1860,13 +1932,14 @@ void mj_implicit(const mjModel* m, mjData* d) {
 // forward dynamics with skip; skipstage is mjtStage
 void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
   TM_START;
+  mjENTER(d);
 
   // validate option combinations for the discrete integrator
   mj_checkDiscrete(m);
 
   // position-dependent
   if (skipstage < mjSTAGE_POS) {
-    mj_fwdPosition(m, d);
+    mjSTAGE(mj_fwdPosition(m, d));
 
     if (!skipsensor) {
       mj_sensorPos(m, d);
@@ -1899,13 +1972,13 @@ void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) 
     mjcb_control(m, d);
   }
 
-  mj_fwdActuation(m, d);
+  mjSTAGE(mj_fwdActuation(m, d));
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
     mj_regularizeConstraint(m, d, /*flg_AR=*/1);
     mj_referenceConstraint(m, d);
   }
-  mj_fwdAcceleration(m, d);
+  mjSTAGE(mj_fwdAcceleration(m, d));
   mj_fwdConstraint(m, d);
   if (!skipsensor) {
     d->flg_rnepost = 0;  // clear flag for lazy evaluation
@@ -1913,24 +1986,28 @@ void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) 
   }
 
   TM_END(mjTIMER_FORWARD);
+  mjLEAVE(d);
 }
 
 
 // forward dynamics
 void mj_forward(const mjModel* m, mjData* d) {
+  mjENTER(d);
   mj_forwardSkip(m, d, mjSTAGE_NONE, 0);
+  mjLEAVE(d);
 }
 
 
 // advance simulation using control callback
 void mj_step(const mjModel* m, mjData* d) {
   TM_START;
+  mjENTER(d);
 
   // common to all integrators
-  mj_checkPos(m, d);
-  mj_checkVel(m, d);
-  mj_forward(m, d);
-  mj_checkAcc(m, d);
+  mjSTAGE(mj_checkPos(m, d));
+  mjSTAGE(mj_checkVel(m, d));
+  mjSTAGE(mj_forward(m, d));
+  mjSTAGE(mj_checkAcc(m, d));
 
   // compare forward and inverse solutions if enabled
   if (mjENABLED(mjENBL_FWDINV)) {
@@ -1961,16 +2038,19 @@ void mj_step(const mjModel* m, mjData* d) {
   }
 
   TM_END(mjTIMER_STEP);
+  mjLEAVE(d);
 }
 
 
 // advance simulation in two phases: before input is set by user
 void mj_step1(const mjModel* m, mjData* d) {
   TM_START;
+  mjENTER(d);
+
   mj_checkDiscrete(m);
-  mj_checkPos(m, d);
-  mj_checkVel(m, d);
-  mj_fwdPosition(m, d);
+  mjSTAGE(mj_checkPos(m, d));
+  mjSTAGE(mj_checkVel(m, d));
+  mjSTAGE(mj_fwdPosition(m, d));
   mj_sensorPos(m, d);
 
   if (!d->flg_energypos) {
@@ -1991,6 +2071,7 @@ void mj_step1(const mjModel* m, mjData* d) {
     mjcb_control(m, d);
   }
   TM_END(mjTIMER_STEP);
+  mjLEAVE(d);
 }
 
 
@@ -2000,17 +2081,19 @@ void mj_step1(const mjModel* m, mjData* d) {
 // advance simulation in two phases: after input is set by user
 void mj_step2(const mjModel* m, mjData* d) {
   TM_START;
-  mj_fwdActuation(m, d);
+  mjENTER(d);
+
+  mjSTAGE(mj_fwdActuation(m, d));
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
     mj_regularizeConstraint(m, d, /*flg_AR=*/1);
     mj_referenceConstraint(m, d);
   }
-  mj_fwdAcceleration(m, d);
+  mjSTAGE(mj_fwdAcceleration(m, d));
   mj_fwdConstraint(m, d);
   d->flg_rnepost = 0;  // clear flag for lazy evaluation
   mj_sensorAcc(m, d);
-  mj_checkAcc(m, d);
+  mjSTAGE(mj_checkAcc(m, d));
 
   // compare forward and inverse solutions if enabled
   if (mjENABLED(mjENBL_FWDINV)) {
@@ -2028,4 +2111,5 @@ void mj_step2(const mjModel* m, mjData* d) {
 
   d->timer[mjTIMER_STEP].number--;
   TM_END(mjTIMER_STEP);
+  mjLEAVE(d);
 }

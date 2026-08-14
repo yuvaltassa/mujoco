@@ -1022,7 +1022,7 @@ MJAPI void* mju_malloc(size_t size);
 // Free memory, using free() by default.
 MJAPI void mju_free(void* ptr);
 
-// High-level warning function: count warnings in mjData, print only the first.
+// High-level warning function: count warnings in mjData, print only the first, record in status.
 MJAPI void mj_warning(mjData* d, int warning, int info);
 
 // Write [datetime, type: message] to MUJOCO_LOG.TXT.

@@ -10,6 +10,23 @@ Engine
 - The near-singular inertia warning is now also raised by the modified-inertia factorizations of the
   :at:`implicitfast` and damped-:at:`Euler` integrators (previously silent) and of the :at:`implicit` integrator
   (previously a fatal error).
+- Added the :ref:`onwarn<option-onwarn>` option, selecting the engine's response to
+  :ref:`simulation warnings<siSimWarning>`: :at-val:`auto` (default) applies the per-warning automatic recovery as
+  before, :at-val:`continue` records the warning without resetting the state, and the new :at-val:`stop` mode stops
+  the top-level call at the first warning, leaving the state available for inspection.
+- Added ``mjData.status`` of type :ref:`mjtStatus`, the status of the most recent pipeline call (:ref:`mj_step` and
+  related): 0 when the call completed without simulation warnings, otherwise naming the first warning raised; the
+  new macro :ref:`mjOK` tests it.
+- Python: ``data.status`` reports the status as above; ``mj_step(m, d, nstep)`` reports the first warning of
+  the ``nstep`` steps.
+
+.. admonition:: Breaking API changes
+   :class: attention
+
+   - Removed the ``autoreset`` :ref:`flag<option-flag>`, subsumed by :ref:`onwarn<option-onwarn>`: replace
+     :at-val:`autoreset="disable"` with :at-val:`onwarn="continue"` (the enabled default corresponds to
+     :at-val:`onwarn="auto"`). ``mjDSBL_AUTORESET`` is removed from ``mjtDisableBit`` and the subsequent enum
+     values are renumbered.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

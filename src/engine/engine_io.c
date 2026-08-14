@@ -1075,6 +1075,9 @@ void mj_makeRawData(mjData** dest, const mjModel* m) {
   // prevent spurious timing print from mj_resetData before _resetData zeroes the struct
   d->timer[mjTIMER_STEP].number = 0;
 
+  // no pipeline call is in progress
+  d->nested = 0;
+
   // compute buffer size
   d->nbuffer = 0;
   d->buffer = d->arena = NULL;
@@ -1172,6 +1175,7 @@ mjData* mj_copyDataVisual(mjData* dest, const mjModel* m, const mjData* src, int
   dest->buffer = save_buffer;
   dest->arena = save_arena;
   dest->threadpool = 0;
+  dest->nested = 0;
   mj_setPtrData(m, dest);
 
   // save plugin_data, since the X macro copying block below will override it
@@ -1337,6 +1341,8 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
   // clear solver diagnostics
   memset(d->warning, 0, mjNWARNING*sizeof(mjWarningStat));
   memset(d->timer, 0, mjNTIMER*sizeof(mjTimerStat));
+  d->status = 0;
+  d->nested = 0;
   memset(d->solver, 0, mjNSOLVER*mjNISLAND*sizeof(mjSolverStat));
   mju_zeroInt(d->solver_niter, mjNISLAND);
   mju_zeroInt(d->solver_nnz, mjNISLAND);

@@ -451,9 +451,14 @@ void App::UpdatePhysics() {
       ResetPhysics();
     } else if (status == StepControl::Status::kDiverged) {
       stepped = true;
-      for (mjtWarning w : StepControl::kDivergedWarnings) {
-        if (data()->warning[w].number > 0) {
-          step_error_ = mju_warningText(w, data()->warning[w].lastinfo);
+      if (data()->status > 0) {
+        step_error_ = mju_warningText(data()->status - 1,
+                                      data()->warning[data()->status - 1].lastinfo);
+      } else {
+        for (mjtWarning w : StepControl::kDivergedWarnings) {
+          if (data()->warning[w].number > 0) {
+            step_error_ = mju_warningText(w, data()->warning[w].lastinfo);
+          }
         }
       }
     }

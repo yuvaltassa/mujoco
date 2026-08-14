@@ -45,6 +45,7 @@
     X   ( int,    ls_iterations,     1      )  \
     X   ( int,    noslip_iterations, 1      )  \
     X   ( int,    ccd_iterations,    1      )  \
+    X   ( int,    onwarn,            1      )  \
     X   ( int,    disableflags,      1      )  \
     X   ( int,    enableflags,       1      )  \
     X   ( int,    disableactuator,   1      )  \
@@ -1056,6 +1057,8 @@
     X( size_t,    maxuse_arena       ) \
     X( int,       maxuse_con         ) \
     X( int,       maxuse_efc         ) \
+    X( int,       status             ) \
+    X( int,       nested             ) \
     X( int,       ncon               ) \
     X( int,       ne                 ) \
     X( int,       nf                 ) \

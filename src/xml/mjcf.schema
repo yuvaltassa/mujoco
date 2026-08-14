@@ -178,6 +178,12 @@ enum cone : mjtCone {
   elliptic    = mjCONE_ELLIPTIC
 }
 
+enum onwarn : mjtOnWarn {
+  auto        = mjONWARN_AUTO
+  continue    = mjONWARN_CONTINUE
+  stop        = mjONWARN_STOP
+}
+
 enum jacobian : mjtJacobian {
   dense    = mjJAC_DENSE
   sparse   = mjJAC_SPARSE
@@ -592,6 +598,7 @@ element option : mjOption {
   ls_iterations      : int = 50
   noslip_iterations  : int
   ccd_iterations     : int = 35
+  onwarn             : enum<onwarn> = auto
   sdf_iterations     : int = 10
   sdf_initpoints     : int = 40
   actuatorgroupdisable : int[] (reading=custom)   # bits of disableactuator
@@ -616,7 +623,6 @@ element flag {
   sensor             : enum<enable> = enable
   midphase           : enum<enable> = enable
   eulerdamp          : enum<enable> = enable
-  autoreset          : enum<enable> = enable
   nativeccd          : enum<enable> = enable
   island             : enum<enable> = enable
   multiccd           : enum<enable> = enable
