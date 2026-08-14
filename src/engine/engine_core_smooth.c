@@ -238,16 +238,19 @@ void mj_kinematics2(const mjModel* m, mjData* d) {
 
 // forward kinematics
 void mj_kinematics(const mjModel* m, mjData* d) {
+  mjENTER(d);
   mj_kinematics1(m, d);
   if (mj_wake(m, d)) {
     mj_updateSleep(m, d);
   }
   mj_kinematics2(m, d);
+  mjLEAVE(d);
 }
 
 
 // map inertias and motion dofs to global frame centered at subtree-CoM
 void mj_comPos(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nbody_awake < m->nbody;
   int nbody = sleep_filter ? d->nbody_awake : m->nbody;
   int nparent = sleep_filter ? d->nparent_awake : m->nbody;
@@ -351,11 +354,13 @@ void mj_comPos(const mjModel* m, mjData* d) {
       }
     }
   }
+  mjLEAVE(d);
 }
 
 
 // compute camera and light positions and orientations
 void mj_camlight(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int ncam = m->ncam, nlight = m->nlight;
   int sleep_filter = mjENABLED(mjENBL_SLEEP);
 
@@ -487,6 +492,7 @@ void mj_camlight(const mjModel* m, mjData* d) {
     // normalize dir
     mju_normalize3(d->light_xdir+3*i);
   }
+  mjLEAVE(d);
 }
 
 
@@ -550,12 +556,14 @@ static inline void mju_mulMatMat322(mjtNum* C, const mjtNum* A, const mjtNum* B)
 
 // compute flex-related quantities
 void mj_flex(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nv = m->nv;
   int* rowadr = m->flexedge_J_rowadr;
   int* vrowadr = m->flexvert_J_rowadr, *vrownnz = m->flexvert_J_rownnz;
 
   // skip if no flexes
   if (!m->nflex) {
+    mjLEAVE(d);
     return;
   }
 
@@ -924,16 +932,19 @@ void mj_flex(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  mjLEAVE(d);
 }
 
 
 // compute tendon lengths and moments
 void mj_tendon(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nv = m->nv, nten = m->ntendon;
   const int *rownnz = m->ten_J_rownnz, *rowadr = m->ten_J_rowadr, *colind = m->ten_J_colind;
   mjtNum *L = d->ten_length, *J = d->ten_J;
 
   if (!nten) {
+    mjLEAVE(d);
     return;
   }
 
@@ -1112,6 +1123,7 @@ void mj_tendon(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  mjLEAVE(d);
 }
 
 
@@ -1267,10 +1279,12 @@ mjtNum mj_tendonDot(const mjModel* m, mjData* d, int id, const mjtNum* vec) {
 
 // compute actuator/transmission lengths and moments
 void mj_transmission(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nv = m->nv, nactuator = m->nactuator;
 
   // nothing to do
   if (!nactuator) {
+    mjLEAVE(d);
     return;
   }
 
@@ -1840,6 +1854,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  mjLEAVE(d);
 }
 
 
@@ -1892,6 +1907,7 @@ void mj_tendonArmature(const mjModel* m, mjData* d) {
 
 // composite rigid body inertia algorithm
 void mj_crb(const mjModel* m, mjData* d) {
+  mjENTER(d);
   // outputs
   mjtNum* crb = d->crb;
   mjtNum* M   = d->M;
@@ -1964,20 +1980,24 @@ void mj_crb(const mjModel* m, mjData* d) {
       M[Madr_ij--] += mji_dot6(cdof+6*j, buf);
     }
   }
+  mjLEAVE(d);
 }
 
 
 void mj_makeM(const mjModel* m, mjData* d) {
   TM_START;
+  mjENTER(d);
   mj_crb(m, d);
   mj_tendonArmature(m, d);
   TM_END(mjTIMER_POS_INERTIA);
+  mjLEAVE(d);
 }
 
 
 // sparse L'*D*L factorizaton of the inertia matrix M, assumed spd
 void mj_factorM(const mjModel* m, mjData* d) {
   TM_START;
+  mjENTER(d);
 
   // sleep filtering
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
@@ -2008,6 +2028,7 @@ void mj_factorM(const mjModel* m, mjData* d) {
   }
 
   TM_ADD(mjTIMER_POS_INERTIA);
+  mjLEAVE(d);
 }
 
 
@@ -2144,18 +2165,22 @@ void mj_solveLD(mjtNum* restrict x, const mjtNum* qLD, const mjtNum* qLDiagInv, 
 // sparse backsubstitution:  x = inv(L'*D*L)*y
 //  use factorization in d
 void mj_solveM(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y, int n) {
+  mjENTER(d);
   if (x != y) {
     mju_copy(x, y, n*m->nv);
   }
   mj_solveLD(x, d->qLD, d->qLDiagInv, m->nv, n, m->M_rownnz, m->M_rowadr, m->M_colind, NULL);
+  mjLEAVE(d);
 }
 
 
 // half of sparse backsubstitution:  x = sqrt(inv(D))*inv(L')*y
 void mj_solveM2(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y,
                 const mjtNum* sqrtInvD, int n) {
+  mjENTER(d);
   mj_solveM2_impl(x, y, sqrtInvD, d->qLD, m->nv, n,
                   m->M_rownnz, m->M_rowadr, m->M_colind, m->dof_simplenum);
+  mjLEAVE(d);
 }
 
 
@@ -2204,6 +2229,7 @@ void mj_solveM2_impl(mjtNum* x, const mjtNum* y, const mjtNum* sqrtInvD, const m
 
 // compute cvel, cdof_dot
 void mj_comVel(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nbody_awake < m->nbody;
   int nbody = sleep_filter ? d->nbody_awake : m->nbody;
 
@@ -2269,11 +2295,13 @@ void mj_comVel(const mjModel* m, mjData* d) {
     mji_copy6(d->cvel+6*i, cvel);
     mju_copy(d->cdof_dot+6*bda, cdofdot, 6*dofnum);
   }
+  mjLEAVE(d);
 }
 
 
 // subtree linear velocity and angular momentum
 void mj_subtreeVel(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nbody_awake < m->nbody;
   int nbody = sleep_filter ? d->nbody_awake : m->nbody;
 
@@ -2346,6 +2374,7 @@ void mj_subtreeVel(const mjModel* m, mjData* d) {
 
   // mark as computed
   d->flg_subtreevel = 1;
+  mjLEAVE(d);
 }
 
 
@@ -2353,6 +2382,7 @@ void mj_subtreeVel(const mjModel* m, mjData* d) {
 
 // RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=0 removes inertial term
 void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result) {
+  mjENTER(d);
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nbody_awake < m->nbody;
   int nbody = sleep_filter ? d->nbody_awake : m->nbody;
   int nparent = sleep_filter ? d->nparent_awake : m->nbody;
@@ -2414,11 +2444,13 @@ void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result) {
   }
 
   mj_freeStack(d);
+  mjLEAVE(d);
 }
 
 
 // RNE with complete data: compute cacc, cfrc_ext, cfrc_int
 void mj_rnePostConstraint(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nbody = m->nbody;
   mjtNum cfrc_com[6], cfrc[6], lfrc[6];
   mjContact* con;
@@ -2626,6 +2658,7 @@ void mj_rnePostConstraint(const mjModel* m, mjData* d) {
 
   // mark as computed
   d->flg_rnepost = 1;
+  mjLEAVE(d);
 }
 
 

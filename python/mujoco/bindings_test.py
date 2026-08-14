@@ -606,6 +606,56 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     np.testing.assert_allclose(contact_copy[2].pos[:2], [0.1, 0.1])
     np.testing.assert_allclose(contact_copy[3].pos[:2], [-0.1, 0.1])
 
+  def test_mj_step_status(self):
+    mujoco.mj_step(self.model, self.data)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_OK)
+    self.assertFalse(self.data.status)
+
+    # divergence: the status of the call names the warning
+    self.data.qpos[0] = float('nan')
+    mujoco.mj_step(self.model, self.data)
+    self.assertTrue(self.data.status)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+
+    # a healthy call clears the status, a reset does too
+    mujoco.mj_step(self.model, self.data)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_OK)
+    self.data.qpos[0] = float('nan')
+    mujoco.mj_step(self.model, self.data)
+    mujoco.mj_resetData(self.model, self.data)
+    self.assertEqual(self.data.status, 0)
+
+    # nstep: the status covers all steps, reporting the first warning
+    self.data.qpos[0] = float('nan')
+    mujoco.mj_step(self.model, self.data, nstep=3)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    self.assertEqual(self.data.warning[mujoco.mjtWarning.mjWARN_BADQPOS].number, 1)
+
+    # zero steps make no call, so they report nothing and overwrite nothing
+    mujoco.mj_step(self.model, self.data, nstep=0)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+
+  def test_abandoned_call_needs_a_reset(self):
+    # an exception raised in a callback abandons the call in progress: the
+    # exception leaves the engine without running the exits of the stages it
+    # unwinds, so the data must be reset, as it always has been
+    def raising_callback(unused_model, unused_data):
+      raise ValueError('a host exception')
+
+    mujoco.set_mjcb_control(raising_callback)
+    with self.assertRaises(ValueError):
+      mujoco.mj_step(self.model, self.data)
+    mujoco.set_mjcb_control(None)
+
+    mujoco.mj_resetData(self.model, self.data)
+
+    # the reset data reports its own warnings again
+    self.data.qpos[0] = float('nan')
+    mujoco.mj_step(self.model, self.data)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    mujoco.mj_step(self.model, self.data)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_OK)
+
   def test_mj_step(self):
     displacement = 0.25
     self.data.qpos[2] += displacement

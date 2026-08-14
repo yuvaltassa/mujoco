@@ -388,6 +388,7 @@ static int mj_vertBodyWeight(const mjModel* m, const mjData* d, int f, int* v,
 
 // add contact to d->contact list; return 0 if success; 1 if buffer full
 int mj_addContact(const mjModel* m, mjData* d, const mjContact* con) {
+  mjENTER(d);
   // move arena pointer back to the end of the existing contact array and invalidate efc_ arrays
   d->parena = d->ncon * sizeof(mjContact);
 #ifdef mjUSEASAN
@@ -400,12 +401,14 @@ int mj_addContact(const mjModel* m, mjData* d, const mjContact* con) {
   mjContact* dst = mj_arenaAllocByte(d, sizeof(mjContact), _Alignof(mjContact));
   if (!dst) {
     mj_warning(d, mjWARN_CONTACTFULL, d->ncon);
+    mjLEAVE(d);
     return 1;
   }
   *dst = *con;
 
   // increase counter, return success
   d->ncon++;
+  mjLEAVE(d);
   return 0;
 }
 
@@ -2923,11 +2926,13 @@ static void computeY_backsub(mjtNum* Y, const int* Y_rownnz, const int* Y_rowadr
 
 // driver: call all functions above
 void mj_makeConstraint(const mjModel* m, mjData* d) {
+  mjENTER(d);
   // clear sizes
   d->ne = d->nf = d->nl = d->nefc = d->nJ = d->nA = d->nY = 0;
 
   // disabled or Jacobian not allocated: return
   if (mjDISABLED(mjDSBL_CONSTRAINT)) {
+    mjLEAVE(d);
     return;
   }
 
@@ -2945,6 +2950,7 @@ void mj_makeConstraint(const mjModel* m, mjData* d) {
 
   // allocate efc arrays on arena
   if (!arenaAllocEfc(m, d)) {
+    mjLEAVE(d);
     return;
   }
 
@@ -2994,6 +3000,7 @@ void mj_makeConstraint(const mjModel* m, mjData* d) {
 
   // no constraints: return
   if (!d->nefc) {
+    mjLEAVE(d);
     return;
   }
 
@@ -3011,6 +3018,7 @@ void mj_makeConstraint(const mjModel* m, mjData* d) {
     // compute KBIP, D, R, adjust diagA
     mj_makeImpedance(m, d);
   }
+  mjLEAVE(d);
 }
 
 
@@ -3285,10 +3293,12 @@ static void mj_makeARNumeric(const mjModel* m, mjData* d) {
 
 // compute efc_Y, optionally efc_diagA, optionally efc_AR
 void mj_projectConstraint(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nefc = d->nefc;
 
   // nothing to do
   if (!nefc) {
+    mjLEAVE(d);
     return;
   }
 
@@ -3308,12 +3318,13 @@ void mj_projectConstraint(const mjModel* m, mjData* d) {
         mj_makeARSymbolic(m, d);
       }
     }
+    mjLEAVE(d);
     return;
   }
 
   // compute Y = J*M^{-1/2}; overwrite diagApprox if diagexact
   if (isDual || diagexact) {
-    mj_makeYSymbolic(m, d);
+    mjSTAGE(mj_makeYSymbolic(m, d));
     if (d->nefc) {
       mj_makeYNumeric(m, d, diagexact);
     }
@@ -3337,6 +3348,7 @@ void mj_projectConstraint(const mjModel* m, mjData* d) {
       mj_makeARNumeric(m, d);
     }
   }
+  mjLEAVE(d);
 }
 
 
@@ -3453,6 +3465,7 @@ void mj_velocityConstraint(const mjModel* m, mjData* d) {
 
 // compute efc_vel, efc_aref
 void mj_referenceConstraint(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nefc = d->nefc;
   const mjtNum* KBIP = d->efc_KBIP;
   int metric = mj_isMetric(m);
@@ -3487,6 +3500,7 @@ void mj_referenceConstraint(const mjModel* m, mjData* d) {
   // bias adhesive contact rows: a force offset (D*R*edge = edge), independent of the row factor,
   // so it is added after the division
   mj_adhesionRef(m, d);
+  mjLEAVE(d);
 }
 
 
@@ -3694,8 +3708,10 @@ void mj_constraintUpdate_impl(int ne, int nf, int nefc,
 // optional: cost(qacc) = s_hat(jar) where jar = Jac*qacc-aref; cone Hessians
 void mj_constraintUpdate(const mjModel* m, mjData* d, const mjtNum* jar,
                          mjtNum cost[1], int flg_coneHessian) {
+  mjENTER(d);
   mj_constraintUpdate_impl(d->ne, d->nf, d->nefc, d->efc_D, d->efc_R, d->efc_frictionloss,
                            jar, d->efc_type, d->efc_id, d->contact, d->efc_state, d->efc_force,
                            cost, flg_coneHessian);
   mj_mulJacTVec(m, d, d->qfrc_constraint, d->efc_force);
+  mjLEAVE(d);
 }

@@ -1022,7 +1022,11 @@ MJAPI void* mju_malloc(size_t size);
 // Free memory, using free() by default.
 MJAPI void mju_free(void* ptr);
 
-// High-level warning function: count warnings in mjData, print only the first.
+// High-level warning function: count warnings in mjData, print only the first, record in status.
+// Deprecated: this is the engine's own mechanism for raising a simulation warning, not an
+// interface for user code. Calling it from outside the engine, in particular from a callback,
+// injects a warning into whatever pipeline call happens to be running. To report a condition
+// from user code, emit a log message with mju_warning instead.
 MJAPI void mj_warning(mjData* d, int warning, int info);
 
 // Write [datetime, type: message] to MUJOCO_LOG.TXT.

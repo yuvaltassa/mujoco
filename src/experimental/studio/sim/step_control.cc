@@ -161,11 +161,17 @@ StepControl::Status StepControl::Advance(mjModel* m, mjData* d) {
       pre_step_(m, d);
     }
     mj_step(m, d);
+
+    // Stop stepping if the step stopped at a simulation warning.
+    if (m->opt.onwarn == mjONWARN_STOP && d->status > 0) {
+      SetPauseState(PauseState::kNormalPaused);
+      return Status::kDiverged;
+    }
     if (post_step_) {
       post_step_(m, d);
     }
 
-    if (mjDISABLED(mjDSBL_AUTORESET)) {
+    if (m->opt.onwarn == mjONWARN_CONTINUE) {
       for (mjtWarning w : kDivergedWarnings) {
         if (d->warning[w].number > 0) {
           // Stop stepping if the simulation diverged.
@@ -173,7 +179,7 @@ StepControl::Status StepControl::Advance(mjModel* m, mjData* d) {
           return Status::kDiverged;
         }
       }
-    } else {
+    } else if (m->opt.onwarn == mjONWARN_AUTO) {
       // Stop stepping if we auto reset.
       if (d->time < prev_time) {
         return Status::kAutoReset;

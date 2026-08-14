@@ -660,6 +660,19 @@ Check if a given optional feature has been enabled via the physics options, assu
 type :ref:`mjtEnableBit`.
 
 
+.. _mjOK:
+
+mjOK
+~~~~
+
+.. code-block:: C
+
+   #define mjOK(d) ((d)->status == mjSTATUS_OK)
+
+Check that the most recent pipeline call on the given ``mjData*`` completed without
+:ref:`simulation warnings<siSimWarning>`, i.e. that ``mjData.status`` is :ref:`mjSTATUS_OK<mjtStatus>`.
+
+
 .. _mjMAX:
 
 mjMAX

@@ -148,8 +148,50 @@ MJAPI mjtNum mj_actuatorDamping(const mjModel* m, mjtObj type, int id, mjtNum po
 // return actuator armature contribution to joint or tendon
 MJAPI mjtNum mj_actuatorArmature(const mjModel* m, mjtObj type, int id);
 
-// high-level warning function: count warnings in mjData, print only the first time
+// high-level warning function: count warnings in mjData, print the first time, record in status
 MJAPI void mj_warning(mjData* d, int warning, int info);
+
+// enter a pipeline call: the outermost call on d clears the status and marks d as in progress,
+// nested calls (pipeline stages, or calls made from callbacks) leave both alone;
+// return 1 if outermost
+static inline int mji_enter(mjData* d) {
+  // nested in a call on the same d, which owns the status
+  if (d->nested) {
+    return 0;
+  }
+  d->nested = 1;
+  d->status = mjSTATUS_OK;
+  return 1;
+}
+
+// exit a pipeline call: the outermost call marks d as no longer in progress
+static inline void mji_leave(mjData* d, int outermost) {
+  if (outermost) {
+    d->nested = 0;
+  }
+}
+
+// pipeline entry and exit, to be paired on every return path of a pipeline function
+#define mjENTER(d) const int mjenter_outermost_ = mji_enter(d)
+#define mjLEAVE(d)  mji_leave(d, mjenter_outermost_)
+
+// run a pipeline stage and leave the call if a warning under the stop policy stopped it;
+// mjSTAGE_ runs a cleanup before leaving
+#define mjSTAGE_(call, cleanup)                                                   \
+  {                                                                               \
+    call;                                                                         \
+    if (mji_stop(m, d)) {                                                         \
+      cleanup;                                                                    \
+      mjLEAVE(d);                                                                 \
+      return;                                                                     \
+    }                                                                             \
+  }
+#define mjSTAGE(call) mjSTAGE_(call, (void)0)
+
+// nonzero status under the stop policy: the pipeline call should unwind
+static inline int mji_stop(const mjModel* m, const mjData* d) {
+  return d->status && m->opt.onwarn == mjONWARN_STOP;
+}
 
 
 //-------------------------- effective-metric predicates ------------------------------------------

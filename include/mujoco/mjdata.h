@@ -128,6 +128,8 @@ typedef struct mjData_ {
   // diagnostics
   mjWarningStat warning[mjNWARNING];          // warning statistics (mutable)
   mjTimerStat   timer[mjNTIMER];              // timer statistics
+  int           status;                       // status of the last pipeline call (mjtStatus)
+  int           nested;                       // nonzero while a pipeline call is in progress
 
   // variable sizes
   int     ncon;              // number of detected contacts

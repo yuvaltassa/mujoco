@@ -6543,7 +6543,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
                  type=ValueType(name='int'),
              ),
          ),
-         doc='High-level warning function: count warnings in mjData, print only the first.',  # pylint: disable=line-too-long
+         doc='High-level warning function: count warnings in mjData, print only the first, record in status.',  # pylint: disable=line-too-long
      )),
     ('mju_writeLog',
      FunctionDecl(

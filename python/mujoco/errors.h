@@ -145,6 +145,7 @@ struct MjErrorIntercepter {
 #endif
       mjfLogHandler prev_handler = _mjPRIVATE_setTlsLogHandler(&MjErrorHandler);
 
+
       // Determine the handler to forward non-error messages to.
       // If there was a previously installed TLS handler, forward to it.
       // Otherwise, probe the global handler via mju_setLogHandler.

@@ -84,7 +84,9 @@ plugins, see :ref:`Model Encoding & Saving <meSaving>`.
 
 .. _Mainsimulation:
 
-These are the main entry points to the simulator. Most users will only need to call :ref:`mj_step`, which computes
+These are the main entry points to the simulator. Each records its :ref:`mjtStatus` in ``mjData.status``, naming the
+first :ref:`simulation warning<siSimWarning>` raised during the call (0 if none); the response to warnings is
+controlled by the :ref:`onwarn<option-onwarn>` option. Most users will only need to call :ref:`mj_step`, which computes
 everything and advanced the simulation state by one time step. Controls and applied forces must either be set in advance
 (in ``mjData.{ctrl, qfrc_applied, xfrc_applied}``), or a control callback :ref:`mjcb_control` must be installed which
 will be called just before the controls and applied forces are needed. Alternatively, one can use :ref:`mj_step1` and

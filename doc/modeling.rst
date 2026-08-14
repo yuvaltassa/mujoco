@@ -1829,11 +1829,11 @@ MuJoCo's :ref:`constraint impedance<soParameters>` computation relies on an appr
 inertia matrix, computed once at compile time from the initial configuration ``qpos0``.
 
 In the vast majority of models this approximation is entirely adequate. However, in certain situations—such as models
-with highly anisotropic inertias, complex kinematic chains, or bodies operating far from ``qpos0``—the approximation
-may become inaccurate. This can occasionally manifest as unexplained solver divergence (``badqacc`` warnings),
-excessive penetration, unrealistic slip, or poor solver convergence. A useful diagnostic is the
-:ref:`fwdinv<option-flag-fwdinv>` flag: if the forward-inverse discrepancy is large, inaccurate constraint scaling may
-be a contributing factor.
+with highly anisotropic inertias, complex kinematic chains, or bodies operating far from ``qpos0``—the approximation may
+become inaccurate. This can occasionally manifest as unexplained :ref:`divergence<Divergence>` (``badqacc``
+:ref:`simulation warnings<siSimWarning>`), excessive penetration, unrealistic slip, or poor solver convergence. A useful
+diagnostic is the :ref:`fwdinv<option-flag-fwdinv>` flag: if the forward-inverse discrepancy is large, inaccurate
+constraint scaling may be a contributing factor.
 
 If you suspect that the compile-time approximation is insufficient for your model, you can enable the
 :ref:`diagexact<option-flag-diagexact>` flag to compute the exact diagonal at runtime. See :ref:`Diagonal approximation

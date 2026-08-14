@@ -389,7 +389,12 @@ MJDATA_SIZES: tuple[str, ...] = (
 )
 
 # Fields that should be entirely omitted from the bindings.
-SKIPPED_FIELDS: Dict[str, list[str]] = {}
+# Internal runtime flags, set only while a pipeline call is in progress: always
+# false in an mjData a caller can observe, and writing them would corrupt the
+# call they describe.
+SKIPPED_FIELDS: Dict[str, list[str]] = {
+    "MjData": ["nested"],
+}
 
 # Fields handled manually in template file struct declaration.
 MANUAL_FIELDS: Dict[str, list[str]] = {
