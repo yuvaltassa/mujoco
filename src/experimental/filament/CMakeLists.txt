@@ -41,3 +41,8 @@ target_link_libraries(${MUJOCO_FILAMENT_EXPERIMENTAL_TARGET_NAME}
 )
 
 add_library(mujoco::filament_experimental ALIAS ${MUJOCO_FILAMENT_EXPERIMENTAL_TARGET_NAME})
+
+if(MUJOCO_USE_FILAMENT_MJR_COMPAT)
+    add_executable(scene_benchmark compat/scene_benchmark.cc)
+    target_link_libraries(scene_benchmark mujoco::filament_experimental mujoco)
+endif()

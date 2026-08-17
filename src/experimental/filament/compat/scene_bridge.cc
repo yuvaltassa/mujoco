@@ -60,6 +60,12 @@ SceneBridge::~SceneBridge() {
     mjrf_removeRenderableFromScene(scene_, iter.get());
   }
   renderables_.clear();
+  for (RetainedEntry& entry : retained_) {
+    if (entry.in_scene) {
+      mjrf_removeRenderableFromScene(scene_, entry.renderable.get());
+    }
+  }
+  retained_.clear();
 }
 
 std::optional<float3> SceneBridge::ClipFromWorld(const float3& pos) const{
@@ -110,6 +116,13 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
 
   camera_ = mjv_averageCamera(scene->camera, scene->camera + 1);
   clip_from_world_ = CalculateClipFromWorld(viewport, camera_);
+
+  // Retained scenes: the producer's change list drives everything.
+  if (scene->nslot) {
+    UpdateRetained(scene);
+    UpdateLights(scene);
+    return;
+  }
 
   // Remove all drawables from previous render and prepare new ones.
   for (auto& iter : renderables_) {
@@ -217,6 +230,18 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
     renderables_.push_back(std::move(renderable));
   }
 
+  UpdateLights(scene);
+}
+
+void SceneBridge::UpdateLights(const mjvScene* scene) {
+  const mjModel* model = model_objects_->GetModel();
+
+  mjtNum hpos[3], hfwd[3];
+  float headpos[3], gazedir[3];
+  mjv_cameraInModel(hpos, hfwd, nullptr, scene);
+  mju_n2f(headpos, hpos, 3);
+  mju_n2f(gazedir, hfwd, 3);
+
   mjrfLight* headlight = nullptr;
   bool headlight_enabled = false;
   for (int i = 0; i < scene->nlight; ++i) {
@@ -248,6 +273,116 @@ void SceneBridge::Update(const mjrRect& viewport, const mjvScene* scene) {
   // Enable/disable the headlight based on whether or not it's in the scene.
   if (headlight) {
     mjrf_setLightEnabled(headlight, headlight_enabled);
+  }
+}
+
+void SceneBridge::UpdateRetained(const mjvScene* scene) {
+  // Renderables are indexed by scene position; sized on first use.
+  if (static_cast<int>(retained_.size()) < scene->maxgeom) {
+    retained_.resize(scene->maxgeom);
+  }
+
+  // Apply exactly what the producer says changed.
+  for (int k = 0; k < scene->nchanged; ++k) {
+    ApplyRetainedEntry(scene->changed[k], scene, scene->changebits[k]);
+  }
+
+  // Hide arena entries beyond the current extent.
+  for (int i = scene->ngeom; i < retained_ngeom_; ++i) {
+    RetainedEntry& entry = retained_[i];
+    if (entry.in_scene) {
+      mjrf_removeRenderableFromScene(scene_, entry.renderable.get());
+      entry.in_scene = false;
+    }
+  }
+  retained_ngeom_ = scene->ngeom;
+
+  // Labels are drawn per frame.
+  if (draw_text_callback_) {
+    for (int i = 0; i < scene->ngeom; ++i) {
+      if (i < scene->nslot && !scene->visible[i]) {
+        continue;
+      }
+      const mjvGeom* geom = scene->geoms + i;
+      if (geom->label[0] != 0) {
+        if (auto pos = ClipFromWorld(ReadFloat3(geom->pos))) {
+          draw_text_callback_(geom->label, pos->x, pos->y, pos->z);
+        }
+      }
+    }
+  }
+}
+
+void SceneBridge::ApplyRetainedEntry(int idx, const mjvScene* scene,
+                                     int bits) {
+  RetainedEntry& entry = retained_[idx];
+  const mjvGeom& geom = scene->geoms[idx];
+
+  // Visibility off: remove from the filament scene; slot content is stale.
+  const bool visible = idx >= scene->nslot || scene->visible[idx];
+  if (!visible) {
+    if (entry.in_scene) {
+      mjrf_removeRenderableFromScene(scene_, entry.renderable.get());
+      entry.in_scene = false;
+    }
+    return;
+  }
+
+  // Multi-part builtin renderables do not support re-typing: recreate when
+  // this position's content changes shape (rare: arena churn).
+  if (entry.renderable && entry.type != geom.type) {
+    if (entry.in_scene) {
+      mjrf_removeRenderableFromScene(scene_, entry.renderable.get());
+      entry.in_scene = false;
+    }
+    entry.renderable.reset();
+  }
+
+  if (!entry.renderable) {
+    mjrfRenderableParams params;
+    mjrf_defaultRenderableParams(&params);
+    entry.renderable = CreateRenderable(ctx_, params);
+    entry.type = geom.type;
+    entry.has_mesh = false;
+    bits = mjSYNC_VISIBLE | mjSYNC_MESH | mjSYNC_POSE | mjSYNC_MATERIAL;
+  }
+  mjrfRenderable* renderable = entry.renderable.get();
+
+  // Deformables: refresh the vertex streams into the persistent mesh.
+  if ((geom.type == mjGEOM_FLEX || geom.type == mjGEOM_SKIN) &&
+      (bits & mjSYNC_MESH)) {
+    if (!scene_objects_->CreateSkinFlexMesh(scene, model_objects_->GetModel(),
+                                            geom)) {
+      return;
+    }
+  }
+
+  // Builtin (non-asset) shapes are multi-part and their mesh may be assigned
+  // only once per renderable; a repeat mesh bit reduces to pose + material.
+  const bool asset_shape = geom.type == mjGEOM_MESH || geom.type == mjGEOM_SDF ||
+                           geom.type == mjGEOM_HFIELD ||
+                           geom.type == mjGEOM_FLEX || geom.type == mjGEOM_SKIN;
+  if ((bits & mjSYNC_MESH) && entry.has_mesh && !asset_shape) {
+    bits = (bits & ~mjSYNC_MESH) | mjSYNC_POSE | mjSYNC_MATERIAL;
+  }
+
+  if (bits & mjSYNC_MESH) {
+    ApplyGeomMesh(renderable, geom, model_objects_.get(),
+                  scene_objects_.get());
+    entry.has_mesh = true;
+    ApplyGeomMaterial(renderable, geom, model_objects_.get());
+  } else {
+    if (bits & mjSYNC_POSE) {
+      ApplyGeomPose(renderable, geom);
+    }
+    if (bits & mjSYNC_MATERIAL) {
+      ApplyGeomMaterial(renderable, geom, model_objects_.get());
+    }
+  }
+
+  if (!entry.in_scene) {
+    mjrf_addRenderableToScene(scene_, renderable);
+    entry.in_scene = true;
   }
 }
 
