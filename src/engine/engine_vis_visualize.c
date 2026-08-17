@@ -2996,6 +2996,12 @@ static void addConstraintGeoms(const mjModel* m, mjData* d, const mjvOption* vop
 // add abstract geoms
 void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
                   const mjvPerturb* pert, int catmask, mjvScene* scn) {
+  // retained scenes are updated with mjv_syncScene; arena appends arrive
+  // with arena sync
+  if (scn->nslot) {
+    mju_error("mjv_addGeoms cannot yet be used with a retained-mode scene");
+  }
+
   // make default pert if missing
   mjvPerturb localpert;
   if (!pert) {
@@ -3647,6 +3653,11 @@ void mjv_updateActiveSkin(const mjModel* m, const mjData* d, mjvScene* scn, cons
 // update entire scene
 void mjv_updateScene(const mjModel* m, mjData* d, const mjvOption* opt,
                      const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn) {
+  // retained scenes are updated with mjv_syncScene
+  if (scn->nslot) {
+    mju_error("mjv_updateScene cannot be used with a retained-mode scene");
+  }
+
   // clear geoms
   scn->ngeom = 0;
 

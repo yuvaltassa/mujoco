@@ -82,6 +82,47 @@ TEST_F(MjvSceneTest, UpdateScene) {
   mj_deleteModel(model);
 }
 
+TEST_F(MjvSceneTest, MakeRetainedScene) {
+  static constexpr char kFlexSkinPath[] = "engine/testdata/skingroup.xml";
+  const std::string xml_path = GetTestDataFilePath(kFlexSkinPath);
+  mjModel* model = mj_loadXML(xml_path.c_str(), nullptr, 0, 0);
+  ASSERT_THAT(model, NotNull());
+
+  // request retained mode between defaultScene and makeScene
+  mjv_defaultScene(&scn_);
+  scn_.retained = 1;
+  mjv_makeScene(model, &scn_, kMaxGeom);
+
+  // one slot per model element, all present but invisible before first sync
+  int nslot = model->ngeom + model->nsite + model->nflex + model->nskin;
+  EXPECT_EQ(scn_.nslot, nslot);
+  EXPECT_EQ(scn_.ngeom, nslot);
+  EXPECT_EQ(scn_.nchanged, 0);
+  for (int k = 0; k < nslot; k++) {
+    EXPECT_EQ(scn_.visible[k], 0);
+    EXPECT_EQ(scn_.geoms[k].segid, k);
+  }
+
+  // slots are self-describing: geoms, sites, flexes, skins in model order
+  EXPECT_EQ(scn_.geoms[0].objtype, mjOBJ_GEOM);
+  EXPECT_EQ(scn_.geoms[0].objid, 0);
+  int flexbase = model->ngeom + model->nsite;
+  EXPECT_EQ(scn_.geoms[flexbase].objtype, mjOBJ_FLEX);
+  EXPECT_EQ(scn_.geoms[flexbase].objid, 0);
+  EXPECT_EQ(scn_.geoms[flexbase + model->nflex].objtype, mjOBJ_SKIN);
+
+  // immediate-mode scenes are unaffected: remake without the request
+  mjv_freeScene(&scn_);
+  mjv_defaultScene(&scn_);
+  mjv_makeScene(model, &scn_, kMaxGeom);
+  EXPECT_EQ(scn_.retained, 0);
+  EXPECT_EQ(scn_.nslot, 0);
+  EXPECT_EQ(scn_.ngeom, 0);
+
+  mjv_freeScene(&scn_);
+  mj_deleteModel(model);
+}
+
 TEST_F(MjvSceneTest, UpdateSceneFlexSkin) {
   static constexpr char kFlexSkinPath[] = "engine/testdata/skingroup.xml";
   const std::string xml_path = GetTestDataFilePath(kFlexSkinPath);

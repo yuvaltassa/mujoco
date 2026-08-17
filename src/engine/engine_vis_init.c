@@ -23,6 +23,7 @@
 #include "engine/engine_array_safety.h"
 #include "engine/engine_util_errmem.h"
 #include "engine/engine_util_misc.h"
+#include "engine/engine_vis_visualize.h"
 
 #ifdef _MSC_VER
   #pragma warning (disable: 4305)  // disable MSVC warning: truncation from 'double' to 'float'
@@ -124,8 +125,12 @@ const char* mjRNDSTRING[mjNRNDFLAG][3] = {
 
 // allocate and init abstract scene
 void mjv_makeScene(const mjModel* m, mjvScene* scn, int maxgeom) {
+  // latch retained-mode request across the reset in mjv_freeScene
+  mjtByte retained = scn->retained;
+
   // free previous
   mjv_freeScene(scn);
+  scn->retained = retained;
 
   // allocate geom buffers
   if (maxgeom > 0) {
@@ -138,6 +143,52 @@ void mjv_makeScene(const mjModel* m, mjvScene* scn, int maxgeom) {
     if (!scn->geoms || !scn->geomorder) {
       mjERROR("could not allocate geom buffers");
     }
+  }
+
+  // allocate retained-mode bookkeeping, initialize slot identity
+  if (scn->retained) {
+    if (!m) {
+      mjERROR("retained mode requires a model");
+    }
+    int nslot = m->ngeom + m->nsite + m->nflex + m->nskin;
+    if (maxgeom <= nslot) {
+      mjERROR("retained mode requires maxgeom (%d) > model element slots (%d)",
+              maxgeom, nslot);
+    }
+
+    // allocate
+    scn->nslot = nslot;
+    scn->visible = (mjtByte*) mju_malloc(nslot*sizeof(mjtByte));
+    scn->changed = (int*) mju_malloc(maxgeom*sizeof(int));
+    scn->changebits = (int*) mju_malloc(maxgeom*sizeof(int));
+
+    // check allocation
+    if (!scn->visible || !scn->changed || !scn->changebits) {
+      mjERROR("could not allocate retained-mode buffers");
+    }
+
+    // no slot is visible before the first sync
+    memset(scn->visible, 0, nslot*sizeof(mjtByte));
+
+    // slots are self-describing from birth: one slot per geom, site, flex,
+    // skin, in model order; segid is the slot index
+    int slot = 0;
+    int ntype[4] = {m->ngeom, m->nsite, m->nflex, m->nskin};
+    int objtype[4] = {mjOBJ_GEOM, mjOBJ_SITE, mjOBJ_FLEX, mjOBJ_SKIN};
+    for (int t=0; t < 4; t++) {
+      for (int i=0; i < ntype[t]; i++) {
+        mjvGeom* geom = scn->geoms + slot;
+        memset(geom, 0, sizeof(mjvGeom));
+        mjv_initGeom(geom, mjGEOM_NONE, NULL, NULL, NULL, NULL);
+        geom->objtype = objtype[t];
+        geom->objid = i;
+        geom->segid = slot;
+        slot++;
+      }
+    }
+
+    // slots are always present in the geom buffer
+    scn->ngeom = nslot;
   }
 
   // set default OpenGL options
@@ -281,6 +332,10 @@ void mjv_freeScene(mjvScene* scn) {
   // free buffers allocated by mjv_makeScene
   mju_free(scn->geoms);
   mju_free(scn->geomorder);
+
+  mju_free(scn->visible);
+  mju_free(scn->changed);
+  mju_free(scn->changebits);
 
   mju_free(scn->flexedgeadr);
   mju_free(scn->flexedgenum);
