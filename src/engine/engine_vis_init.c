@@ -161,9 +161,10 @@ void mjv_makeScene(const mjModel* m, mjvScene* scn, int maxgeom) {
     scn->visible = (mjtByte*) mju_malloc(nslot*sizeof(mjtByte));
     scn->changed = (int*) mju_malloc(maxgeom*sizeof(int));
     scn->changebits = (int*) mju_malloc(maxgeom*sizeof(int));
+    scn->arenaprev = (mjvGeom*) mju_malloc((maxgeom-nslot)*sizeof(mjvGeom));
 
     // check allocation
-    if (!scn->visible || !scn->changed || !scn->changebits) {
+    if (!scn->visible || !scn->changed || !scn->changebits || !scn->arenaprev) {
       mjERROR("could not allocate retained-mode buffers");
     }
 
@@ -336,6 +337,7 @@ void mjv_freeScene(mjvScene* scn) {
   mju_free(scn->visible);
   mju_free(scn->changed);
   mju_free(scn->changebits);
+  mju_free(scn->arenaprev);
 
   mju_free(scn->flexedgeadr);
   mju_free(scn->flexedgenum);

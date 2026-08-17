@@ -3340,6 +3340,8 @@ typedef struct mjvScene_ {        // abstract scene passed to OpenGL renderer
   int      nchanged;              // number of entries in change list, cleared by each sync
   int*     changed;               // indices of changed scene entries (maxgeom)
   int*     changebits;            // what changed, bitmask of mjtSyncBit (maxgeom)
+  mjvGeom* arenaprev;             // internal: previous sync's arena content (maxgeom-nslot)
+  int      narenaprev;            // internal: number of valid entries in arenaprev
 
   // flex data
   int      nflex;                 // number of flexes
@@ -3877,6 +3879,8 @@ void mjv_makeScene(const mjModel* m, mjvScene* scn, int maxgeom);
 void mjv_freeScene(mjvScene* scn);
 void mjv_updateScene(const mjModel* m, mjData* d, const mjvOption* opt,
                      const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn);
+void mjv_syncScene(const mjModel* m, mjData* d, const mjvOption* opt,
+                   const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn);
 void mjv_copyModel(mjModel* dest, const mjModel* src);
 void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* opt,
                   const mjvPerturb* pert, int catmask, mjvScene* scn);

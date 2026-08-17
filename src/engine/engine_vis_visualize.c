@@ -2994,12 +2994,55 @@ static void addConstraintGeoms(const mjModel* m, mjData* d, const mjvOption* vop
 
 
 // add abstract geoms
-void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
-                  const mjvPerturb* pert, int catmask, mjvScene* scn) {
-  // retained scenes are updated with mjv_syncScene; arena appends arrive
-  // with arena sync
-  if (scn->nslot) {
-    mju_error("mjv_addGeoms cannot yet be used with a retained-mode scene");
+// compute what changed between two geoms at the same scene position, as a
+// bitmask of mjtSyncBit; identity fields are not compared (equal by
+// construction for slots; visually irrelevant for positional arena pairs)
+static int diffGeom(const mjvGeom* a, const mjvGeom* b) {
+  int bits = 0;
+
+  // shape or asset: requires a mesh rebind, which may also change the
+  // material variant
+  if (a->type != b->type || a->dataid != b->dataid) {
+    bits |= mjSYNC_MESH | mjSYNC_MATERIAL;
+  }
+
+  // pose; size also feeds texture scaling
+  if (memcmp(a->pos, b->pos, sizeof(a->pos)) ||
+      memcmp(a->mat, b->mat, sizeof(a->mat))) {
+    bits |= mjSYNC_POSE;
+  }
+  if (memcmp(a->size, b->size, sizeof(a->size))) {
+    bits |= mjSYNC_POSE | mjSYNC_MATERIAL;
+  }
+
+  // material inputs; labels ride the material bit
+  if (a->matid != b->matid || a->texid != b->texid ||
+      a->texuniform != b->texuniform || a->texcoord != b->texcoord ||
+      memcmp(a->rgba, b->rgba, sizeof(a->rgba)) ||
+      a->emission != b->emission || a->specular != b->specular ||
+      a->shininess != b->shininess || a->reflectance != b->reflectance ||
+      memcmp(a->texrepeat, b->texrepeat, sizeof(a->texrepeat)) ||
+      memcmp(a->label, b->label, sizeof(a->label))) {
+    bits |= mjSYNC_MATERIAL;
+  }
+
+  return bits;
+}
+
+
+
+static void addPluginGeoms(const mjModel* m, mjData* d, const mjvOption* opt,
+                           mjvScene* scn);
+static void addDecorGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
+                          const mjvPerturb* pert, int catmask, mjvScene* scn);
+
+
+// update retained-mode scene in place, recording changes
+void mjv_syncScene(const mjModel* m, mjData* d, const mjvOption* opt,
+                   const mjvPerturb* pert, mjvCamera* cam, int catmask,
+                   mjvScene* scn) {
+  if (!scn->nslot) {
+    mju_error("mjv_syncScene requires a retained-mode scene");
   }
 
   // make default pert if missing
@@ -3010,18 +3053,159 @@ void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
   }
 
   // clear mjCAT_STATIC bit if mjVIS_STATIC is not set
-  if (!vopt->flags[mjVIS_STATIC]) {
+  if (!opt->flags[mjVIS_STATIC]) {
     catmask &= (~mjCAT_STATIC);
   }
 
-  addFlexGeoms(m, d, vopt, pert, catmask, scn);
-  addSkinGeoms(m, d, vopt, pert, catmask, scn);
-  addGeomGeoms(m, d, vopt, pert, catmask, scn);
-  addSiteGeoms(m, d, vopt, pert, catmask, scn);
-  addSpatialTendonGeoms(m, d, vopt, catmask, scn);
-  addSliderCrankGeoms(m, d, vopt, catmask, scn);
+  // clear change list; the arena is rebuilt below
+  scn->nchanged = 0;
+  scn->ngeom = scn->nslot;
 
-  // remaining functions only add decor elements
+  // update camera first: slots see the current camera (in mjv_updateScene,
+  // infinite-plane re-centering sees the previous frame's camera)
+  mjv_updateCamera(m, d, cam, scn);
+
+  // average eye position, used for infinite-plane re-centering
+  mjtNum headpos[3];
+  for (int j=0; j < 3; j++) {
+    headpos[j] = 0.5*(scn->camera[0].pos[j] + scn->camera[1].pos[j]);
+  }
+
+  // deformable vertex streams refresh below; their slots must report a mesh
+  // change even when the summary geom is unchanged
+  int flexstream = (catmask & mjCAT_DYNAMIC) &&
+                   (opt->flags[mjVIS_FLEXVERT] || opt->flags[mjVIS_FLEXEDGE] ||
+                    opt->flags[mjVIS_FLEXFACE] || opt->flags[mjVIS_FLEXSKIN]);
+  int skinstream = (catmask & mjCAT_DYNAMIC) && opt->flags[mjVIS_SKIN];
+
+  // sync all model-element slots: geoms, sites, flexes, skins
+  int slot = 0;
+  for (int type=0; type < 4; type++) {
+    int n = type == 0 ? m->ngeom : type == 1 ? m->nsite
+                                 : type == 2 ? m->nflex : m->nskin;
+    for (int i=0; i < n; i++, slot++) {
+      // fill geom if its category passes catmask and it is drawn
+      mjvGeom geom;
+      int drawn = 0;
+      switch (type) {
+      case 0:
+        drawn = (bodycategory(m, m->geom_bodyid[i]) & catmask) &&
+                makeGeomGeom(&geom, m, d, opt, pert, headpos, i);
+        break;
+      case 1:
+        drawn = (bodycategory(m, m->site_bodyid[i]) & catmask) &&
+                makeSiteGeom(&geom, m, d, opt, pert, i);
+        break;
+      case 2:
+        drawn = (mjCAT_DYNAMIC & catmask) &&
+                makeFlexGeom(&geom, m, d, opt, pert, i);
+        break;
+      case 3:
+        drawn = (mjCAT_DYNAMIC & catmask) &&
+                makeSkinGeom(&geom, m, d, opt, pert, i);
+        break;
+      }
+
+      int bits = 0;
+      if (drawn && !scn->visible[slot]) {
+        // slot becomes visible: apply everything
+        bits = mjSYNC_VISIBLE | mjSYNC_MESH | mjSYNC_POSE | mjSYNC_MATERIAL;
+        geom.segid = slot;
+        scn->geoms[slot] = geom;
+        scn->visible[slot] = 1;
+      } else if (!drawn && scn->visible[slot]) {
+        // slot becomes invisible: content is left as-is
+        bits = mjSYNC_VISIBLE;
+        scn->visible[slot] = 0;
+      } else if (drawn) {
+        // visible slot: diff against current content, update on change
+        bits = diffGeom(scn->geoms + slot, &geom);
+        if (type == 2 ? flexstream : type == 3 ? skinstream : 0) {
+          bits |= mjSYNC_MESH;
+        }
+        if (bits) {
+          geom.segid = slot;
+          scn->geoms[slot] = geom;
+        }
+      }
+
+      // record the change
+      if (bits) {
+        scn->changed[scn->nchanged] = slot;
+        scn->changebits[scn->nchanged] = bits;
+        scn->nchanged++;
+      }
+    }
+  }
+
+  // rebuild the arena: plugin geoms, tendons and slider-cranks (variable
+  // cardinality, no slots), then decor; same order as the immediate path
+  addPluginGeoms(m, d, opt, scn);
+  addSpatialTendonGeoms(m, d, opt, catmask, scn);
+  addSliderCrankGeoms(m, d, opt, catmask, scn);
+  addDecorGeoms(m, d, opt, pert, catmask, scn);
+
+  // diff the arena positionally against the previous sync's content; an
+  // entry pair may describe different objects, which has no visual effect
+  // beyond what the bits report
+  int narena = scn->ngeom - scn->nslot;
+  for (int k=0; k < narena; k++) {
+    int bits;
+    if (k < scn->narenaprev) {
+      bits = diffGeom(scn->arenaprev + k, scn->geoms + scn->nslot + k);
+    } else {
+      // new arena entry: apply everything
+      bits = mjSYNC_VISIBLE | mjSYNC_MESH | mjSYNC_POSE | mjSYNC_MATERIAL;
+    }
+    if (bits) {
+      scn->changed[scn->nchanged] = scn->nslot + k;
+      scn->changebits[scn->nchanged] = bits;
+      scn->nchanged++;
+    }
+  }
+
+  // snapshot the arena for the next sync; geoms appended after this sync are
+  // the appender's to apply and do not participate in change tracking
+  memcpy(scn->arenaprev, scn->geoms + scn->nslot, narena*sizeof(mjvGeom));
+  scn->narenaprev = narena;
+
+  // update lights
+  mjv_makeLights(m, d, scn);
+
+  // refresh deformable vertex streams
+  if (flexstream) {
+    mjv_updateActiveFlex(m, d, scn, opt);
+  }
+  if (skinstream) {
+    mjv_updateActiveSkin(m, d, scn, opt);
+  }
+}
+
+
+
+// trigger plugin visualization hooks; plugin geoms are appended to the scene
+static void addPluginGeoms(const mjModel* m, mjData* d, const mjvOption* opt,
+                           mjvScene* scn) {
+  if (m->nplugin) {
+    const int nplugin_slots = mjp_pluginCount();
+    // iterate over plugins, call visualize if defined
+    for (int i=0; i < m->nplugin; i++) {
+      const int slot = m->plugin[i];
+      const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nplugin_slots);
+      if (!plugin) {
+        mjERROR("invalid plugin slot: %d", slot);
+      }
+      if (plugin->visualize) {
+        plugin->visualize(m, d, opt, scn, i);
+      }
+    }
+  }
+}
+
+
+// add all decor-category geoms to the scene
+static void addDecorGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
+                          const mjvPerturb* pert, int catmask, mjvScene* scn) {
   if (!(catmask & mjCAT_DECOR)) {
     return;
   }
@@ -3049,6 +3233,32 @@ void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
   addExternalPerturbGeoms(m, d, vopt, scn);
   addConstraintGeoms(m, d, vopt, scn);
   addContactGeoms(m, d, vopt, scn, catmask);
+}
+
+
+void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
+                  const mjvPerturb* pert, int catmask, mjvScene* scn) {
+  // make default pert if missing
+  mjvPerturb localpert;
+  if (!pert) {
+    mjv_defaultPerturb(&localpert);
+    pert = &localpert;
+  }
+
+  // clear mjCAT_STATIC bit if mjVIS_STATIC is not set
+  if (!vopt->flags[mjVIS_STATIC]) {
+    catmask &= (~mjCAT_STATIC);
+  }
+
+  addFlexGeoms(m, d, vopt, pert, catmask, scn);
+  addSkinGeoms(m, d, vopt, pert, catmask, scn);
+  addGeomGeoms(m, d, vopt, pert, catmask, scn);
+  addSiteGeoms(m, d, vopt, pert, catmask, scn);
+  addSpatialTendonGeoms(m, d, vopt, catmask, scn);
+  addSliderCrankGeoms(m, d, vopt, catmask, scn);
+
+  // decor elements
+  addDecorGeoms(m, d, vopt, pert, catmask, scn);
 }
 
 
@@ -3662,20 +3872,7 @@ void mjv_updateScene(const mjModel* m, mjData* d, const mjvOption* opt,
   scn->ngeom = 0;
 
   // trigger plugin visualization hooks
-  if (m->nplugin) {
-    const int nslot = mjp_pluginCount();
-    // iterate over plugins, call visualize if defined
-    for (int i=0; i < m->nplugin; i++) {
-      const int slot = m->plugin[i];
-      const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
-      if (!plugin) {
-        mjERROR("invalid plugin slot: %d", slot);
-      }
-      if (plugin->visualize) {
-        plugin->visualize(m, d, opt, scn, i);
-      }
-    }
-  }
+  addPluginGeoms(m, d, opt, scn);
 
   // add all categories
   mjv_addGeoms(m, d, opt, pert, catmask, scn);
