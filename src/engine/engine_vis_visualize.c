@@ -805,10 +805,102 @@ static void addContactGeoms(const mjModel* m, mjData* d, const mjvOption* vopt, 
 }
 
 
+// fill geom with the current visual state of model flex id; return 1 if the
+// flex is drawn under the given options, 0 if it is filtered out
+static int makeFlexGeom(mjvGeom* geom, const mjModel* m, mjData* d,
+                        const mjvOption* vopt, const mjvPerturb* pert,
+                        int id) {
+  // skip if no flex visualization is enabled
+  if (!vopt->flags[mjVIS_FLEXVERT] && !vopt->flags[mjVIS_FLEXEDGE] &&
+      !vopt->flags[mjVIS_FLEXFACE] && !vopt->flags[mjVIS_FLEXSKIN]) {
+    return 0;
+  }
+
+  // skip if group is disabled
+  if (!vopt->flexgroup[mjMAX(0, mjMIN(mjNGROUP-1, m->flex_group[id]))]) {
+    return 0;
+  }
+
+  // initialize with defaults, set identity; segid is the aggregator's job
+  // pos = first vertex
+  memset(geom, 0, sizeof(mjvGeom));
+  mjv_initGeom(geom, mjGEOM_FLEX, NULL,
+               d->flexvert_xpos + 3*m->flex_vertadr[id], NULL, NULL);
+  geom->objtype = mjOBJ_FLEX;
+  geom->objid = id;
+  geom->category = mjCAT_DYNAMIC;
+  geom->segid = -1;
+  geom->size[0] = m->flex_radius[id];
+  setMaterial(m, geom, m->flex_matid[id], m->flex_rgba+4*id, vopt->flags);
+
+  // override if visualizing islands
+  if (vopt->flags[mjVIS_ISLAND]) {
+    // find first dynamic body in flex
+    int bodyid = -1;
+    if (m->flex_interp[id]) {
+      int nodeadr = m->flex_nodeadr[id];
+      for (int j=0; j < m->flex_nodenum[id] && bodyid < 0; j++) {
+        int b = m->flex_nodebodyid[nodeadr+j];
+        if (m->body_treeid[b] >= 0) bodyid = b;
+      }
+    } else {
+      int vertadr = m->flex_vertadr[id];
+      for (int j=0; j < m->flex_vertnum[id] && bodyid < 0; j++) {
+        int b = m->flex_vertbodyid[vertadr+j];
+        if (m->body_treeid[b] >= 0) bodyid = b;
+      }
+    }
+
+    if (bodyid >= 0) {
+      // strip material
+      geom->matid = -1;
+
+      int weld_id = m->body_weldid[bodyid];
+      int dof = m->body_dofadr[weld_id];
+      int island = d->nisland ? d->dof_island[dof] : -1;
+      int h = island >= 0 ? d->island_dofadr[island] : -1;
+      int awake = d->body_awake[bodyid];
+
+      // if sleep is enabled, color by first tree dof
+      if (h == -1 && mjENABLED(mjENBL_SLEEP)) {
+        int tree = m->dof_treeid[dof];
+        if (!awake) tree = mj_sleepCycle(d->tree_asleep, m->ntree, tree);
+        h = m->tree_dofadr[tree];
+      }
+
+      islandColor(geom->rgba, h, awake);
+    }
+  }
+
+  // set texcoord
+  if (m->flex_texcoordadr[id] >= 0) {
+    geom->texcoord = 1;
+  } else {
+    geom->matid = -1;
+  }
+
+  // glow flex if selected
+  if (pert && pert->flexselect == id) {
+    markselected(&m->vis, geom);
+  }
+
+  // skip if alpha is 0
+  if (geom->rgba[3] == 0) {
+    return 0;
+  }
+
+  // vopt->label
+  if (vopt->label == mjLABEL_FLEX) {
+    makeLabel(m, mjOBJ_FLEX, id, geom->label);
+  }
+
+  return 1;
+}
+
+
 static void addFlexGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
                          const mjvPerturb* pert, int catmask, mjvScene* scn) {
-  const int category = mjCAT_DYNAMIC;
-  if (!(category & catmask)) {
+  if (!(mjCAT_DYNAMIC & catmask)) {
     return;
   }
   if (!vopt->flags[mjVIS_FLEXVERT] && !vopt->flags[mjVIS_FLEXEDGE] &&
@@ -817,91 +909,82 @@ static void addFlexGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
   }
 
   for (int i=0; i < m->nflex; i++) {
-    if (!vopt->flexgroup[mjMAX(0, mjMIN(mjNGROUP-1, m->flex_group[i]))]) {
+    // fill geom, skip if filtered out
+    mjvGeom geom;
+    if (!makeFlexGeom(&geom, m, d, vopt, pert, i)) {
       continue;
     }
 
-    mjvGeom* thisgeom = acquireGeom(scn, i, category, mjOBJ_FLEX);
+    mjvGeom* thisgeom = acquireGeom(scn, i, geom.category, mjOBJ_FLEX);
     if (!thisgeom) {
       return;
     }
 
-    // construct geom, pos = first vertex
-    mjv_initGeom(thisgeom, mjGEOM_FLEX, NULL,
-                  d->flexvert_xpos + 3*m->flex_vertadr[i], NULL, NULL);
-    thisgeom->size[0] = m->flex_radius[i];
-    setMaterial(m, thisgeom, m->flex_matid[i], m->flex_rgba+4*i, vopt->flags);
-
-    // override if visualizing islands
-    if (vopt->flags[mjVIS_ISLAND]) {
-      // find first dynamic body in flex
-      int bodyid = -1;
-      if (m->flex_interp[i]) {
-        int nodeadr = m->flex_nodeadr[i];
-        for (int j=0; j < m->flex_nodenum[i] && bodyid < 0; j++) {
-          int b = m->flex_nodebodyid[nodeadr+j];
-          if (m->body_treeid[b] >= 0) bodyid = b;
-        }
-      } else {
-        int vertadr = m->flex_vertadr[i];
-        for (int j=0; j < m->flex_vertnum[i] && bodyid < 0; j++) {
-          int b = m->flex_vertbodyid[vertadr+j];
-          if (m->body_treeid[b] >= 0) bodyid = b;
-        }
-      }
-
-      if (bodyid >= 0) {
-        // strip material
-        thisgeom->matid = -1;
-
-        int weld_id = m->body_weldid[bodyid];
-        int dof = m->body_dofadr[weld_id];
-        int island = d->nisland ? d->dof_island[dof] : -1;
-        int h = island >= 0 ? d->island_dofadr[island] : -1;
-        int awake = d->body_awake[bodyid];
-
-        // if sleep is enabled, color by first tree dof
-        if (h == -1 && mjENABLED(mjENBL_SLEEP)) {
-          int tree = m->dof_treeid[dof];
-          if (!awake) tree = mj_sleepCycle(d->tree_asleep, m->ntree, tree);
-          h = m->tree_dofadr[tree];
-        }
-
-        islandColor(thisgeom->rgba, h, awake);
-      }
-    }
-
-    // set texcoord
-    if (m->flex_texcoordadr[i] >= 0) {
-      thisgeom->texcoord = 1;
-    } else {
-      thisgeom->matid = -1;
-    }
-
-    // glow flex if selected
-    if (pert->flexselect == i) {
-      markselected(&m->vis, thisgeom);
-    }
-
-    // skip if alpha is 0
-    if (thisgeom->rgba[3] == 0) {
-      continue;
-    }
-
-    // vopt->label
-    if (vopt->label == mjLABEL_FLEX) {
-      makeLabel(m, mjOBJ_FLEX, i, thisgeom->label);
-    }
+    // copy in the filled geom, keeping the segid assigned by acquireGeom
+    int segid = thisgeom->segid;
+    *thisgeom = geom;
+    thisgeom->segid = segid;
 
     releaseGeom(&thisgeom, scn);
   }
 }
 
 
+// fill geom with the current visual state of model skin id; return 1 if the
+// skin is drawn under the given options, 0 if it is filtered out
+static int makeSkinGeom(mjvGeom* geom, const mjModel* m, mjData* d,
+                        const mjvOption* vopt, const mjvPerturb* pert,
+                        int id) {
+  // skip if skin visualization is disabled
+  if (!vopt->flags[mjVIS_SKIN]) {
+    return 0;
+  }
+
+  // skip if group is disabled
+  if (!vopt->skingroup[mjMAX(0, mjMIN(mjNGROUP-1, m->skin_group[id]))]) {
+    return 0;
+  }
+
+  // initialize with defaults, set identity; segid is the aggregator's job
+  // pos = first bone
+  memset(geom, 0, sizeof(mjvGeom));
+  mjv_initGeom(geom, mjGEOM_SKIN, NULL,
+               d->xpos + 3*m->skin_bonebodyid[m->skin_boneadr[id]], NULL, NULL);
+  geom->objtype = mjOBJ_SKIN;
+  geom->objid = id;
+  geom->category = mjCAT_DYNAMIC;
+  geom->segid = -1;
+
+  // set material properties
+  setMaterial(m, geom, m->skin_matid[id], m->skin_rgba+4*id, vopt->flags);
+
+  // glow skin if selected
+  if (pert && pert->skinselect == id) {
+    markselected(&m->vis, geom);
+  }
+
+  // set texcoord
+  if (m->skin_texcoordadr[id] >= 0) {
+    geom->texcoord = 1;
+  }
+
+  // skip if alpha is 0
+  if (geom->rgba[3] == 0) {
+    return 0;
+  }
+
+  // vopt->label
+  if (vopt->label == mjLABEL_SKIN) {
+    makeLabel(m, mjOBJ_SKIN, id, geom->label);
+  }
+
+  return 1;
+}
+
+
 static void addSkinGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
                          const mjvPerturb* pert, int catmask, mjvScene* scn) {
-  const int category = mjCAT_DYNAMIC;
-  if (!(category & catmask)) {
+  if (!(mjCAT_DYNAMIC & catmask)) {
     return;
   }
   if (!vopt->flags[mjVIS_SKIN]) {
@@ -909,192 +992,242 @@ static void addSkinGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
   }
 
   for (int i=0; i < m->nskin; i++) {
-    if (!vopt->skingroup[mjMAX(0, mjMIN(mjNGROUP-1, m->skin_group[i]))]) {
+    // fill geom, skip if filtered out
+    mjvGeom geom;
+    if (!makeSkinGeom(&geom, m, d, vopt, pert, i)) {
       continue;
     }
-    mjvGeom* thisgeom = acquireGeom(scn, i, category, mjOBJ_SKIN);
+
+    mjvGeom* thisgeom = acquireGeom(scn, i, geom.category, mjOBJ_SKIN);
     if (!thisgeom) {
       return;
     }
 
-    // construct geom, pos = first bone
-    mjv_initGeom(thisgeom, mjGEOM_SKIN, NULL,
-                  d->xpos + 3*m->skin_bonebodyid[m->skin_boneadr[i]], NULL, NULL);
-
-    // set material properties
-    setMaterial(m, thisgeom, m->skin_matid[i], m->skin_rgba+4*i, vopt->flags);
-
-    // glow skin if selected
-    if (pert->skinselect == i) {
-      markselected(&m->vis, thisgeom);
-    }
-
-    // set texcoord
-    if (m->skin_texcoordadr[i] >= 0) {
-      thisgeom->texcoord = 1;
-    }
-
-    // skip if alpha is 0
-    if (thisgeom->rgba[3] == 0) {
-      continue;
-    }
-
-    // vopt->label
-    if (vopt->label == mjLABEL_SKIN) {
-      makeLabel(m, mjOBJ_SKIN, i, thisgeom->label);
-    }
+    // copy in the filled geom, keeping the segid assigned by acquireGeom
+    int segid = thisgeom->segid;
+    *thisgeom = geom;
+    thisgeom->segid = segid;
 
     releaseGeom(&thisgeom, scn);
   }
 }
 
 
+// fill geom with the current visual state of model geom id; return 1 if the
+// geom is drawn under the given options, 0 if it is filtered out
+// headpos, if given, re-centers infinite planes on the viewer
+static int makeGeomGeom(mjvGeom* geom, const mjModel* m, mjData* d,
+                        const mjvOption* vopt, const mjvPerturb* pert,
+                        const mjtNum* headpos, int id) {
+  // skip if group is disabled
+  if (!vopt->geomgroup[mjMAX(0, mjMIN(mjNGROUP-1, m->geom_group[id]))]) {
+    return 0;
+  }
+
+  // initialize with defaults, set identity; segid is the aggregator's job
+  memset(geom, 0, sizeof(mjvGeom));
+  mjv_initGeom(geom, m->geom_type[id], m->geom_size+3*id,
+               d->geom_xpos+3*id, d->geom_xmat+9*id, NULL);
+  geom->objtype = mjOBJ_GEOM;
+  geom->objid = id;
+  geom->category = bodycategory(m, m->geom_bodyid[id]);
+  geom->segid = -1;
+  geom->dataid = m->geom_dataid[id];
+
+  // copy rbound from model
+  geom->modelrbound = (float)m->geom_rbound[id];
+
+  // set material properties
+  float* rgba = m->geom_rgba+4*id;
+  int geom_matid = m->geom_matid[id];
+  setMaterial(m, geom, geom_matid, rgba, vopt->flags);
+
+  // override if visualizing islands
+  if (vopt->flags[mjVIS_ISLAND]) {
+    int weld_id = m->body_weldid[m->geom_bodyid[id]];
+    if (m->body_dofnum[weld_id]) {
+      // strip materials off moving geom
+      geom->matid = -1;
+
+      // set hue using first island dof, -1 if no island
+      int dof = m->body_dofadr[weld_id];
+      int island = d->nisland ? d->dof_island[dof] : -1;
+      int h = island >= 0 ? d->island_dofadr[island] : -1;
+      int awake = d->body_awake[m->geom_bodyid[id]];
+
+      // if sleep is enabled, color by first tree dof
+      if (h == -1 && mjENABLED(mjENBL_SLEEP)) {
+        int tree = m->dof_treeid[dof];
+        if (!awake) tree = mj_sleepCycle(d->tree_asleep, m->ntree, tree);
+        h = m->tree_dofadr[tree];
+      }
+
+      islandColor(geom->rgba, h, awake);
+    }
+  }
+
+  // set texcoord
+  if ((m->geom_type[id] == mjGEOM_MESH || m->geom_type[id] == mjGEOM_SDF) &&
+      m->geom_dataid[id] >= 0 &&
+      m->mesh_texcoordadr[m->geom_dataid[id]] >= 0) {
+    geom->texcoord = 1;
+  }
+
+  // skip if alpha is 0
+  if (geom->rgba[3] == 0) {
+    return 0;
+  }
+
+  // glow geoms of selected body
+  if (pert && pert->select > 0 && pert->select == m->geom_bodyid[id]) {
+    markselected(&m->vis, geom);
+  }
+
+  // vopt->label
+  if (vopt->label == mjLABEL_GEOM) {
+    makeLabel(m, mjOBJ_GEOM, id, geom->label);
+  }
+
+  // mesh: 2*id is original, 2*id+1 is convex hull
+  if (m->geom_type[id] == mjGEOM_MESH || m->geom_type[id] == mjGEOM_SDF) {
+    geom->dataid *= 2;
+    if (m->mesh_graphadr[m->geom_dataid[id]] >= 0 && vopt->flags[mjVIS_CONVEXHULL] &&
+        (m->geom_contype[id] || m->geom_conaffinity[id])) {
+      geom->dataid += 1;
+    }
+  }
+
+  // plane
+  else if (m->geom_type[id] == mjGEOM_PLANE) {
+    // dataid is the plane's ordinal among planes
+    int planeid = 0;
+    for (int j=0; j < id; j++) {
+      planeid += (m->geom_type[j] == mjGEOM_PLANE);
+    }
+    geom->dataid = planeid;
+
+    // save initial pos
+    mjtNum tmp[9];
+    mju_copy3(tmp, d->geom_xpos+3*id);
+
+    // re-center infinite plane on the viewer
+    if (headpos && (m->geom_size[3*id] <= 0 || m->geom_size[3*id+1] <= 0)) {
+      // vec = headpos - geompos
+      mjtNum vec[3];
+      for (int j=0; j < 3; j++) {
+        vec[j] = headpos[j] - d->geom_xpos[3*id+j];
+      }
+
+      // construct axes
+      mjtNum ax[9];
+      mju_transpose(ax, d->geom_xmat+9*id, 3, 3);
+
+      // loop over (x,y)
+      for (int k=0; k < 2; k++) {
+        if (m->geom_size[3*id+k] <= 0) {
+          // compute zfar
+          mjtNum zfar = m->vis.map.zfar * m->stat.extent;
+
+          // get size increment
+          mjtNum sX;
+          int matid = m->geom_matid[id];
+          if (matid >= 0 && m->mat_texrepeat[2*matid+k] > 0) {
+            sX = 2/m->mat_texrepeat[2*matid+k];
+          } else {
+            sX = 2.1*zfar/(mjMAXPLANEGRID-2);
+          }
+
+          // project on frame, round to integer increment of size
+          mjtNum dX = mju_dot3(vec, ax+3*k);
+          dX = 2*sX*mju_round(0.5*dX/sX);
+
+          // translate
+          mju_addToScl3(tmp, ax+3*k, dX);
+        }
+      }
+    }
+
+    // set final pos
+    mju_n2f(geom->pos, tmp, 3);
+  }
+
+  return 1;
+}
+
+
 static void addGeomGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
                          const mjvPerturb* pert, int catmask, mjvScene* scn) {
-  const int objtype = mjOBJ_GEOM;
-  int planeid = -1;
+  // average camera position, for infinite-plane re-centering
+  mjtNum headpos[3];
+  for (int j=0; j < 3; j++) {
+    headpos[j] = 0.5*(scn->camera[0].pos[j] + scn->camera[1].pos[j]);
+  }
+
   for (int i=0; i < m->ngeom; i++) {
-    // count planes, put current plane number in geom->dataid
-    if (m->geom_type[i] == mjGEOM_PLANE) {
-      planeid++;
-    }
-
     // skip if category is masked
-    int category = bodycategory(m, m->geom_bodyid[i]);
-    if (!(category & catmask)) {
+    if (!(bodycategory(m, m->geom_bodyid[i]) & catmask)) {
       continue;
     }
 
-    // skip if group is disabled
-    if (!vopt->geomgroup[mjMAX(0, mjMIN(mjNGROUP-1, m->geom_group[i]))]) {
+    // fill geom, skip if filtered out
+    mjvGeom geom;
+    if (!makeGeomGeom(&geom, m, d, vopt, pert, headpos, i)) {
       continue;
     }
 
-    mjvGeom* thisgeom = acquireGeom(scn, i, category, objtype);
+    mjvGeom* thisgeom = acquireGeom(scn, i, geom.category, mjOBJ_GEOM);
     if (!thisgeom) {
       return;
     }
 
-    // construct geom
-    mjv_initGeom(thisgeom, m->geom_type[i], m->geom_size+3*i,
-                  d->geom_xpos+3*i, d->geom_xmat+9*i, NULL);
-    thisgeom->dataid = m->geom_dataid[i];
-
-    // copy rbound from model
-    thisgeom->modelrbound = (float)m->geom_rbound[i];
-
-    // set material properties
-    float* rgba = m->geom_rgba+4*i;
-    int geom_matid = m->geom_matid[i];
-    setMaterial(m, thisgeom, geom_matid, rgba, vopt->flags);
-
-    // override if visualizing islands
-    if (vopt->flags[mjVIS_ISLAND]) {
-      int weld_id = m->body_weldid[m->geom_bodyid[i]];
-      if (m->body_dofnum[weld_id]) {
-        // strip materials off moving geom
-        thisgeom->matid = -1;
-
-        // set hue using first island dof, -1 if no island
-        int dof = m->body_dofadr[weld_id];
-        int island = d->nisland ? d->dof_island[dof] : -1;
-        int h = island >= 0 ? d->island_dofadr[island] : -1;
-        int awake = d->body_awake[m->geom_bodyid[i]];
-
-        // if sleep is enabled, color by first tree dof
-        if (h == -1 && mjENABLED(mjENBL_SLEEP)) {
-          int tree = m->dof_treeid[dof];
-          if (!awake) tree = mj_sleepCycle(d->tree_asleep, m->ntree, tree);
-          h = m->tree_dofadr[tree];
-        }
-
-        islandColor(thisgeom->rgba, h, awake);
-      }
-    }
-
-    // set texcoord
-    if ((m->geom_type[i] == mjGEOM_MESH || m->geom_type[i] == mjGEOM_SDF) &&
-        m->geom_dataid[i] >= 0 &&
-        m->mesh_texcoordadr[m->geom_dataid[i]] >= 0) {
-      thisgeom->texcoord = 1;
-    }
-
-    // skip if alpha is 0
-    if (thisgeom->rgba[3] == 0) {
-      continue;
-    }
-
-    // glow geoms of selected body
-    if (pert->select > 0 && pert->select == m->geom_bodyid[i]) {
-      markselected(&m->vis, thisgeom);
-    }
-
-    // vopt->label
-    if (vopt->label == mjLABEL_GEOM) {
-      makeLabel(m, mjOBJ_GEOM, i, thisgeom->label);
-    }
-
-    // mesh: 2*i is original, 2*i+1 is convex hull
-    if (m->geom_type[i] == mjGEOM_MESH || m->geom_type[i] == mjGEOM_SDF) {
-      thisgeom->dataid *= 2;
-      if (m->mesh_graphadr[m->geom_dataid[i]] >= 0 && vopt->flags[mjVIS_CONVEXHULL] &&
-          (m->geom_contype[i] || m->geom_conaffinity[i])) {
-        thisgeom->dataid += 1;
-      }
-    }
-
-    // plane
-    else if (m->geom_type[i] == mjGEOM_PLANE) {
-      // use current planeid
-      thisgeom->dataid = planeid;
-
-      // save initial pos
-      mjtNum tmp[9];
-      mju_copy3(tmp, d->geom_xpos+3*i);
-
-      // re-center infinite plane
-      if (m->geom_size[3*i] <= 0 || m->geom_size[3*i+1] <= 0) {
-        // vec = headpos - geompos
-        mjtNum vec[3];
-        for (int j=0; j < 3; j++) {
-          vec[j] = 0.5*(scn->camera[0].pos[j] + scn->camera[1].pos[j]) - d->geom_xpos[3*i+j];
-        }
-
-        // construct axes
-        mjtNum ax[9];
-        mju_transpose(ax, d->geom_xmat+9*i, 3, 3);
-
-        // loop over (x,y)
-        for (int k=0; k < 2; k++) {
-          if (m->geom_size[3*i+k] <= 0) {
-            // compute zfar
-            mjtNum zfar = m->vis.map.zfar * m->stat.extent;
-
-            // get size increment
-            mjtNum sX;
-            int matid = m->geom_matid[i];
-            if (matid >= 0 && m->mat_texrepeat[2*matid+k] > 0) {
-              sX = 2/m->mat_texrepeat[2*matid+k];
-            } else {
-              sX = 2.1*zfar/(mjMAXPLANEGRID-2);
-            }
-
-            // project on frame, round to integer increment of size
-            mjtNum dX = mju_dot3(vec, ax+3*k);
-            dX = 2*sX*mju_round(0.5*dX/sX);
-
-            // translate
-            mju_addToScl3(tmp, ax+3*k, dX);
-          }
-        }
-      }
-
-      // set final pos
-      mju_n2f(thisgeom->pos, tmp, 3);
-    }
+    // copy in the filled geom, keeping the segid assigned by acquireGeom
+    int segid = thisgeom->segid;
+    *thisgeom = geom;
+    thisgeom->segid = segid;
 
     releaseGeom(&thisgeom, scn);
   }
+}
+
+
+// fill geom with the current visual state of model site id; return 1 if the
+// site is drawn under the given options, 0 if it is filtered out
+static int makeSiteGeom(mjvGeom* geom, const mjModel* m, mjData* d,
+                        const mjvOption* vopt, const mjvPerturb* pert,
+                        int id) {
+  // skip if group disabled
+  if (!vopt->sitegroup[mjMAX(0, mjMIN(mjNGROUP-1, m->site_group[id]))]) {
+    return 0;
+  }
+
+  // initialize with defaults, set identity; segid is the aggregator's job
+  memset(geom, 0, sizeof(mjvGeom));
+  mjv_initGeom(geom, m->site_type[id], m->site_size+3*id,
+               d->site_xpos+3*id, d->site_xmat+9*id, NULL);
+  geom->objtype = mjOBJ_SITE;
+  geom->objid = id;
+  geom->category = bodycategory(m, m->site_bodyid[id]);
+  geom->segid = -1;
+
+  // set material if given
+  setMaterial(m, geom, m->site_matid[id], m->site_rgba+4*id, vopt->flags);
+
+  // skip if alpha is 0
+  if (geom->rgba[3] == 0) {
+    return 0;
+  }
+
+  // glow
+  if (pert && pert->select > 0 && pert->select == m->site_bodyid[id]) {
+    markselected(&m->vis, geom);
+  }
+
+  // vopt->label
+  if (vopt->label == mjLABEL_SITE) {
+    makeLabel(m, mjOBJ_SITE, id, geom->label);
+  }
+
+  return 1;
 }
 
 
@@ -1102,41 +1235,25 @@ static void addSiteGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
                          const mjvPerturb* pert, int catmask, mjvScene* scn) {
   for (int i=0; i < m->nsite; i++) {
     // skip if category is masked
-    int category = bodycategory(m, m->site_bodyid[i]);
-    if (!(category & catmask)) {
+    if (!(bodycategory(m, m->site_bodyid[i]) & catmask)) {
       continue;
     }
 
-    // skip if group disabled
-    if (!vopt->sitegroup[mjMAX(0, mjMIN(mjNGROUP-1, m->site_group[i]))]) {
+    // fill geom, skip if filtered out
+    mjvGeom geom;
+    if (!makeSiteGeom(&geom, m, d, vopt, pert, i)) {
       continue;
     }
-    mjvGeom* thisgeom = acquireGeom(scn, i, category, mjOBJ_SITE);
+
+    mjvGeom* thisgeom = acquireGeom(scn, i, geom.category, mjOBJ_SITE);
     if (!thisgeom) {
       return;
     }
 
-    // construct geom
-    mjv_initGeom(thisgeom, m->site_type[i], m->site_size+3*i,
-                  d->site_xpos+3*i, d->site_xmat+9*i, NULL);
-
-    // set material if given
-    setMaterial(m, thisgeom, m->site_matid[i], m->site_rgba+4*i, vopt->flags);
-
-    // skip if alpha is 0
-    if (thisgeom->rgba[3] == 0) {
-      continue;
-    }
-
-    // glow
-    if (pert->select > 0 && pert->select == m->site_bodyid[i]) {
-      markselected(&m->vis, thisgeom);
-    }
-
-    // vopt->label
-    if (vopt->label == mjLABEL_SITE) {
-      makeLabel(m, mjOBJ_SITE, i, thisgeom->label);
-    }
+    // copy in the filled geom, keeping the segid assigned by acquireGeom
+    int segid = thisgeom->segid;
+    *thisgeom = geom;
+    thisgeom->segid = segid;
 
     releaseGeom(&thisgeom, scn);
   }

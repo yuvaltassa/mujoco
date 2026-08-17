@@ -82,6 +82,51 @@ TEST_F(MjvSceneTest, UpdateScene) {
   mj_deleteModel(model);
 }
 
+TEST_F(MjvSceneTest, UpdateSceneFlexSkin) {
+  static constexpr char kFlexSkinPath[] = "engine/testdata/skingroup.xml";
+  const std::string xml_path = GetTestDataFilePath(kFlexSkinPath);
+  mjModel* model = mj_loadXML(xml_path.c_str(), nullptr, 0, 0);
+  ASSERT_THAT(model, NotNull()) << "Failed to load model from "
+                                << kFlexSkinPath;
+  ASSERT_EQ(model->nflex, 2);  // in groups 2 and 4
+  ASSERT_EQ(model->nskin, 3);  // in groups 0, 2 and 4 (flexcomps make skins)
+
+  InitSceneObjects(model);
+  mjData* data = mj_makeData(model);
+  mj_forward(model, data);
+
+  // count per-element summary geoms of the given objtype
+  auto count = [&](int objtype) {
+    int n = 0;
+    for (int i = 0; i < scn_.ngeom; i++) {
+      if (scn_.geoms[i].objtype == objtype) {
+        n++;
+        EXPECT_EQ(scn_.geoms[i].category, mjCAT_DYNAMIC);
+      }
+    }
+    return n;
+  };
+
+  // default groups enable 0-2: one flex and two skins are drawn
+  mjv_updateScene(model, data, &opt_, &pert_, &cam_, mjCAT_ALL, &scn_);
+  EXPECT_EQ(count(mjOBJ_FLEX), 1);
+  EXPECT_EQ(count(mjOBJ_SKIN), 2);
+
+  // enabling group 4 draws the second flex
+  opt_.flexgroup[4] = 1;
+  mjv_updateScene(model, data, &opt_, &pert_, &cam_, mjCAT_ALL, &scn_);
+  EXPECT_EQ(count(mjOBJ_FLEX), 2);
+
+  // disabling skin visualization removes the skin
+  opt_.flags[mjVIS_SKIN] = 0;
+  mjv_updateScene(model, data, &opt_, &pert_, &cam_, mjCAT_ALL, &scn_);
+  EXPECT_EQ(count(mjOBJ_SKIN), 0);
+
+  mj_deleteData(data);
+  FreeSceneObjects();
+  mj_deleteModel(model);
+}
+
 TEST_F(MjvSceneTest, UpdateSceneGeomsExhausted) {
   const std::string xml_path = GetTestDataFilePath(kModelPath);
   mjModel* model = mj_loadXML(xml_path.c_str(), nullptr, 0, 0);
