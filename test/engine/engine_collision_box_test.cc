@@ -618,6 +618,62 @@ TEST_F(MjCollisionBoxTest, NearAlignedManifoldIsExact) {
 // a pair whose overlap is comparable to the rounding error of its own support
 // evaluation: the separating-axis test must err toward contact, or the boxes
 // pass through each other
+// two identical boxes resting face-to-face, kissing at one corner with sub-micron
+// overlap, faces flush along their width: the collider this one replaced returned a
+// phantom contact of depth equal to the full flush extent plus the true depth
+// (dist = -71.056 for a 71-wide box overlapping by 5.6e-7 of its size), ejecting
+// resting stacks of packed goods at 18 m/s. The pose is a point singularity: any
+// 10 um or 0.1 degree perturbation hides it, but settled bodies find it because
+// quaternion creep slides a resting pair along the singular manifold. Poses are the
+// 17-digit captures from github.com/google-deepmind/mujoco/issues/3476, applied
+// through qpos so they survive compilation exactly.
+TEST_F(MjCollisionBoxTest, FlushFacesNoPhantomDepth) {
+  constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body><freejoint/><geom type="box" size="75 35.5 22.5" mass="0.25"/></body>
+      <body><freejoint/><geom type="box" size="75 35.5 22.5" mass="0.25"/></body>
+    </worldbody>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+
+  const mjtNum qpos[14] = {
+      862.4672361088551,     444.5974448882937,      -87.50001574938747,
+      0.70870472649706,      2.2005940043163968e-13, -1.8342950101702237e-13,
+      0.7055052165935622,
+      862.4009654665109,     594.9219226097865,      -87.50002095390447,
+      0.7054546906050059,    -7.947440490083151e-08, -3.301086291725321e-08,
+      0.7087550207958939};
+  mju_copy(data->qpos, qpos, 14);
+  mj_kinematics(model.get(), data.get());
+
+  mjPreContact precon[mjMAXCONPAIR];
+  int num = mjc_BoxBox(model.get(), data.get(), precon, 0, 1, 0);
+
+  // the boxes overlap by 6.8e-10 of their size: every reported depth must be of that
+  // order, bounded far below the tightest box dimension. Under single precision the
+  // overlap itself is below rounding, so an empty manifold is also acceptable; what is
+  // never acceptable is a deep contact.
+  for (int i = 0; i < num; i++) {
+    EXPECT_GT(precon[i].dist, -0.01) << "phantom deep contact " << i;
+  }
+
+  // in double precision the deepest contact must also agree with the convex pipeline
+#ifndef mjUSESINGLE
+  ASSERT_GT(num, 0);
+  mjtNum gap = mj_geomDistance(model.get(), data.get(), 0, 1, 10, nullptr);
+  mjtNum deepest = precon[0].dist;
+  for (int i = 1; i < num; i++) {
+    deepest = mju_min(deepest, precon[i].dist);
+  }
+  EXPECT_THAT(deepest, MjNear(gap, 1e-6, 1e-6));
+#endif
+}
+
 TEST_F(MjCollisionBoxTest, ShallowOverlapSurvivesRounding) {
   constexpr char xml[] = R"(
   <mujoco>
