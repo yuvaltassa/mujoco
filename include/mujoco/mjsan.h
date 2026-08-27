@@ -15,6 +15,9 @@
 #ifndef MUJOCO_INCLUDE_MJSAN_H_
 #define MUJOCO_INCLUDE_MJSAN_H_
 
+#include <mujoco/mjdata.h>
+#include <mujoco/mjexport.h>
+
 // Define ADDRESS_SANITIZER if implied by other macros.
 #if !defined(ADDRESS_SANITIZER)
   #if defined(__SANITIZE_ADDRESS__)
@@ -49,12 +52,14 @@
 // into mark/free into the same function, this instrumentation requires that the compiler retains
 // separate mark/free calls for each original callee. The memory-clobbered asm blocks act as a
 // barrier to prevent mark/free calls from being combined under optimization.
+// mj__markStack and mj__freeStack are exported because the wrappers below are inlined into callers
+// outside the library, which then reference them directly.
 #ifdef mjUSEASAN
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void mj__markStack(mjData*) __attribute__((noinline));
+MJAPI void mj__markStack(mjData*) __attribute__((noinline));
 __attribute__((always_inline))
 static inline void mj_markStack(mjData* d) {
   __asm__ volatile("" ::: "memory");
@@ -62,7 +67,7 @@ static inline void mj_markStack(mjData* d) {
   __asm__ volatile("" ::: "memory");
 }
 
-void mj__freeStack(mjData*) __attribute__((noinline));
+MJAPI void mj__freeStack(mjData*) __attribute__((noinline));
 __attribute__((always_inline))
 static inline void mj_freeStack(mjData* d) {
   __asm__ volatile("" ::: "memory");
