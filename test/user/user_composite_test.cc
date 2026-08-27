@@ -37,6 +37,37 @@ using UserCompositeTest = MujocoTest;
 
 // ------------------------ cable tests ---------------------------------------
 
+TEST_F(UserCompositeTest, InvalidInitialRejected) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+  <worldbody>
+    <composite type="cable" count="5 1 1" curve="s" initial="fixed">
+      <geom type="capsule" size=".02"/>
+    </composite>
+  </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size());
+  EXPECT_THAT(m.get(), IsNull());
+  EXPECT_THAT(error.data(), HasSubstr("invalid keyword: 'fixed'"));
+}
+
+TEST_F(UserCompositeTest, InitialNone) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+  <worldbody>
+    <composite type="cable" count="5 1 1" curve="s" initial="none">
+      <geom type="capsule" size=".02"/>
+    </composite>
+  </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size());
+  EXPECT_THAT(m.get(), NotNull()) << error.data();
+}
+
 TEST_F(UserCompositeTest, ShapeCanBeOmitted) {
   static constexpr char xml[] = R"(
   <mujoco>
