@@ -826,6 +826,32 @@ TEST_F(UserFlexTest, LoadMSHASCII_22_MissingElement_Fail) {
   mj_deleteModel(m);
 }
 
+// Resource buffers are not null-terminated, so the GMSH header parser must stay
+// within the reported size. A file that is exactly "$MeshFormat" leaves nothing
+// after the tag; reading on is a heap overflow.
+TEST_F(UserFlexTest, LoadMSHTruncatedHeader_Fail) {
+  static constexpr char msh[] = "$MeshFormat";
+
+  // sizeof - 1: the buffer must be added without its terminating null
+  mjVFS vfs;
+  mj_defaultVFS(&vfs);
+  mj_addBufferVFS(&vfs, "truncated.msh", msh, sizeof(msh) - 1);
+
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <flexcomp name="test" type="gmsh" dim="3" radius=".001"
+                file="truncated.msh"/>
+    </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size(), &vfs);
+  EXPECT_THAT(m.get(), IsNull());
+  EXPECT_THAT(error.data(), HasSubstr("Could not read GMSH file header"));
+  mj_deleteVFS(&vfs);
+}
+
 TEST_F(UserFlexTest, LoadMSHASCII_dim_missing_in_xml) {
   const std::string xml_path = GetTestDataFilePath(
       "user/testdata/cube_22_ascii_vol_gmshApp_missing_dim.xml");

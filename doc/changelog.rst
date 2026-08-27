@@ -62,6 +62,8 @@ Bug fixes
 ^^^^^^^^^
 
 - Rewrote the Plane-Mesh collider to fix bugs and improve performance. Fixes :issue:`3524`.
+- Fixed an out-of-bounds read when parsing the header of a :ref:`GMSH file<gmsh-file-docs>` loaded by
+  :ref:`flexcomp<body-flexcomp>`. Truncated headers are now reported as an error.
 
 Rendering
 ^^^^^^^^^
