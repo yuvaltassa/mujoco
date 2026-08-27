@@ -25,6 +25,12 @@ Compiler
   newlines or XML characters is exported as CDATA.
 - Added :ref:`cutoff<sensor-tactile-cutoff>` attribute to :ref:`sensor/tactile<sensor-tactile>`.
 
+Bug fixes
+^^^^^^^^^
+
+- Fixed an out-of-bounds read when parsing the header of a :ref:`GMSH file<gmsh-file-docs>` loaded by
+  :ref:`flexcomp<body-flexcomp>`. Truncated headers are now reported as an error.
+
 Samples
 ^^^^^^^
 - Added :ref:`render.cc<saRender>`: a headless offscreen rendering sample that saves an image to a PNG image.
