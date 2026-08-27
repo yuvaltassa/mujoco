@@ -30,6 +30,18 @@ UniquePtr<mjrfRenderable> CreateGeomRenderable(const mjvGeom& geom,
                                                ModelObjects* model_objs,
                                                SceneObjects* scene_objs);
 
+// Assigns the mesh implied by the geom (builtin shape, model asset, or scene
+// flex/skin mesh) to the renderable, along with its size and transform.
+void ApplyGeomMesh(mjrfRenderable* renderable, const mjvGeom& geom,
+                   ModelObjects* model_objs, SceneObjects* scene_objs);
+
+// Applies the geom's size and transform to the renderable.
+void ApplyGeomPose(mjrfRenderable* renderable, const mjvGeom& geom);
+
+// Resolves the geom's material against the model and applies it.
+void ApplyGeomMaterial(mjrfRenderable* renderable, const mjvGeom& geom,
+                       ModelObjects* model_objs);
+
 }  // namespace mujoco
 
 #endif  // MUJOCO_SRC_EXPERIMENTAL_FILAMENT_COMPAT_SCENE_GEOM_UTIL_H_

@@ -37,6 +37,10 @@ MJAPI void mjv_initGeom(mjvGeom* geom, int type, const mjtNum* size,
 MJAPI void mjv_updateScene(const mjModel* m, mjData* d, const mjvOption* opt,
                            const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn);
 
+// update retained-mode scene in place, recording changes
+MJAPI void mjv_syncScene(const mjModel* m, mjData* d, const mjvOption* opt,
+                         const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn);
+
 // add geoms from selected categories to existing scene
 MJAPI void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* opt,
                         const mjvPerturb* pert, int catmask, mjvScene* scn);

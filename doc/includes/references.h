@@ -3097,6 +3097,12 @@ typedef enum mjtCatBit_ {         // bitflags for mjvGeom category
   mjCAT_DECOR         = 4,        // decorative geoms
   mjCAT_ALL           = 7         // select all categories
 } mjtCatBit;
+typedef enum mjtSyncBit_ {        // bitflags for mjvScene changebits (retained mode)
+  mjSYNC_MESH         = 1,        // shape or asset changed
+  mjSYNC_POSE         = 2,        // position, orientation or size changed
+  mjSYNC_MATERIAL     = 4,        // material inputs changed
+  mjSYNC_VISIBLE      = 8         // visibility changed
+} mjtSyncBit;
 typedef enum mjtMouse_ {          // mouse interaction mode
   mjMOUSE_NONE        = 0,        // no action
   mjMOUSE_ROTATE_V,               // rotate (orbit) vertically
@@ -3324,6 +3330,18 @@ typedef struct mjvScene_ {        // abstract scene passed to OpenGL renderer
   int      ngeom;                 // number of geoms currently in buffer
   mjvGeom* geoms;                 // buffer for geoms (ngeom)
   int*     geomorder;             // buffer for ordering geoms by distance to camera (ngeom)
+
+  // retained mode: set retained before mjv_makeScene, update with mjv_syncScene
+  mjtByte  retained;              // scene is retained: slot/arena layout, change tracking
+  int      nslot;                 // number of model-element slots; geoms[0..nslot) are
+                                  //   one slot per geom, site, flex, skin, in model order;
+                                  //   geoms[nslot..ngeom) are per-sync (decor, appended)
+  mjtByte* visible;               // per-slot visibility (nslot)
+  int      nchanged;              // number of entries in change list, cleared by each sync
+  int*     changed;               // indices of changed scene entries (maxgeom)
+  int*     changebits;            // what changed, bitmask of mjtSyncBit (maxgeom)
+  mjvGeom* arenaprev;             // internal: previous sync's arena content (maxgeom-nslot)
+  int      narenaprev;            // internal: number of valid entries in arenaprev
 
   // flex data
   int      nflex;                 // number of flexes
@@ -3861,6 +3879,8 @@ void mjv_makeScene(const mjModel* m, mjvScene* scn, int maxgeom);
 void mjv_freeScene(mjvScene* scn);
 void mjv_updateScene(const mjModel* m, mjData* d, const mjvOption* opt,
                      const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn);
+void mjv_syncScene(const mjModel* m, mjData* d, const mjvOption* opt,
+                   const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn);
 void mjv_copyModel(mjModel* dest, const mjModel* src);
 void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* opt,
                   const mjvPerturb* pert, int catmask, mjvScene* scn);

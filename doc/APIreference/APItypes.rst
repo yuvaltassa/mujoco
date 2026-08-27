@@ -612,6 +612,17 @@ These are the available categories of geoms in the abstract visualizer. The bitm
 .. mujoco-include:: mjtCatBit
 
 
+.. _mjtSyncBit:
+
+mjtSyncBit
+~~~~~~~~~~
+
+These are the kinds of change recorded in a retained-mode scene's change list by :ref:`mjv_syncScene`: the entry's
+``changebits`` is a bitmask of these values, telling a renderer which state to re-apply.
+
+.. mujoco-include:: mjtSyncBit
+
+
 .. _mjtMouse:
 
 mjtMouse

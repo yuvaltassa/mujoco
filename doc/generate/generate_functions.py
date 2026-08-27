@@ -156,7 +156,8 @@ def generate() -> str:
 {doc}
 
 """.lstrip())
-  return rst_str
+  # end with exactly one newline, matching the end-of-file-fixer pre-commit hook
+  return rst_str.rstrip('\n') + '\n'
 
 
 def main() -> None:

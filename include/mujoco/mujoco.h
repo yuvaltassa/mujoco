@@ -832,6 +832,11 @@ MJAPI void mjv_freeScene(mjvScene* scn);
 MJAPI void mjv_updateScene(const mjModel* m, mjData* d, const mjvOption* opt,
                            const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn);
 
+// Update retained-mode scene in place given model state, recording changed
+// entries in the scene's change list.
+MJAPI void mjv_syncScene(const mjModel* m, mjData* d, const mjvOption* opt,
+                         const mjvPerturb* pert, mjvCamera* cam, int catmask, mjvScene* scn);
+
 // Copy mjModel, skip large arrays not required for abstract visualization.
 // Nullable: dest
 MJAPI void mjv_copyModel(mjModel* dest, const mjModel* src);

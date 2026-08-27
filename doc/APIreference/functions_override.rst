@@ -427,6 +427,14 @@ The functions in this section implement abstract visualization. The results are 
 also be used by users wishing to implement their own renderer, or hook up MuJoCo to advanced rendering tools such as
 Unity or Unreal Engine. See :ref:`simulate<saSimulate>` for illustration of how to use these functions.
 
+.. _mjv_syncScene:
+
+Update a retained-mode scene in place given model state. Model-element slots are filled by the same per-element policy
+as :ref:`mjv_updateScene`, compared against their current content, and updated on change; changed entries are recorded
+in the scene's change list (``changed``/``changebits``, see :ref:`mjtSyncBit`), which is valid until the next sync.
+Unlike :ref:`mjv_updateScene`, infinite-plane re-centering sees the current camera. The scene must have been created
+in retained mode by setting ``retained`` before :ref:`mjv_makeScene`.
+
 .. _FilamentRenderingApi:
 
 Rendering functions using the Filament rendering engine. These functions are prefixed with ``mjrf``. See

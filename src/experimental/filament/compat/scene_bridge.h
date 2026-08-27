@@ -62,6 +62,25 @@ class SceneBridge {
   std::optional<filament::math::float3> ClipFromWorld(
       const filament::math::float3& pos) const;
 
+  // Retained-scene path (see mjv_syncScene): the producer's change list
+  // drives per-entry application; the bridge keeps no bookkeeping beyond one
+  // renderable per scene position.
+  struct RetainedEntry {
+    UniquePtr<mjrfRenderable> renderable{nullptr, mjrf_destroyRenderable};
+    int type = -1;  // mjtGeom of the last application; re-typing recreates
+    bool has_mesh = false;  // builtin meshes may be assigned only once
+    bool in_scene = false;
+  };
+
+  // Applies the change list of a retained scene.
+  void UpdateRetained(const mjvScene* scene);
+
+  // Applies changed state of the scene entry at idx to its renderable.
+  void ApplyRetainedEntry(int idx, const mjvScene* scene, int bits);
+
+  // Updates filament lights from the scene's light list.
+  void UpdateLights(const mjvScene* scene);
+
   mjrfContext* ctx_ = nullptr;
   mjrfScene* scene_ = nullptr;
   std::unique_ptr<ModelObjects> model_objects_;
@@ -70,6 +89,8 @@ class SceneBridge {
   mjrCamera camera_;
   DrawTextAtFn draw_text_callback_;
   std::vector<UniquePtr<mjrfRenderable>> renderables_;
+  std::vector<RetainedEntry> retained_;
+  int retained_ngeom_ = 0;
   filament::math::mat4 clip_from_world_;
 };
 
