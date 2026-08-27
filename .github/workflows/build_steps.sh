@@ -153,6 +153,38 @@ test_mujoco() {
 }
 
 
+# The subset of the test suite the asan job builds and runs. Sanitized runs are
+# several times slower than ordinary ones, so this deliberately is not the whole
+# suite: engine_io_test owns CanDetectStackFrameLeakage, which covers the
+# instrumentation in mjsan.h directly, and engine_forward_test exercises the
+# stepping pipeline, which is what drives mark/free traffic in bulk.
+ASAN_TEST_TARGETS="engine_io_test engine_forward_test"
+
+
+build_mujoco_asan() {
+    echo "Building MuJoCo (asan subset)..."
+    cmake --build . --config=Debug --target ${ASAN_TEST_TARGETS} ${CMAKE_BUILD_ARGS}
+}
+
+
+test_mujoco_asan() {
+    echo "Testing MuJoCo (asan subset)..."
+    # Run the binaries directly rather than through ctest: naming the targets is
+    # stable, whereas a ctest -R filter would have to track every gtest suite
+    # these binaries happen to contain. They run from the source test directory
+    # because that is where their model files are, which is the WORKING_DIRECTORY
+    # ctest would otherwise give them. Read that directory out of the cache rather
+    # than assuming where the build tree sits relative to the source tree.
+    local bindir="${PWD}/bin"
+    local srcdir
+    srcdir="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' CMakeCache.txt)"
+    cd "${srcdir}/test"
+    for target in ${ASAN_TEST_TARGETS}; do
+        "${bindir}/${target}"
+    done
+}
+
+
 install_mujoco() {
     echo "Installing MuJoCo..."
     cmake --install .
