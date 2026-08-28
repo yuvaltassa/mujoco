@@ -184,6 +184,46 @@ if(NOT EMSCRIPTEN)
     endif()
 endif()
 
+# Local utility (not for upstream): headless one-frame filament render.
+if(NOT EMSCRIPTEN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/render_headless.cc)
+    add_executable(render_headless render_headless.cc)
+    target_include_directories(render_headless
+        PRIVATE ${PROJECT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/src)
+    target_link_libraries(render_headless PRIVATE mujoco::mujoco mujoco::platform)
+    if(MUJOCO_USE_FILAMENT)
+        add_custom_target(render_headless_assets ALL
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/../src/render/filament/assets
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/assets
+            COMMENT "Deploying Filament assets for render_headless")
+        add_dependencies(render_headless_assets mujoco_filament_assets)
+        add_dependencies(render_headless render_headless_assets)
+    endif()
+endif()
+
+# Local utility (not for upstream): headless settle + drift/energy report.
+if(NOT EMSCRIPTEN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/settle.cc)
+    add_executable(settle settle.cc)
+    target_include_directories(settle PRIVATE ${PROJECT_SOURCE_DIR}/include)
+    target_link_libraries(settle PRIVATE mujoco::mujoco)
+endif()
+
+# Local utility (not for upstream): settle a model and bake the settled poses
+# back into the body frames (optionally dropping named bodies first).
+if(NOT EMSCRIPTEN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/bake.cc)
+    add_executable(bake bake.cc)
+    target_include_directories(bake PRIVATE ${PROJECT_SOURCE_DIR}/include)
+    target_link_libraries(bake PRIVATE mujoco::mujoco)
+endif()
+
+# Local utility (not for upstream): replay-bench the elliptic cone-fold solver
+# path vs the stock rank-1-update path (MJ_CONE_FOLD env toggle).
+if(NOT EMSCRIPTEN AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/cone_bench.cc)
+    add_executable(cone_bench cone_bench.cc)
+    target_include_directories(cone_bench PRIVATE ${PROJECT_SOURCE_DIR}/include)
+    target_link_libraries(cone_bench PRIVATE mujoco::mujoco)
+endif()
+
 # WASM Live target.
 if(EMSCRIPTEN)
     add_executable(mujoco_studio)

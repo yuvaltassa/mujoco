@@ -1,0 +1,117 @@
+<mujoco model="Clump: 2 humanoids and 100 objects">
+<!--
+     Cone-fold benchmark scene (local, not for upstream), derived from
+     test/engine/testdata/island/2humanoid100.xml: a walled box with 100 free
+     objects and two humanoids. Converted from CG/pyramidal to Newton/elliptic
+     sparse so the cone-fold path is reachable.
+
+     Sweep axes are set at runtime by cone_bench, not baked here:
+       gravity tilt (clumping)  -tilt T       -> gravity = (-T, -T, -10)
+       contact dimensionality   -condim N     -> all geom_condim = N
+       islands                  -noisland
+       warmstart                -nowarmstart
+       regime (falling/clumped) -settle N
+-->
+  <option timestep="0.005" solver="Newton" cone="elliptic" jacobian="sparse" gravity="-1 -1 -10">
+    <flag island="enable"/>
+  </option>
+
+  <size memory="100M"/>
+
+  <default>
+    <geom solimp=".9 .9 .01"/>
+    <default class="capsule">
+      <geom type="capsule" size="0.1 0.05"/>
+    </default>
+    <default class="ellipsoid">
+      <geom type="ellipsoid" size="0.15 0.1 0.07"/>
+    </default>
+    <default class="box">
+      <geom type="box" size="0.15 0.1 0.05"/>
+    </default>
+    <default class="cylinder">
+      <geom type="cylinder" size="0.1 0.05" condim="4" friction="1 .01 .01"/>
+    </default>
+    <default class="sphere">
+      <geom type="sphere" size="0.1"/>
+    </default>
+    <default class="border">
+      <geom type="capsule" size="0.4" rgba=".4 .4 .4 1"/>
+    </default>
+    <default class="borderpost">
+      <geom type="box" size="0.41 0.41 0.41" rgba=".55 .55 .55 1"/>
+    </default>
+  </default>
+
+  <asset>
+    <model file="humanoid.xml"/>
+  </asset>
+
+  <statistic extent="4"/>
+
+  <worldbody>
+    <light directional="true" diffuse=".8 .8 .8" pos="0 0 10" dir="0 0 -10"/>
+    <geom name="floor" type="plane" size="3 3 .5"/>
+    <geom class="border" fromto="-3 3 0 3 3 0"/>
+    <geom class="border" fromto="-3 -3 0 3 -3 0"/>
+    <geom class="border" fromto="3 3 0 3 -3 0"/>
+    <geom class="border" fromto="-3 3 0 -3 -3 0"/>
+    <geom class="borderpost" pos="3 3 0"/>
+    <geom class="borderpost" pos="-3 3 0"/>
+    <geom class="borderpost" pos="3 -3 0"/>
+    <geom class="borderpost" pos="-3 -3 0"/>
+
+    <replicate count="4" euler="0 0 90">
+      <geom type="plane" size=".5 3 .05" zaxis="1 0 0" pos="-3 0 0.4"/>
+    </replicate>
+
+    <replicate count="20" offset="0 0 0.2" euler="0 0 20">
+      <body pos="-2 0 0.5" euler="30 40 0">
+        <freejoint/>
+        <geom class="capsule"/>
+      </body>
+    </replicate>
+
+    <attach model="Humanoid" body="torso" prefix="1_"/>
+
+    <frame euler="0 0 72">
+      <replicate count="20" offset="0 0 0.2" euler="0 0 20">
+        <body pos="-2 0 0.5" euler="20 40 60">
+          <freejoint/>
+          <geom class="ellipsoid"/>
+        </body>
+      </replicate>
+    </frame>
+
+    <frame euler="0 0 144">
+      <replicate count="20" offset="0 0 0.2" euler="0 0 20">
+        <body pos="-2 0 0.5" euler="30 70 110">
+          <freejoint/>
+          <geom class="box"/>
+        </body>
+      </replicate>
+    </frame>
+
+    <frame pos="1 1 0" euler="0 0 144">
+      <attach model="Humanoid" body="torso" prefix="2_"/>
+    </frame>
+
+    <frame euler="0 0 216">
+      <replicate count="20" offset="0 0 0.2" euler="0 0 20">
+        <body pos="-2 0 0.5" euler="60 30 0">
+          <freejoint/>
+          <geom class="cylinder"/>
+        </body>
+      </replicate>
+    </frame>
+
+    <frame euler="0 0 288">
+      <replicate count="20" offset="0 0 0.2" euler="0 0 20">
+        <body pos="-2 0 0.5" euler="60 30 0">
+          <freejoint/>
+          <geom class="sphere"/>
+        </body>
+      </replicate>
+    </frame>
+  </worldbody>
+</mujoco>
