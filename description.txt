@@ -1,0 +1,33 @@
+Review mirror of the commit messages (kept in sync; not for upstream).
+
+================================================================================
+Fold cone contributions into the Hessian when many contacts slide
+================================================================================
+
+In the elliptic Newton solver, HessianCone rebuilds Lcone every iteration by
+copying L and applying dim sparse rank-1 updates per cone-state contact. With
+many sliding contacts the updates dwarf the factorization they avoid: on a
+collapsing house of cards, mju_cholUpdateSparse is 63% of step time. Since a
+cone contact's contribution Jc'*Hc*Jc equals (Lc'*Jc)'(Lc'*Jc), replacing its
+Jacobian rows with Lc'*Jc at unit weight lets the existing J'DJ + factorize
+pipeline produce the cone-inclusive Hessian in one factorization, with
+unchanged sparsity.
+
+Choose between the paths with a flop-count model computed from the fixed
+sparsity patterns: rank-1 updates cost the reverse-etree path of each
+contact's last dof (exactly the update closure), folding costs the
+factorization plus J'DJ flops. Instrumented timings of both paths (~300k
+calls, 10 scenes) show the crossover moving from ~12 to ~175 cone rows with
+the factor's fill-in, and the fitted gate 10U > 3(Lflops + 2S) lands within
+0.8% of a per-call oracle that always picks the faster path. The path costs
+and factorization flops are computed once per solve alongside the symbolic
+factorization whose pattern they describe; the remaining O(nefc) decision is
+cached until a constraint changes state.
+
+End-to-end, every tested scene is at 0.99x or better vs never folding while
+keeping the folding wins (1.4-2.1x mean, 2-4x worst step). The added test
+drives a sliding clump with condim 3, 4 and 6 through the folding regime and
+checks sparse (folding) against dense (rank-1) accelerations; it passes under
+mjUSESINGLE. cone_fold.md records the design and measurement campaign.
+
+Based on an original implementation by Kevin Zakka.

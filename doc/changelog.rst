@@ -11,6 +11,10 @@ General
 - The :ref:`.mjz <MJZArchives>` encoder now writes the root file as ``model.xml`` in the archive as this is less
   susceptible to breakage due to file renaming.
 - Added support for Python 3.15 (GIL and Free-Threading).
+- The Newton solver with :ref:`elliptic cones<option-cone>` now rebuilds the cone-augmented Hessian factor with a
+  single refactorization instead of per-contact rank-1 updates when a flop-count model predicts this is faster.
+  Scenes with many simultaneously sliding contacts speed up by 1.4-2x on average and 3-4x on the slowest steps.
+  Contribution by Kevin Zakka.
 
 Compiler
 ^^^^^^^^
