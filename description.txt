@@ -31,3 +31,15 @@ checks sparse (folding) against dense (rank-1) accelerations; it passes under
 mjUSESINGLE. cone_fold.md records the design and measurement campaign.
 
 Based on an original implementation by Kevin Zakka.
+
+================================================================================
+Add benchmark for the elliptic cone-Hessian paths
+================================================================================
+
+A pile of boxes sliding under diagonal gravity, keyframed in two regimes of
+the same model: "clump" (piled in a corner, coupled contact graph) exercises
+the folded path, "scatter" (independent stacks) exercises the rank-1 update
+path -- despite holding more cone-state rows than the clump, demonstrating
+that the gate tracks factor structure rather than cone count. Each benchmark
+iteration resets to the keyframe and runs one mj_forward, keeping both
+HessianCone paths and the gate between them under measurement.
