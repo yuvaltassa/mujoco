@@ -1983,14 +1983,16 @@ void mjCFlexcomp::LoadGMSH(mjCModel* model, mjResource* resource) {
   int elemend   = findstring(buffer, buffer_sz, "$EndElements");
 
 
+  // check sections are present, before begin is offset past the section name
+  if (nodebegin < 0) { throw mjCError(NULL, "GMSH file missing $Nodes"); }
+  if (elembegin < 0) { throw mjCError(NULL, "GMSH file missing $Elements"); }
+
   // correct begin for string size, +1 for LF in binary (CRLF in Win ascii works)
   nodebegin += (int)strlen("$Nodes") + 1;
   elembegin += (int)strlen("$Elements") + 1;
 
-  // check sections
-  if (nodebegin < 0) { throw mjCError(NULL, "GMSH file missing $Nodes"); }
+  // check sections are closed
   if (nodeend < nodebegin) { throw mjCError(NULL, "GMSH file missing $EndNodes after $Nodes"); }
-  if (elembegin < 0) { throw mjCError(NULL, "GMSH file missing $Elements"); }
   if (elemend < elembegin) {
     throw mjCError(NULL, "GMSH file missing $EndElements after $Elements");
   }
