@@ -852,6 +852,54 @@ TEST_F(UserFlexTest, LoadMSHTruncatedHeader_Fail) {
   mj_deleteVFS(&vfs);
 }
 
+TEST_F(UserFlexTest, LoadMSHMissingNodesSection_Fail) {
+  static constexpr char msh[] =
+      "$MeshFormat\n4.1 0 8\n$EndMeshFormat\n"
+      "$Elements\n1 1 1 1\n3 1 4 1\n1 1 1 1 1\n$EndElements\n";
+
+  mjVFS vfs;
+  mj_defaultVFS(&vfs);
+  mj_addBufferVFS(&vfs, "nonodes.msh", msh, sizeof(msh) - 1);
+
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <flexcomp name="test" type="gmsh" dim="3" radius=".001"
+                file="nonodes.msh"/>
+    </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size(), &vfs);
+  EXPECT_THAT(m.get(), IsNull());
+  EXPECT_THAT(error.data(), HasSubstr("GMSH file missing $Nodes"));
+  mj_deleteVFS(&vfs);
+}
+
+TEST_F(UserFlexTest, LoadMSHMissingElementsSection_Fail) {
+  static constexpr char msh[] =
+      "$MeshFormat\n4.1 0 8\n$EndMeshFormat\n"
+      "$Nodes\n1 1 1 1\n3 1 0 1\n1\n0 0 0\n$EndNodes\n";
+
+  mjVFS vfs;
+  mj_defaultVFS(&vfs);
+  mj_addBufferVFS(&vfs, "noelements.msh", msh, sizeof(msh) - 1);
+
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <flexcomp name="test" type="gmsh" dim="3" radius=".001"
+                file="noelements.msh"/>
+    </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size(), &vfs);
+  EXPECT_THAT(m.get(), IsNull());
+  EXPECT_THAT(error.data(), HasSubstr("GMSH file missing $Elements"));
+  mj_deleteVFS(&vfs);
+}
+
 TEST_F(UserFlexTest, LoadMSHASCII_dim_missing_in_xml) {
   const std::string xml_path = GetTestDataFilePath(
       "user/testdata/cube_22_ascii_vol_gmshApp_missing_dim.xml");
