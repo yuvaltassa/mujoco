@@ -15,6 +15,7 @@
 // Tests for user/user_model.cc.
 
 #include <array>
+#include <cstdio>
 #include <memory>
 #include <string>
 
@@ -897,6 +898,47 @@ TEST_F(UserFlexTest, LoadMSHMissingElementsSection_Fail) {
   MjModelPtr m = LoadModelFromString(xml, error.data(), error.size(), &vfs);
   EXPECT_THAT(m.get(), IsNull());
   EXPECT_THAT(error.data(), HasSubstr("GMSH file missing $Elements"));
+  mj_deleteVFS(&vfs);
+}
+
+// The last section marker of a GMSH file need not be followed by a newline.
+TEST_F(UserFlexTest, LoadMSHEndMarkerAtEOF_Success) {
+  // read a well-formed GMSH file
+  const std::string msh_path =
+      GetTestDataFilePath("user/testdata/cube_41_ascii_vol_gmshApp.msh");
+  FILE* f = fopen(msh_path.c_str(), "rb");
+  ASSERT_THAT(f, NotNull()) << "Could not open " << msh_path;
+  fseek(f, 0, SEEK_END);
+  long msh_size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  std::string msh(msh_size, '\0');
+  fread(msh.data(), 1, msh_size, f);
+  fclose(f);
+
+  // drop the newline after the final $EndElements
+  static constexpr char kEndElements[] = "$EndElements";
+  size_t end = msh.rfind(kEndElements);
+  ASSERT_NE(end, std::string::npos);
+  msh.resize(end + sizeof(kEndElements) - 1);
+
+  mjVFS vfs;
+  mj_defaultVFS(&vfs);
+  mj_addBufferVFS(&vfs, "cube.msh", msh.data(), msh.size());
+
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <flexcomp name="test" type="gmsh" dim="3" radius=".001" file="cube.msh">
+        <edge equality="true"/>
+      </flexcomp>
+    </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size(), &vfs);
+  ASSERT_THAT(m.get(), NotNull()) << error.data();
+  EXPECT_EQ(m->nflexvert, 14);
+  EXPECT_EQ(m->nflexelem, 24);
   mj_deleteVFS(&vfs);
 }
 
