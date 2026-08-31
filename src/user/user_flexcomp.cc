@@ -1367,8 +1367,8 @@ bool mjCFlexcomp::MakeMesh(
 static int findstring(const char* buffer, int buffer_sz, const char* str) {
   int len = (int)strlen(str);
 
-  // scan buffer
-  for (int i = 0; i < buffer_sz - len; i++) {
+  // scan buffer, including a match ending at the last byte
+  for (int i = 0; i <= buffer_sz - len; i++) {
     // check for string at position i
     bool found = true;
     for (int k = 0; k < len; k++) {
