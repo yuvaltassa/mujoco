@@ -1069,6 +1069,121 @@ static void addJTBJSparse(
 
 //----------------------------- derivatives of actuator forces -------------------------------------
 
+// derivative of mju_muscleGainLength w.r.t length
+static mjtNum mjd_muscleGainLength(mjtNum length, mjtNum lmin, mjtNum lmax) {
+  if (lmin <= length && length <= lmax) {
+    // mid-ranges (maximum is at 1.0)
+    mjtNum a = 0.5*(lmin+1);
+    mjtNum b = 0.5*(1+lmax);
+
+    if (length <= a) {
+      // FL = 0.5*x*x
+      mjtNum x = (length-lmin) / mju_max(mjMINVAL, a-lmin);
+      return x / mju_max(mjMINVAL, a-lmin);
+    } else if (length <= 1) {
+      // FL = 1 - 0.5*x*x, x decreasing in length
+      mjtNum x = (1-length) / mju_max(mjMINVAL, 1-a);
+      return x / mju_max(mjMINVAL, 1-a);
+    } else if (length <= b) {
+      // FL = 1 - 0.5*x*x
+      mjtNum x = (length-1) / mju_max(mjMINVAL, b-1);
+      return -x / mju_max(mjMINVAL, b-1);
+    } else {
+      // FL = 0.5*x*x, x decreasing in length
+      mjtNum x = (lmax-length) / mju_max(mjMINVAL, lmax-b);
+      return -x / mju_max(mjMINVAL, lmax-b);
+    }
+  }
+
+  return 0;
+}
+
+
+// derivative of mju_muscleGain w.r.t length
+static mjtNum mjd_muscleGain_len(mjtNum len, mjtNum vel, const mjtNum lengthrange[2], mjtNum acc0,
+                                 const mjtNum prm[9]) {
+  // unpack parameters
+  mjtNum range[2] = {prm[0], prm[1]};
+  mjtNum force    = prm[2];
+  mjtNum scale    = prm[3];
+  mjtNum lmin     = prm[4];
+  mjtNum lmax     = prm[5];
+  mjtNum vmax     = prm[6];
+  mjtNum fvmax    = prm[8];
+
+  // scale force if negative
+  if (force < 0) {
+    force = scale / mju_max(mjMINVAL, acc0);
+  }
+
+  // optimum length
+  mjtNum L0 = (lengthrange[1]-lengthrange[0]) / mju_max(mjMINVAL, range[1]-range[0]);
+
+  // normalized length and velocity
+  mjtNum L = range[0] + (len-lengthrange[0]) / mju_max(mjMINVAL, L0);
+  mjtNum V = vel / mju_max(mjMINVAL, L0*vmax);
+
+  // length curve derivative
+  mjtNum dFL = mjd_muscleGainLength(L, lmin, lmax);
+
+  // velocity curve
+  mjtNum FV;
+  mjtNum y = fvmax-1;
+  if (V <= -1) {
+    FV = 0;
+  } else if (V <= 0) {
+    FV = (V+1)*(V+1);
+  } else if (V <= y) {
+    FV = fvmax - (y-V)*(y-V) / mju_max(mjMINVAL, y);
+  } else {
+    FV = fvmax;
+  }
+
+  // compute dFL*FV and scale, make it negative
+  return -force*dFL*FV/mju_max(mjMINVAL, L0);
+}
+
+
+// derivative of mju_muscleBias w.r.t length
+static mjtNum mjd_muscleBias_len(mjtNum len, const mjtNum lengthrange[2], mjtNum acc0,
+                                 const mjtNum prm[9]) {
+  // unpack parameters
+  mjtNum range[2] = {prm[0], prm[1]};
+  mjtNum force    = prm[2];
+  mjtNum scale    = prm[3];
+  mjtNum lmax     = prm[5];
+  mjtNum fpmax    = prm[7];
+
+  // scale force if negative
+  if (force < 0) {
+    force = scale / mju_max(mjMINVAL, acc0);
+  }
+
+  // optimum length
+  mjtNum L0 = (lengthrange[1]-lengthrange[0]) / mju_max(mjMINVAL, range[1]-range[0]);
+
+  // normalized length
+  mjtNum L = range[0] + (len-lengthrange[0]) / mju_max(mjMINVAL, L0);
+
+  // derivative of the passive curve: half-quadratic to (L0+lmax)/2, linear beyond
+  mjtNum b = 0.5*(1+lmax);
+  mjtNum dFP;
+  if (L <= 1) {
+    dFP = 0;
+  } else if (L <= b) {
+    // FP = 0.5*x*x
+    mjtNum x = (L-1) / mju_max(mjMINVAL, b-1);
+    dFP = x / mju_max(mjMINVAL, b-1);
+  } else {
+    // FP = 0.5 + x
+    dFP = 1 / mju_max(mjMINVAL, b-1);
+  }
+
+  // scale, make it negative
+  return -force*fpmax*dFP/mju_max(mjMINVAL, L0);
+}
+
+
 // derivative of mju_muscleGain w.r.t velocity
 static mjtNum mjd_muscleGain_vel(mjtNum len, mjtNum vel, const mjtNum lengthrange[2], mjtNum acc0,
                                  const mjtNum prm[9]) {
@@ -2329,19 +2444,73 @@ static mjtNum actuatorInput(const mjModel* m, const mjData* d, int i) {
 }
 
 
-// d(force)/d(length) of actuator i: affine and SO3 servo terms only (muscle force-length
-// and DC-motor position-loop stiffness are not treated)
+// d(force)/d(length) of actuator i: all gain and bias types
 static mjtNum actuatorLenDeriv(const mjModel* m, const mjData* d, int i) {
+  int oadr = m->actuator_outadr[i];
   mjtNum bias_len = 0, gain_len = 0;
+
+  // affine and SO3 servo bias
   if (m->actuator_biastype[i] == mjBIAS_AFFINE || m->actuator_biastype[i] == mjBIAS_SO3) {
     bias_len = (m->actuator_biasprm + mjNBIAS*i)[1];
   }
+
+  // muscle bias: passive force-length curve
+  else if (m->actuator_biastype[i] == mjBIAS_MUSCLE) {
+    bias_len = mjd_muscleBias_len(d->actuator_length[oadr],
+                                  m->actuator_lengthrange+2*oadr,
+                                  m->actuator_acc0[oadr],
+                                  m->actuator_biasprm + mjNBIAS*i);
+  }
+
+  // affine gain
   if (m->actuator_gaintype[i] == mjGAIN_AFFINE) {
     gain_len = (m->actuator_gainprm + mjNGAIN*i)[1];
   }
+
+  // muscle gain: active force-length curve
+  else if (m->actuator_gaintype[i] == mjGAIN_MUSCLE) {
+    gain_len = mjd_muscleGain_len(d->actuator_length[oadr],
+                                  d->actuator_velocity[oadr],
+                                  m->actuator_lengthrange+2*oadr,
+                                  m->actuator_acc0[oadr],
+                                  m->actuator_gainprm + mjNGAIN*i);
+  }
+
+  // DC motor controller position loop
+  else if (m->actuator_gaintype[i] == mjGAIN_DCMOTOR) {
+    const mjtNum* dynprm = m->actuator_dynprm + mjNDYN*i;
+    const mjtNum* gainprm = m->actuator_gainprm + mjNGAIN*i;
+    mjtNum te = dynprm[0];
+
+    // controller length derivative dV/dl: torque-space kp through the tau->V map; Vmax
+    // clipping and the O(h*ki) integral-state chain are ignored, matching the velocity
+    // derivative's treatment of the saturations
+    mjtNum dVdl = 0;
+    if (m->actuator_ctrlspec[i] & (mjINPUT_POS | mjINPUT_VEL | mjINPUT_FF)) {
+      mjtNum R = mju_max(mjMINVAL, gainprm[0]);
+      mjtNum K = gainprm[1];  // K > 0 on this path, enforced by the compiler
+      dVdl = -gainprm[4]*R/K;
+    }
+
+    if (te > 0) {
+      // stateful current with actearly: d(K*next_act)/d(length) through act_dot
+      mjtNum R = mju_max(mjMINVAL, gainprm[0]);
+      mjtNum K = gainprm[1];
+      mjtNum s = 1 - mju_exp(-m->opt.timestep / te);
+      bias_len += K * dVdl * s / R;
+    } else if (dVdl != 0) {
+      // stateless: K/R * dVdl = -kp exactly, the motor parameters cancel
+      mjtNum R = mju_max(mjMINVAL, gainprm[0]);
+      mjtNum K = gainprm[1];
+      bias_len += K * dVdl / R;
+    }
+  }
+
+  // force = gain .* [ctrl/act]
   if (gain_len != 0) {
     bias_len += gain_len * actuatorInput(m, d, i);
   }
+
   return bias_len;
 }
 

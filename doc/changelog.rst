@@ -17,8 +17,8 @@ Engine
   operation, performed in the effective metric :math:`\widehat{M} = M + hD + h^2K`, which incorporates both
   implicit damping :math:`hD` and implicit position stiffness :math:`h^2 K`.
   Under this integrator ``mjData.qacc`` is the discrete step map :math:`(v^+ - v)/h`, and joint,
-  tendon and actuator stiffness and damping join the solver's metric, making joint and tendon springs and stiff
-  position servos stable at timesteps far beyond the explicit stability limit. The actuator-gain treatment
+  tendon and actuator stiffness and damping join the solver's metric, making passive springs and actuator
+  position gains stable at timesteps far beyond the explicit stability limit. The actuator-gain treatment
   resolves the stiff-servo timestep limitation of :issue:`3443` (analysis contributed by
   :github:user:`qiayuanl`). See the :ref:`integrator documentation<geIntegrators>` for semantics and current
   limitations.

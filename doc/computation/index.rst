@@ -726,8 +726,6 @@ Discrete-time (``discrete``)
       - Under ``PGS``, tendon and actuator metric terms are excluded and their forces integrate explicitly.
       - Under primal solvers (``CG``, ``Newton``), ``noslip`` post-processing approximates the Delassus operator
         from the backbone metric factor alone, omitting tendon and actuator couplings.
-      - Muscle force-length and DC-motor position-loop stiffness are not yet in the metric and integrate explicitly
-        (their velocity damping derivatives are included).
       - Models with flex currently fall back to a monolithic solve across islands.
 
 4th-order Runge-Kutta (``RK4``)

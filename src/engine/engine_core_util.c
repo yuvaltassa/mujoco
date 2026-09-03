@@ -1338,6 +1338,7 @@ int mj_effActuatorPossible(const mjModel* m, int i) {
   return m->actuator_biastype[i] == mjBIAS_AFFINE ||
          m->actuator_biastype[i] == mjBIAS_SO3 ||
          m->actuator_biastype[i] == mjBIAS_DCMOTOR ||
+         m->actuator_biastype[i] == mjBIAS_MUSCLE ||
          m->actuator_gaintype[i] == mjGAIN_AFFINE ||
          m->actuator_gaintype[i] == mjGAIN_SO3 ||
          m->actuator_gaintype[i] == mjGAIN_MUSCLE ||

@@ -4907,6 +4907,258 @@ TEST_F(ForwardTest, DiscreteStiffLegPress) {
   }
 }
 
+// muscle force-length stiffness enters the discrete metric: the actuator metric
+// scalar matches a finite difference of the actuator force, clamped to the
+// stabilizing sign
+TEST_F(ForwardTest, DiscreteMuscleStiffnessInMetric) {
+  // near-zero fpmax: essentially only the active FL curve, so the descending
+  // limb is net destabilizing (the compiler requires fpmax strictly positive)
+  static constexpr char active_xml[] = R"(
+  <mujoco>
+    <option integrator="discrete" gravity="0 0 0"/>
+    <worldbody>
+      <body>
+        <joint name="slide" type="slide" range="-1 1"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+    <actuator>
+      <muscle name="active" joint="slide" ctrlrange="0 1" fpmax="0.001"/>
+    </actuator>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(active_xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+  mjtNum h = model->opt.timestep;
+
+  // actuator force at (q, v, act); qpos maps to actuator length with unit gear
+  auto force = [&](mjtNum q, mjtNum v, mjtNum act) {
+    data->qpos[0] = q;
+    data->qvel[0] = v;
+    data->act[0] = act;
+    mj_forward(model.get(), data.get());
+    return data->actuator_force[0];
+  };
+
+  // centered finite difference of the force w.r.t. length (curves are piecewise
+  // quadratic, so the FD is exact up to roundoff)
+  mjtNum eps = MjEps(1e-6, 1e-3);
+  auto fd_deriv = [&](mjtNum q, mjtNum v, mjtNum act) {
+    return (force(q + eps, v, act) - force(q - eps, v, act)) / (2 * eps);
+  };
+
+  // the joint range maps to normalized length [0.75, 1.05]: check the metric
+  // scalar against the FD on the ascending limb interior, at the curve knots,
+  // and at nonzero velocities (FV scaling)
+  mjtNum tol = MjTol(5e-9, 1e-3);
+  mjtNum points[][3] = {{-0.8, 0, 0.7},    {-0.545, 0, 0.7}, {-0.3, 0, 0.7},
+                        {-0.0909, 0, 0.7}, {0.2, 0, 0.7},    {-0.3, -0.5, 0.7},
+                        {-0.3, 0.5, 0.7}};
+  for (auto& p : points) {
+    mjtNum expected = h * mju_max(0, -fd_deriv(p[0], p[1], p[2]));
+    force(p[0], p[1], p[2]);
+    ASSERT_EQ(data->nefmA, 1);
+    EXPECT_NEAR(data->efm_ak[0], expected, tol)
+        << "q " << p[0] << " v " << p[1];
+  }
+
+  // descending limb with no passive term: the slope is destabilizing (FD is
+  // positive) and the stable-sign clamp zeroes the metric term
+  EXPECT_GT(fd_deriv(0.9, 0, 0.7), 1);
+  force(0.9, 0, 0.7);
+  ASSERT_EQ(data->nefmA, 1);
+  EXPECT_EQ(data->efm_ak[0], 0);
+
+  // default muscle, zero activation: beyond L=1 the passive FP curve alone
+  // contributes
+  static constexpr char passive_xml[] = R"(
+  <mujoco>
+    <option integrator="discrete" gravity="0 0 0"/>
+    <worldbody>
+      <body>
+        <joint name="slide" type="slide" range="-1 1"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+    <actuator>
+      <muscle name="passive" joint="slide" ctrlrange="0 1"/>
+    </actuator>
+  </mujoco>
+  )";
+  model = LoadModelFromString(passive_xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  data = MakeData(model);
+  mjtNum expected = h * mju_max(0, -fd_deriv(0.9, 0, 0));
+  EXPECT_GT(expected, 0);
+  force(0.9, 0, 0);
+  ASSERT_EQ(data->nefmA, 1);
+  EXPECT_NEAR(data->efm_ak[0], expected, tol);
+}
+
+// the DC-motor controller position loop enters the discrete metric: kp exactly
+// when the current is stateless, scaled by the one-step filter factor when
+// stateful
+TEST_F(ForwardTest, DiscreteDCMotorStiffnessInMetric) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <option integrator="discrete" gravity="0 0 0"/>
+    <worldbody>
+      <body>
+        <joint name="slide" type="slide"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+    <actuator>
+      <dcmotor joint="slide" motorconst="0.05" resistance="2.0" input="pos" controller="10 0 0"/>
+      <dcmotor joint="slide" motorconst="0.05" resistance="2.0" input="pos" controller="10 0 0"
+               inductance="0.002"/>
+    </actuator>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+  mjtNum h = model->opt.timestep;
+  mjtNum kp = 10;
+
+  data->qpos[0] = 0.3;
+  data->ctrl[0] = data->ctrl[1] = 0.5;
+  mj_forward(model.get(), data.get());
+  ASSERT_EQ(data->nefmA, 2);
+
+  // stateless: df/dl = -kp exactly, the motor parameters cancel; a
+  // setpoint-only controller has no net velocity term (back-EMF compensation is
+  // exact), so the combined scalar is the pure stiffness term
+  mjtNum tol = MjTol(1e-12, 1e-7);
+  EXPECT_NEAR(data->efm_ak[0], h * kp, tol);
+  EXPECT_NEAR(data->efm_as[0], h * h * kp, tol);
+
+  // stateful current: the same one-step filter factor as the velocity
+  // derivative
+  mjtNum te = model->actuator_dynprm[mjNDYN];
+  ASSERT_GT(te, 0);
+  mjtNum s = 1 - mju_exp(-h / te);
+  EXPECT_NEAR(data->efm_ak[1], h * kp * s, tol);
+}
+
+// a stateless setpoint dcmotor is the same servo as <pid>: under discrete both
+// receive the same metric stiffness, and their trajectories match at a timestep
+// far beyond the explicit stability limit of the shared kp
+TEST_F(ForwardTest, DiscreteDCMotorMatchesPid) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <option timestep="0.01" integrator="discrete">
+      <flag contact="disable" gravity="disable"/>
+    </option>
+    <worldbody>
+      <body>
+        <joint name="slide1" type="slide" axis="1 0 0"/>
+        <geom size="0.1" mass="1"/>
+      </body>
+      <body>
+        <joint name="slide2" type="slide" axis="1 0 0"/>
+        <geom size="0.1" mass="1"/>
+      </body>
+    </worldbody>
+    <actuator>
+      <pid name="pid" joint="slide1" kp="90000" kv="600"/>
+      <dcmotor name="dcmotor" joint="slide2" motorconst="0.05" resistance="2.0"
+               input="pos vel" controller="90000 0 600"/>
+    </actuator>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  ASSERT_EQ(model->nu, 4);
+  MjDataPtr data = MakeData(model);
+
+  // h*omega = 3: beyond the explicit limit, the trajectories are stable only
+  // because kp is in the metric -- for the dcmotor, through the controller path
+  while (data->time < 1.0) {
+    mjtNum qref = mju_sin(5 * data->time);
+    mjtNum vref = mju_cos(3 * data->time);
+    data->ctrl[0] = data->ctrl[2] = qref;
+    data->ctrl[1] = data->ctrl[3] = vref;
+    mj_step(model.get(), data.get());
+    ASSERT_NEAR(data->qpos[0], data->qpos[1], MjTol(1e-12, 1e-4));
+    ASSERT_NEAR(data->qvel[0], data->qvel[1], MjTol(1e-10, 1e-2));
+  }
+
+  // the servos track: the comparison is not between two frozen joints
+  EXPECT_GT(mju_abs(data->qpos[0]), 0.1);
+}
+
+// passive muscle stiffness far beyond the explicit stability limit:
+// implicitfast diverges (the passive curve has no matching muscle velocity
+// damping), discrete settles quietly onto the statics solution
+TEST_F(ForwardTest, DiscreteStiffMuscleHang) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <option timestep="0.01" integrator="discrete"/>
+    <worldbody>
+      <body>
+        <joint name="slide" type="slide" axis="0 0 1" range="-0.1 0.1" damping="1"/>
+        <geom size=".05" mass="0.1"/>
+      </body>
+    </worldbody>
+    <actuator>
+      <muscle joint="slide" gear="-1" force="2e5" ctrlrange="0 1"/>
+    </actuator>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+
+  // hang for 2 seconds, return the endpoint and the peak tail speed
+  auto hang = [&](mjtIntegrator integrator, mjtNum h, mjtNum* maxv_tail) {
+    model->opt.integrator = integrator;
+    model->opt.timestep = h;
+    mj_resetData(model.get(), data.get());
+    int nstep = (int)mju_round(2.0 / h);
+    *maxv_tail = 0;
+    for (int i = 0; i < nstep; i++) {
+      mj_step(model.get(), data.get());
+      if (i >= nstep - 50) {
+        *maxv_tail = mju_max(*maxv_tail, mju_abs(data->qvel[0]));
+      }
+    }
+    return data->qpos[0];
+  };
+
+  // the mass stretches the muscle onto the passive curve; the equilibrium is a
+  // statics problem, so discrete lands on the fine-timestep reference at any
+  // timestep
+  mjtNum maxv;
+  mjtNum ref = hang(mjINT_IMPLICITFAST, 1e-4, &maxv);
+  for (double h : {0.01, 0.02}) {
+    mjtNum q = hang(mjINT_DISCRETE, h, &maxv);
+    EXPECT_NEAR(q, ref, MjTol(1e-5, 1e-4));
+    EXPECT_LT(maxv, MjTol(1e-6, 1e-4));
+  }
+
+  // h*omega = 2.4: implicitfast survives but rings hard on the explicit
+  // stiffness
+  hang(mjINT_IMPLICITFAST, 0.01, &maxv);
+  EXPECT_GT(maxv, 0.05);
+
+  // h*omega = 4.8: implicitfast diverges
+  MockWarningHandler warning_handler;
+  warning_handler.ExpectWarnings("The simulation is unstable");
+  hang(mjINT_IMPLICITFAST, 0.02, &maxv);
+  int nwarning = 0;
+  for (int w = 0; w < mjNWARNING; w++) {
+    nwarning += data->warning[w].number;
+  }
+  EXPECT_GT(nwarning, 0);
+  testing::Mock::VerifyAndClearExpectations(&warning_handler);
+}
+
 // cross-tree tendon stiffness far beyond the explicit stability bound: stable
 // and dissipating
 TEST_F(ForwardTest, DiscreteTendonStiffStable) {
