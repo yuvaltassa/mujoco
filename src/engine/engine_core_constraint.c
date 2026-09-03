@@ -2808,7 +2808,8 @@ static int computeY_precount(int* Y_rownnz, int* Y_rowadr, int nefc, int nv,
 }
 
 
-// fill Y column indices and values from J, chaining up the kinematic tree
+// fill Y column indices and values from J, chaining up the kinematic tree;
+// with Y == NULL, fill only the column indices (pattern-only)
 static void computeY_fill(mjtNum* Y, int* Y_colind,
                           const int* Y_rownnz, const int* Y_rowadr, int nefc,
                           const mjtNum* J, const int* J_rownnz, const int* J_rowadr,
@@ -2836,14 +2837,18 @@ static void computeY_fill(mjtNum* Y, int* Y_colind,
         nnzY++;
         remainJ--;
         Y_colind[end - nnzY] = prev_src;
-        Y[end - nnzY] = J[adrJ + remainJ];
+        if (Y) {
+          Y[end - nnzY] = J[adrJ + remainJ];
+        }
       }
 
       // add dst
       else {
         nnzY++;
         Y_colind[end - nnzY] = prev_dst;
-        Y[end - nnzY] = 0;
+        if (Y) {
+          Y[end - nnzY] = 0;
+        }
       }
     }
 
@@ -3020,6 +3025,15 @@ static void mj_makeYSymbolic(const mjModel* m, mjData* d) {
       mj_clearEfc(d);
       d->parena = d->ncon * sizeof(mjContact);
       return;
+    }
+
+    // under discrete the numeric phase is deferred to the actuation stage, but
+    // mj_makeARSymbolic consumes the column indices now: fill the pattern here.
+    // Classic integrators fill it in the numeric phase which follows immediately
+    if (mj_isMetric(m)) {
+      computeY_fill(NULL, d->efc_Y_colind, d->efc_Y_rownnz, d->efc_Y_rowadr, nefc,
+                    NULL, d->efc_J_rownnz, d->efc_J_rowadr, d->efc_J_colind,
+                    m->dof_parentid);
     }
   }
 

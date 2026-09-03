@@ -5092,6 +5092,69 @@ TEST_F(ForwardTest, DiscreteDCMotorMatchesPid) {
   EXPECT_GT(mju_abs(data->qpos[0]), 0.1);
 }
 
+// under discrete, the dual and noslip AR pattern is laid down at the position
+// stage while the numeric phases are deferred to the actuation stage, so the Y
+// column indices must be filled by the symbolic phase. The sparse-Jacobian path
+// read uninitialized indices before the fix; sparse and dense must agree
+TEST_F(ForwardTest, DiscreteSparseDualMatchesDense) {
+  static constexpr char xml_template[] = R"(
+  <mujoco>
+    <option timestep="0.005" integrator="discrete" cone="elliptic" jacobian="%s"
+            noslip_iterations="2" solver="%s"/>
+    <worldbody>
+      <geom type="plane" size="2 2 .1"/>
+      <body pos="0 0 0.3">
+        <freejoint/>
+        <geom type="box" size=".05 .07 .09" mass="1"/>
+      </body>
+      <body pos=".3 0 0.2">
+        <freejoint/>
+        <geom type="box" size=".06 .05 .04" mass="0.5"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  char error[1024];
+  char xml[2048];
+
+  // Newton + noslip: run the sparse and dense Jacobian paths through impact
+  std::vector<mjtNum> qpos[2];
+  for (int s = 0; s < 2; s++) {
+    std::snprintf(xml, sizeof(xml), xml_template, s ? "sparse" : "dense",
+                  "Newton");
+    MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+    ASSERT_THAT(model.get(), NotNull()) << error;
+    MjDataPtr data = MakeData(model);
+    for (int i = 0; i < 100; i++) {
+      mj_step(model.get(), data.get());
+    }
+    qpos[s] = std::vector<mjtNum>(data->qpos, data->qpos + model->nq);
+    int nwarning = 0;
+    for (int w = 0; w < mjNWARNING; w++) {
+      nwarning += data->warning[w].number;
+    }
+    EXPECT_EQ(nwarning, 0);
+  }
+  EXPECT_THAT(qpos[1], Pointwise(MjNear(1e-8, 1e-3), qpos[0]));
+
+  // PGS consumes the same symbolic AR: the sparse path steps cleanly
+  std::snprintf(xml, sizeof(xml), xml_template, "sparse", "PGS");
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+  for (int i = 0; i < 100; i++) {
+    mj_step(model.get(), data.get());
+  }
+  int nwarning = 0;
+  for (int w = 0; w < mjNWARNING; w++) {
+    nwarning += data->warning[w].number;
+  }
+  EXPECT_EQ(nwarning, 0);
+  for (int i = 0; i < model->nv; i++) {
+    EXPECT_TRUE(std::isfinite(data->qacc[i]));
+  }
+}
+
 // passive muscle stiffness far beyond the explicit stability limit:
 // implicitfast diverges (the passive curve has no matching muscle velocity
 // damping), discrete settles quietly onto the statics solution
