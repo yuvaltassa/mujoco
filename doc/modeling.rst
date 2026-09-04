@@ -355,14 +355,16 @@ see :ref:`Friction<CSolverFriction>`.
       k &= d(r) / (d_\text{width}^2 \cdot \text{timeconst}^2 \cdot \text{dampratio}^2) \\
       \end{aligned}
 
-   The timeconst parameter should be at least two times larger than the simulation time step, otherwise the system can
-   become too stiff relative to the numerical integrator (especially when Euler integration is used) and the simulation
-   can go unstable. This is enforced internally, unless the :ref:`refsafe<option-flag-refsafe>` attribute of :ref:`flag
-   <option-flag>` is set to false. The :math:`\text{dampratio}` parameter would normally be set to 1, corresponding to
-   critical damping. Smaller values result in under-damped or bouncy constraints, while larger values result in
-   over-damped constraints. Combining :eq:`eq:solref_standard` with :eq:`eq:constraint`, we can derive the following
-   If the reference acceleration is given using the positive number format and the impedance is constant
-   :math:`d = d_0 = d_\text{width}`, then the penetration depth at rest is
+   The timeconst parameter, and the product of timeconst and dampratio which sets the period of the spring-damper,
+   should both be at least two times larger than the simulation time step, otherwise the system can become too stiff
+   relative to the numerical integrator (especially when Euler integration is used) and the simulation can go unstable.
+   This is enforced internally by raising timeconst to :math:`2 \cdot \text{timestep} / \min(1, \text{dampratio})`,
+   unless the :ref:`refsafe<option-flag-refsafe>` attribute of :ref:`flag<option-flag>` is set to false. The
+   :math:`\text{dampratio}` parameter would normally be set to 1, corresponding to critical damping. Smaller values
+   result in under-damped or bouncy constraints, while larger values result in over-damped constraints. Combining
+   :eq:`eq:solref_standard` with :eq:`eq:constraint`, we can derive the penetration depth at rest. If the reference
+   acceleration is given using the positive number format and the impedance is constant
+   :math:`d = d_0 = d_\text{width}`, it is
 
    .. math::
       r = \au \cdot (1 - d) \cdot \text{timeconst}^2 \cdot \text{dampratio}^2

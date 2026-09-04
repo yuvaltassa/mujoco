@@ -2394,7 +2394,7 @@ typedef enum mjtDisableBit {      // disable default feature bitflags
   mjDSBL_WARMSTART    = 1<<9,     // warmstart constraint solver
   mjDSBL_FILTERPARENT = 1<<10,    // remove collisions with parent body
   mjDSBL_ACTUATION    = 1<<11,    // apply actuation forces
-  mjDSBL_REFSAFE      = 1<<12,    // integrator safety: make ref[0]>=2*timestep
+  mjDSBL_REFSAFE      = 1<<12,    // integrator safety: make ref[0]>=2*timestep/min(1,ref[1])
   mjDSBL_SENSOR       = 1<<13,    // sensors
   mjDSBL_MIDPHASE     = 1<<14,    // mid-phase collision filtering
   mjDSBL_EULERDAMP    = 1<<15,    // implicit integration of joint damping in Euler integrator
