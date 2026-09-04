@@ -1236,86 +1236,135 @@ static void PrimalAllocate(const mjModel* m, mjData* d, mjPrimalContext* ctx, in
     ctx->nJ = nJ;
   }
 
-  // compute mjtNum block size
-  size_t nNum = 5*nefc + 5*nv;         // common arrays
-  if (is_sparse) nNum += nJ;           // JT
-  if (flg_Newton) {
-    nNum += nefc + nv;                 // D, cholupd
-    if (is_elliptic) nNum += 6*nv;     // LTJ
-    if (is_sparse) {
-      nNum += nv;                      // cholscratch
-    } else {
-      nNum += nv*nv;                   // L (dense)
-      if (is_elliptic) nNum += nv*nv;  // Lcone (dense)
-    }
-  } else {
-    nNum += 4*nv;                      // CG arrays
-  }
-
-  // add island matrix sizes
-  if (ctx->island >= 0) {
-    nNum += 2 * nC + nv + nJ;          // iM, iLD, iLDiagInv, iefc_J
-  }
-
-  // compute int block size
-  size_t nInt = nefc;                  // oldstate
-  if (is_sparse) {
-    nInt += 3*nv + nJ;                 // JT sparse
-    if (flg_Newton) nInt += 8*nv;      // Newton sparse
-  }
-
-  // add island matrix sizes
-  if (ctx->island >= 0) {
-    nInt += 2 * nv + nC;               // iM_{rownnz, rowadr, colind}
-    if (is_sparse) {
-      nInt += 3 * nefc + nJ;           // iefc_J_{rownnz, rowadr, rowsuper, colind}
-    }
-  }
-
-  // discrete metric: the effective smooth force, and Newton's lower-triangle view S_*
-  // (filled by MakeMetricLower)
+  // discrete metric: size the lower-triangle view S_* (filled by MakeMetricLower)
   int nScap = 0;
-  if (d->efm_active) {
-    nNum += nv;                        // qfrc_eff
-    if (flg_Newton) {
-      int tcap = 0, tlow = 0;
-      mjEffRank1Iter it = {0};
-      mjEffRank1 e;
-      while (mjd_effRank1Next(m, d, &it, &e, /*flg_contact=*/1)) {
-        if (ctx->island >= 0 && d->tree_island[m->dof_treeid[e.colind[0]]] != ctx->island) {
-          continue;
-        }
-        tcap += e.nnz * e.nnz;
-        tlow += e.nnz * (e.nnz + 1) / 2;
+  if (d->efm_active && flg_Newton) {
+    int tcap = 0, tlow = 0;
+    mjEffRank1Iter it = {0};
+    mjEffRank1 e;
+    while (mjd_effRank1Next(m, d, &it, &e, /*flg_contact=*/1)) {
+      if (ctx->island >= 0 && d->tree_island[m->dof_treeid[e.colind[0]]] != ctx->island) {
+        continue;
       }
-      ctx->S_tcap = tcap;
+      tcap += e.nnz * e.nnz;
+      tlow += e.nnz * (e.nnz + 1) / 2;
+    }
+    ctx->S_tcap = tcap;
 
-      // the view is lower-triangle: at most half the symmetric CSR, the lower wedge of
-      // each rank-1 outer product, the strictly-lower fluid pattern, one diagonal per row
-      nScap = (ctx->island < 0 ? d->nefmK/2 : 0) + tlow + nv + (d->efm_fluid ? m->nC - nv : 0);
-      nInt += 2*nv + nScap;            // S_rownnz, S_rowadr, S_colind
-      nNum += nScap;                   // S_val
+    // the view is lower-triangle: at most half the symmetric CSR, the lower wedge of
+    // each rank-1 outer product, the strictly-lower fluid pattern, one diagonal per row
+    nScap = (ctx->island < 0 ? d->nefmK/2 : 0) + tlow + nv + (d->efm_fluid ? m->nC - nv : 0);
+  }
+
+  // carve the mjtNum and int blocks: pass 0 totals the sizes, pass 1 hands out the
+  // pointers, so a new array cannot be carved without also being counted
+  size_t nNum = 0, nInt = 0;
+  mjtNum* numblock = NULL;
+  int* intblock = NULL;
+  mjtNum* qfrc_eff = NULL;
+
+#define CARVE_NUM(lval, count) \
+  do { if (pass) { (lval) = numblock; numblock += (count); } else nNum += (count); } while (0)
+#define CARVE_INT(lval, count) \
+  do { if (pass) { (lval) = intblock;  intblock += (count); } else nInt += (count); } while (0)
+
+  for (int pass = 0; pass < 2; pass++) {
+    if (pass) {
+      numblock = mjSTACKALLOC(d, nNum, mjtNum);
+      intblock = mjSTACKALLOC(d, nInt, int);
+    }
+
+    // island matrices
+    if (ctx->island >= 0) {
+      CARVE_INT(ctx->M_rownnz, nv);
+      CARVE_INT(ctx->M_rowadr, nv);
+      CARVE_INT(ctx->M_colind, nC);
+      CARVE_NUM(ctx->M, nC);
+      CARVE_NUM(ctx->qLD, nC);
+      CARVE_NUM(ctx->qLDiagInv, nv);
+      CARVE_NUM(ctx->J, nJ);
+      if (is_sparse) {
+        CARVE_INT(ctx->J_rownnz, nefc);
+        CARVE_INT(ctx->J_rowadr, nefc);
+        CARVE_INT(ctx->J_rowsuper, nefc);
+        CARVE_INT(ctx->J_colind, nJ);
+      }
+    }
+
+    // common arrays
+    CARVE_NUM(ctx->Jaref, nefc);
+    CARVE_NUM(ctx->Jv, nefc);
+    CARVE_NUM(ctx->Ma, nv);
+    CARVE_NUM(ctx->Mv, nv);
+    CARVE_NUM(ctx->grad, nv);
+    CARVE_NUM(ctx->Mgrad, nv);
+    CARVE_NUM(ctx->search, nv);
+    CARVE_NUM(ctx->quad, 3*nefc);
+    if (is_sparse) {
+      CARVE_NUM(ctx->JT, nJ);
+    }
+
+    // solver-specific arrays
+    if (flg_Newton) {
+      CARVE_NUM(ctx->D, nefc);
+      CARVE_NUM(ctx->cholupd, nv);
+      if (is_elliptic) {
+        CARVE_NUM(ctx->LTJ, 6*nv);
+      }
+      if (is_sparse) {
+        CARVE_NUM(ctx->cholscratch, nv);
+      } else {
+        ctx->nL = nv*nv;
+        CARVE_NUM(ctx->L, ctx->nL);
+        if (is_elliptic) {
+          CARVE_NUM(ctx->Lcone, ctx->nL);
+        }
+      }
+    } else {
+      CARVE_NUM(ctx->gradold, nv);
+      CARVE_NUM(ctx->Mgradold, nv);
+      CARVE_NUM(ctx->graddif, nv);
+      CARVE_NUM(ctx->Mgraddif, nv);
+    }
+
+    CARVE_INT(ctx->oldstate, nefc);
+    if (is_sparse) {
+      CARVE_INT(ctx->JT_rownnz, nv);
+      CARVE_INT(ctx->JT_rowadr, nv);
+      CARVE_INT(ctx->JT_rowsuper, nv);
+      CARVE_INT(ctx->JT_colind, nJ);
+    }
+    if (flg_Newton && is_sparse) {
+      CARVE_INT(ctx->H_rowadr, nv);
+      CARVE_INT(ctx->H_rownnz, nv);
+      CARVE_INT(ctx->HT_rownnz, nv);
+      CARVE_INT(ctx->HT_rowadr, nv);
+      CARVE_INT(ctx->L_rownnz, nv);
+      CARVE_INT(ctx->L_rowadr, nv);
+      CARVE_INT(ctx->LT_rownnz, nv);
+      CARVE_INT(ctx->LT_rowadr, nv);
+    }
+
+    // discrete metric arrays
+    if (d->efm_active) {
+      if (flg_Newton) {
+        CARVE_INT(ctx->S_rownnz, nv);
+        CARVE_INT(ctx->S_rowadr, nv);
+        CARVE_INT(ctx->S_colind, nScap);
+        CARVE_NUM(ctx->S_val, nScap);
+      }
+      CARVE_NUM(qfrc_eff, nv);
     }
   }
 
-  // allocate mjtNum and int blocks
-  mjtNum* numblock = mjSTACKALLOC(d, nNum, mjtNum);
-  int* intblock    = mjSTACKALLOC(d, nInt, int);
+#undef CARVE_NUM
+#undef CARVE_INT
 
   // populate island matrices if needed
   if (ctx->island >= 0) {
     int island = ctx->island;
-
     int idofadr = d->island_idofadr[island];
     int iefcadr = d->island_iefcadr[island];
-
-    ctx->M_rownnz = intblock; intblock += nv;
-    ctx->M_rowadr = intblock; intblock += nv;
-    ctx->M_colind = intblock; intblock += nC;
-
-    ctx->M = numblock; numblock += nC;
-    ctx->qLD = numblock; numblock += nC;
-    ctx->qLDiagInv = numblock; numblock += nv;
 
     // under the discrete metric, gather the qH backbone factor of M + diag in place of
     // qLD: both are block-diagonal by tree, so the island block of the global factor is
@@ -1328,16 +1377,10 @@ static void PrimalAllocate(const mjModel* m, mjData* d, mjPrimalContext* ctx, in
                     d->island_idofadr[island], 0, ctx->M, d->M);
     mju_gather(ctx->qLDiagInv, gLDiagInv, d->map_idof2dof + idofadr, nv);
 
-    ctx->J = numblock; numblock += nJ;
     if (!is_sparse) {
       mju_block(ctx->J, d->efc_J, m->nv, nv, nefc,
                 d->map_iefc2efc + iefcadr, d->map_idof2dof + idofadr);
     } else {
-      ctx->J_rownnz = intblock; intblock += nefc;
-      ctx->J_rowadr = intblock; intblock += nefc;
-      ctx->J_rowsuper = intblock; intblock += nefc;
-      ctx->J_colind = intblock; intblock += nJ;
-
       mju_blockSparse(ctx->J, ctx->J_rownnz, ctx->J_rowadr, ctx->J_colind,
                       d->efc_J, d->efc_J_rownnz, d->efc_J_rowadr, d->efc_J_colind,
                       nefc, d->map_iefc2efc + iefcadr, d->map_dof2idof,
@@ -1345,58 +1388,6 @@ static void PrimalAllocate(const mjModel* m, mjData* d, mjPrimalContext* ctx, in
 
       mju_superSparse(nefc, ctx->J_rowsuper, ctx->J_rownnz, ctx->J_rowadr, ctx->J_colind);
     }
-  }
-
-  // carve mjtNum block
-  ctx->Jaref  = numblock;  numblock += nefc;
-  ctx->Jv     = numblock;  numblock += nefc;
-  ctx->Ma     = numblock;  numblock += nv;
-  ctx->Mv     = numblock;  numblock += nv;
-  ctx->grad   = numblock;  numblock += nv;
-  ctx->Mgrad  = numblock;  numblock += nv;
-  ctx->search = numblock;  numblock += nv;
-  ctx->quad   = numblock;  numblock += 3*nefc;
-  if (is_sparse) {
-    ctx->JT   = numblock;  numblock += nJ;
-  }
-  if (flg_Newton) {
-    ctx->D       = numblock;  numblock += nefc;
-    ctx->cholupd = numblock;  numblock += nv;
-    if (is_elliptic) {
-      ctx->LTJ = numblock;  numblock += 6*nv;
-    }
-    if (is_sparse) {
-      ctx->cholscratch = numblock;  numblock += nv;
-    } else {
-      ctx->nL = nv*nv;
-      ctx->L     = numblock;  numblock += ctx->nL;
-      ctx->Lcone = is_elliptic ? numblock : NULL;
-      if (is_elliptic) numblock += ctx->nL;
-    }
-  } else {
-    ctx->gradold  = numblock;  numblock += nv;
-    ctx->Mgradold = numblock;  numblock += nv;
-    ctx->graddif  = numblock;  numblock += nv;
-    ctx->Mgraddif = numblock;  numblock += nv;
-  }
-
-  // carve int block
-  ctx->oldstate = intblock;  intblock += nefc;
-  if (is_sparse) {
-    ctx->JT_rownnz   = intblock;  intblock += nv;
-    ctx->JT_rowadr   = intblock;  intblock += nv;
-    ctx->JT_rowsuper = intblock;  intblock += nv;
-    ctx->JT_colind   = intblock;  intblock += nJ;
-  }
-  if (flg_Newton && is_sparse) {
-    ctx->H_rowadr   = intblock;  intblock += nv;
-    ctx->H_rownnz   = intblock;  intblock += nv;
-    ctx->HT_rownnz  = intblock;  intblock += nv;
-    ctx->HT_rowadr  = intblock;  intblock += nv;
-    ctx->L_rownnz   = intblock;  intblock += nv;
-    ctx->L_rowadr   = intblock;  intblock += nv;
-    ctx->LT_rownnz  = intblock;  intblock += nv;
-    ctx->LT_rowadr  = intblock;  intblock += nv;
   }
 
   // sparse: compute Jacobian transpose
@@ -1425,13 +1416,6 @@ static void PrimalAllocate(const mjModel* m, mjData* d, mjPrimalContext* ctx, in
     ctx->flg_metric = 1;
     ctx->fm = m;
     ctx->fd = d;
-    if (flg_Newton) {
-      ctx->S_rownnz = intblock;  intblock += nv;
-      ctx->S_rowadr = intblock;  intblock += nv;
-      ctx->S_colind = intblock;  intblock += nScap;
-      ctx->S_val    = numblock;  numblock += nScap;
-    }
-    mjtNum* qfrc_eff = numblock;  numblock += nv;
     if (ctx->island < 0) {
       mju_add(qfrc_eff, ctx->qfrc_smooth, d->efm_c, nv);
       if (d->efm_ca) {
