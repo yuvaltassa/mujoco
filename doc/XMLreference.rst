@@ -637,9 +637,11 @@ from its default.
 
 :at:`refsafe`: :at-val:`[disable, enable], "enable"`
    This flag enables a safety mechanism that prevents instabilities due to solref[0] being too small compared to the
-   simulation timestep. Recall that solref[0] is the stiffness of the virtual spring-damper used for constraint
-   stabilization. If this setting is enabled, the solver uses max(solref[0], 2*timestep) in place of solref[0]
-   separately for each active constraint.
+   simulation timestep. Recall that solref[0] is the time constant of the virtual spring-damper used for constraint
+   stabilization and solref[1] is its damping ratio. If this setting is enabled, the solver uses
+   max(solref[0], 2*timestep/min(1, solref[1])) in place of solref[0] separately for each active constraint, so that
+   the period of an under-damped constraint is also kept well above the timestep. Friction constraints, which have no
+   stiffness, use max(solref[0], 2*timestep).
 
 .. _option-flag-sensor:
 

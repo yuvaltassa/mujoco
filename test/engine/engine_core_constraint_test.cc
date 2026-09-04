@@ -97,6 +97,113 @@ TEST_F(CoreConstraintTest, RestPenetration) {
   }
 }
 
+// refsafe: the reference time constant is raised to 2*timestep/min(1, ratio)
+TEST_F(CoreConstraintTest, RefsafeDampratio) {
+  constexpr char xml[] = R"(
+  <mujoco>
+    <option timestep="0.002"/>
+    <default>
+      <geom condim="1"/>
+    </default>
+    <worldbody>
+      <geom type="plane" size="1 1 1"/>
+      <body pos="0 0 .099">
+        <joint type="slide" axis="0 0 1" frictionloss="1"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), testing::NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+  mjtNum h = model->opt.timestep;
+  constexpr int kFriction = 0, kContact = 1;
+
+  // K, B of the friction row (0) or contact row (1) given solref; with
+  // refsafe disabled, the given solref is used as is
+  auto kbip = [&](mjtNum timeconst, mjtNum dampratio, int row, bool refsafe) {
+    for (int i = 0; i < model->ngeom; i++) {
+      model->geom_solref[mjNREF * i] = timeconst;
+      model->geom_solref[mjNREF * i + 1] = dampratio;
+    }
+    model->dof_solref[0] = timeconst;
+    model->dof_solref[1] = dampratio;
+    if (refsafe) {
+      model->opt.disableflags &= ~mjDSBL_REFSAFE;
+    } else {
+      model->opt.disableflags |= mjDSBL_REFSAFE;
+    }
+    mj_resetData(model.get(), data.get());
+    mj_forward(model.get(), data.get());
+    EXPECT_EQ(data->nefc, 2);
+    return std::make_pair(data->efc_KBIP[4 * row], data->efc_KBIP[4 * row + 1]);
+  };
+
+  // critically damped and over-damped: clamped to exactly 2*timestep
+  for (mjtNum dampratio : {1.0, 3.0}) {
+    EXPECT_EQ(kbip(h, dampratio, kContact, true),
+              kbip(2 * h, dampratio, kContact, false));
+  }
+
+  // under-damped: clamped to exactly 2*timestep/dampratio, not 2*timestep
+  EXPECT_EQ(kbip(h, 0.3, kContact, true),
+            kbip(2 * h / 0.3, 0.3, kContact, false));
+  EXPECT_NE(kbip(h, 0.3, kContact, true), kbip(2 * h, 0.3, kContact, false));
+
+  // friction rows have no stiffness: clamped to 2*timestep for any dampratio
+  EXPECT_EQ(kbip(h, 0.3, kFriction, true), kbip(2 * h, 0.3, kFriction, false));
+
+  // refsafe disabled: no clamp, stiffer than the clamped value
+  EXPECT_GT(kbip(h, 0.3, kContact, false).first,
+            kbip(h, 0.3, kContact, true).first);
+}
+
+// refsafe: an under-damped contact whose time constant is below the clamp
+// settles, while at the old clamp (2*timestep, independent of dampratio) it
+// chatters and gains energy on every impact
+TEST_F(CoreConstraintTest, RefsafeUnderdampedSettles) {
+  constexpr char xml[] = R"(
+  <mujoco>
+    <option timestep="0.002"/>
+    <default>
+      <geom solref="0.002 0.3"/>
+    </default>
+    <worldbody>
+      <geom type="plane" size="1 1 1"/>
+      <body pos="0 0 .15">
+        <freejoint/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), testing::NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+
+  // drop the ball and report its speed after 3 seconds
+  auto speed = [&]() {
+    mj_resetData(model.get(), data.get());
+    while (data->time < 3) {
+      mj_step(model.get(), data.get());
+    }
+    return mju_norm(data->qvel, model->nv);
+  };
+
+  // new clamp: the ball comes to rest
+  EXPECT_LT(speed(), MjTol(1e-8, 1e-4));
+
+  // old clamp, emulated by disabling refsafe: still bouncing
+  model->opt.disableflags |= mjDSBL_REFSAFE;
+  for (int i = 0; i < model->ngeom; i++) {
+    model->geom_solref[mjNREF * i] = 2 * model->opt.timestep;
+  }
+  EXPECT_GT(speed(), 0.1);
+}
+
 // surfacevel: conveyor belt drags a box to belt speed
 TEST_F(CoreConstraintTest, SurfaceVelocityConveyor) {
   constexpr char xml[] = R"(

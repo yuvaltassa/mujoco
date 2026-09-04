@@ -1973,6 +1973,15 @@ void mj_diagApprox(const mjModel* m, mjData* d) {
 }
 
 
+// minimum time constant keeping a spring-damper reference stable under semi-implicit stepping:
+// the stiffness term of the per-row step map requires timeconst*dampratio >= 2*timestep, the
+// damping term requires timeconst >= 2*timestep; rows without stiffness only need the latter
+static mjtNum minTimeconst(mjtNum dampratio, mjtNum timestep, int stiff) {
+  return 2*timestep / (stiff ? mju_min(1, dampratio) : 1);
+}
+
+
+
 // get solref, solimp for specified constraint
 static void getsolparam(const mjModel* m, const mjData* d, int i,
                         mjtNum* solref, mjtNum* solreffriction, mjtNum* solimp) {
@@ -2023,9 +2032,11 @@ static void getsolparam(const mjModel* m, const mjData* d, int i,
     mj_defaultSolRefImp(solref, NULL);
   }
 
-  // integrator safety: impose ref[0]>=2*timestep for standard format
+  // integrator safety: impose ref[0] >= 2*timestep/min(1, ref[1]) for standard format
   if (!mjDISABLED(mjDSBL_REFSAFE) && solref[0] > 0) {
-    solref[0] = mju_max(solref[0], 2*m->opt.timestep);
+    int stiff = (d->efc_type[i] != mjCNSTR_FRICTION_DOF &&
+                 d->efc_type[i] != mjCNSTR_FRICTION_TENDON);
+    solref[0] = mju_max(solref[0], minTimeconst(solref[1], m->opt.timestep, stiff));
   }
 
   // check reference format: standard or direct, cannot be mixed
@@ -2034,9 +2045,10 @@ static void getsolparam(const mjModel* m, const mjData* d, int i,
     mju_zero(solreffriction, mjNREF);  // default solreffriction is (0, 0)
   }
 
-  // integrator safety: impose ref[0]>=2*timestep for standard format
+  // integrator safety: impose ref[0] >= 2*timestep for standard format (friction: no stiffness)
   if (!mjDISABLED(mjDSBL_REFSAFE) && solreffriction[0] > 0) {
-    solreffriction[0] = mju_max(solreffriction[0], 2*m->opt.timestep);
+    solreffriction[0] = mju_max(solreffriction[0],
+                                minTimeconst(solreffriction[1], m->opt.timestep, 0));
   }
 
   // enforce constraints on solimp

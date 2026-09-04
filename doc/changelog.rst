@@ -33,6 +33,12 @@ Engine
      elasticity or passive flex contact under ``implicit``/``implicitfast`` now raise a runtime error carrying this
      migration note.
 
+- The :ref:`refsafe<option-flag-refsafe>` clamp on ``solref`` now accounts for the damping ratio: the time constant
+  is raised to ``2*timestep/min(1, dampratio)`` instead of ``2*timestep``. The previous clamp kept under-damped
+  constraints (``dampratio < 1``) beyond the stability limit of the semi-implicit integrators, producing chatter and
+  energy gain on impact. Constraints with ``dampratio >= 1`` are unaffected. Under-damped constraints with
+  ``timeconst < 2*timestep/dampratio`` become softer than before; to recover the previous (unstable) behavior, disable
+  the flag.
 - Restored clamping of non-positive pivots in the sparse inertia factorization, along with the associated
   ``mjWARN_INERTIA`` warning. The guard was inadvertently dropped in the 3.3.0 conversion of ``qLD`` to CSR format;
   since then, models with singular mass matrices silently produced non-finite accelerations, typically surfacing as
