@@ -2023,8 +2023,11 @@ static void getsolparam(const mjModel* m, const mjData* d, int i,
     mj_defaultSolRefImp(solref, NULL);
   }
 
-  // integrator safety: impose ref[0]>=2*timestep for standard format
-  if (!mjDISABLED(mjDSBL_REFSAFE) && solref[0] > 0) {
+  // integrator safety: impose ref[0]>=2*timestep for standard format. Not applied under
+  // the discrete integrator: implicitly treated rows (mj_makeImpedance) are stable at
+  // any timeconst, and timeconst -> 0 is their rigid limit
+  int metric = mj_isMetric(m);
+  if (!mjDISABLED(mjDSBL_REFSAFE) && solref[0] > 0 && !metric) {
     solref[0] = mju_max(solref[0], 2*m->opt.timestep);
   }
 
@@ -2035,7 +2038,7 @@ static void getsolparam(const mjModel* m, const mjData* d, int i,
   }
 
   // integrator safety: impose ref[0]>=2*timestep for standard format
-  if (!mjDISABLED(mjDSBL_REFSAFE) && solreffriction[0] > 0) {
+  if (!mjDISABLED(mjDSBL_REFSAFE) && solreffriction[0] > 0 && !metric) {
     solreffriction[0] = mju_max(solreffriction[0], 2*m->opt.timestep);
   }
 
@@ -2147,11 +2150,19 @@ static void getimpedance(const mjtNum* solimp, mjtNum pos, mjtNum margin,
 }
 
 
+// implicit-row factor f = 1 + h*B + h^2*K*I of a constraint row (kbip = its efc_KBIP)
+static inline mjtNum implicitFactor(const mjtNum* kbip, mjtNum h) {
+  return 1 + h*kbip[1] + h*h*kbip[0]*kbip[2];
+}
+
+
 // compute efc_R, efc_D, efc_KBIP, adjust efc_diagA
 void mj_makeImpedance(const mjModel* m, mjData* d) {
   int dim, nefc = d->nefc;
   mjtNum *R = d->efc_R, *KBIP = d->efc_KBIP;
   mjtNum pos, imp, impP, Rpy, solref[mjNREF], solreffriction[mjNREF], solimp[mjNIMP];
+  int metric = mj_isMetric(m);
+  mjtNum h = m->opt.timestep;
 
   // set efc_R, efc_KBIP
   for (int i=0; i < nefc; i++) {
@@ -2204,6 +2215,21 @@ void mj_makeImpedance(const mjModel* m, mjData* d) {
       // I = imp, P = imp'
       KBIP[4*(i+j)+2] = imp;
       KBIP[4*(i+j)+3] = impP;
+
+      // discrete integrator: the row's spring-damper is treated implicitly (backward
+      // Euler on the row), which folds into the weight as R <- R/f. Done here, before
+      // the friction-row and cone relations below, so those derive from the implicit
+      // values and friction rows inherit their contact's factor. The matching
+      // end-of-step reference is in mj_referenceConstraint.
+      // The weight is floored at the impedance ceiling: the effective impedance
+      // I*f/(I*f + 1 - I) is capped at mjMAXIMP, keeping the weights as well-conditioned
+      // as the ceiling already guarantees. Stability needs only the reference's factor,
+      // so K and B are left untouched.
+      if (metric) {
+        mjtNum f = implicitFactor(KBIP + 4*(i+j), h);
+        mjtNum Rmin = mju_max(mjMINVAL, (1-mjMAXIMP)*d->efc_diagA[i+j]/mjMAXIMP);
+        R[i+j] = mju_max(R[i+j]/f, Rmin);
+      }
     }
 
     // skip the rest of this constraint
@@ -3431,24 +3457,39 @@ void mj_velocityConstraint(const mjModel* m, mjData* d) {
 // compute efc_vel, efc_aref
 void mj_referenceConstraint(const mjModel* m, mjData* d) {
   int nefc = d->nefc;
-  mjtNum* KBIP = d->efc_KBIP;
+  const mjtNum* KBIP = d->efc_KBIP;
+  int metric = mj_isMetric(m);
+  mjtNum h = m->opt.timestep;
 
   // compute efc_vel
   mj_velocityConstraint(m, d);
 
-  // compute aref = -B*vel - K*I*(pos-margin)
+  // compute aref = -B*vel - K*I*(pos-margin). Under the discrete integrator the row's
+  // spring-damper is treated implicitly (backward Euler on the row): evaluated at the
+  // end-of-step state, the position transported by h*vel
+  mjtNum shift = metric ? h : 0;
   for (int i=0; i < nefc; i++) {
-    d->efc_aref[i] = -KBIP[4*i+1]*d->efc_vel[i]
-                     -KBIP[4*i]*KBIP[4*i+2]*(d->efc_pos[i]-d->efc_margin[i]);
+    const mjtNum* kbip = KBIP + 4*i;
+    d->efc_aref[i] = -kbip[1]*d->efc_vel[i]
+                     -kbip[0]*kbip[2]*(d->efc_pos[i]-d->efc_margin[i] + shift*d->efc_vel[i]);
   }
-
-  // bias adhesive contact rows
-  mj_adhesionRef(m, d);
 
   // subtract Jdot*v correction for connect/weld equality constraints
   if (d->ne > 0) {
     mj_Jdotv(m, d, d->efc_aref);
   }
+
+  // implicit rows: divide by the factor which scaled the row weight in mj_makeImpedance;
+  // weight and reference are one identity, neither is valid alone
+  if (metric) {
+    for (int i=0; i < nefc; i++) {
+      d->efc_aref[i] /= implicitFactor(KBIP + 4*i, h);
+    }
+  }
+
+  // bias adhesive contact rows: a force offset (D*R*edge = edge), independent of the
+  // row factor, so it is added after the division
+  mj_adhesionRef(m, d);
 }
 
 

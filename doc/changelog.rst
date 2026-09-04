@@ -18,7 +18,9 @@ Engine
   implicit damping :math:`hD` and implicit position stiffness :math:`h^2 K`.
   Under this integrator ``mjData.qacc`` is the discrete step map :math:`(v^+ - v)/h`, and joint,
   tendon and actuator stiffness and damping join the solver's metric, making passive springs and actuator
-  position gains stable at timesteps far beyond the explicit stability limit. The actuator-gain treatment
+  position gains stable at timesteps far beyond the explicit stability limit. Constraint rows are treated implicitly as
+  well: :at:`solref` spring--dampers are evaluated at the end of the step, so constraints are stable at any
+  ``timeconst`` and the :ref:`refsafe<option-flag-refsafe>` clamp is not applied under this integrator. The actuator-gain treatment
   resolves the stiff-servo timestep limitation of :issue:`3443` (analysis contributed by
   :github:user:`qiayuanl`). See the :ref:`integrator documentation<geIntegrators>` for semantics and current
   limitations.

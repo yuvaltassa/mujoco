@@ -674,8 +674,14 @@ Discrete-time (``discrete``)
    :ref:`solver<soAlgorithms>` minimizes the same convex Gauss-principle objective, but in the effective metric
    :math:`\widehat{M} = M + hD + h^2K`, where :math:`D` and :math:`K` denote *positive* damping and stiffness matrices:
    the negated derivatives of the smooth forces, restricted to terms which keep :math:`\widehat{M}` positive definite.
-   Constraint forces are therefore computed against the same effective inertia which performs the velocity update, and
-   the damping ratio specified by :at:`solref` is honored even at coarse timesteps.
+   Constraint forces are therefore computed against the same effective inertia which performs the velocity update.
+   The constraint rows are treated implicitly in the same way: each row's :at:`solref` spring--damper is evaluated at
+   the end of the step and folded into the row's impedance and reference. Constraint rows are then stable for any
+   :at:`solref` at any timestep, so the :ref:`refsafe<option-flag-refsafe>` clamp is not applied under this
+   integrator, and :at:`timeconst` :math:`\to 0` approaches the rigid-constraint limit (the violation is removed in
+   one step) rather than an instability; the row's effective impedance is capped at the maximum impedance
+   ``mjMAXIMP``, which keeps the constraint weights well-conditioned. The cost is extra damping of the constraint response, growing with
+   :math:`h/\mathtt{timeconst}`; the specified damping ratio is recovered as :math:`h \to 0`.
 
    The :math:`h^2K` term makes ``discrete`` the only integrator which is implicit in *position*: joint, tendon and flex
    stiffness and actuator position feedback are stable at timesteps far beyond the explicit stability limit
