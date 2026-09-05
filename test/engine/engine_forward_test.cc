@@ -3827,6 +3827,7 @@ TEST_F(ImplicitIntegratorTest, PassiveFlexContactMovingBase) {
     <option timestep="0.002" integrator="discrete" solver="CG" iterations="400"/>
     <worldbody>
       <body name="base" pos="0 0 .2">
+        <joint name="lift" type="slide" axis="0 0 1" stiffness="1000" damping="100"/>
         <joint name="tilt" type="hinge" axis="0 1 0" stiffness="1" damping=".05"/>
         <geom type="box" size=".05 .05 .005" pos="0 0 -.1" mass="2"/>
         <flexcomp name="lower" type="grid" dim="2" count="9 9 1" spacing=".04 .04 1"
@@ -3862,10 +3863,14 @@ TEST_F(ImplicitIntegratorTest, PassiveFlexContactMovingBase) {
   }
   EXPECT_LT(vmax, 4.0) << "peak speed " << vmax;
 
-  // the off-centre load tilts the base through the pinned corners
-  int tilt = mj_name2id(model, mjOBJ_JOINT, "tilt");
-  EXPECT_GT(mju_abs(data->qpos[model->jnt_qposadr[tilt]]), 1e-3)
-      << "load never reached the base";
+  // the load reaches the base through the pinned corners: the vertical spring
+  // carries base + lower sheet + upper sheet (2 + 0.3 + 0.1 kg) wherever the
+  // upper sheet has slid to. (The base tilt is not a load indicator: on the
+  // fine-timestep trajectory the sheet slides to the centre of the lower sheet
+  // and produces no torque.)
+  int lift = mj_name2id(model, mjOBJ_JOINT, "lift");
+  mjtNum supported = -data->qpos[model->jnt_qposadr[lift]] * 1000 / 9.81;
+  EXPECT_GT(supported, 2.33) << "load never reached the base";
 
   // upper sheet must not pass through the lower one
   mjtNum lo[2] = {1e30, 1e30};
