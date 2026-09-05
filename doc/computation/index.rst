@@ -2248,8 +2248,9 @@ into attributes of :ref:`mjData`. It is informative to compare the list below wi
 wherein comments above blocks of attributes specify the function that computes them. Note that each stage depends on
 the values computed in some or all of the previous stages.
 
-1. Check the positions and velocities for invalid or unacceptably large real values indicating divergence. If divergence
-   is detected, the state is automatically reset and the corresponding warning is raised:
+1. Check the positions and velocities for invalid or unacceptably large real values indicating divergence. If
+   divergence is detected, the corresponding warning is raised and the :ref:`onwarn<option-onwarn>` response is
+   applied (by default the state is automatically reset):
    :ref:`mj_checkPos`, :ref:`mj_checkVel`
 
 Position
@@ -2310,8 +2311,9 @@ of the pipeline, the actual dependence is on the entire :ref:`integration state<
     :ref:`mj_fwdConstraint`
 23. Compute sensor data that depends on force and acceleration if enabled
     (if required by sensors, call :ref:`mj_rnePostConstraint`): :ref:`mj_sensorAcc`
-24. Check the acceleration for invalid or unacceptably large real values. If divergence is detected, the state is
-    automatically reset and the corresponding warning is raised: :ref:`mj_checkAcc`
+24. Check the acceleration for invalid or unacceptably large real values. If divergence is detected, the
+    corresponding warning is raised and the :ref:`onwarn<option-onwarn>` response is applied (by default the state is
+    automatically reset): :ref:`mj_checkAcc`
 25. Compare the results of forward and inverse dynamics, so as to diagnose poor solver convergence in the forward
     dynamics. This is an optional step, and is performed only when enabled: :ref:`mj_compareFwdInv`
 26. Advance the simulation state by one time step, using the selected integrator. Note that the Runge-Kutta integrator

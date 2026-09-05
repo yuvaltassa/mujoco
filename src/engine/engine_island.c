@@ -523,13 +523,13 @@ static const char* unionConstraintTrees(const mjModel* m, const mjData* d, int* 
 
 // discover islands:
 //   nisland, island_idofadr, dof_island, dof_islandnext, island_efcadr, efc_island, efc_islandnext
-void mj_island(const mjModel* m, mjData* d) {
+mjtStatus mj_island(const mjModel* m, mjData* d) {
   int nv = m->nv, nefc = d->nefc, ntree = m->ntree;
 
   // no constraints or islands disabled: quick return
   if (mjDISABLED(mjDSBL_ISLAND) || !nefc) {
     d->nisland = d->nidof = 0;
-    return;
+    return (d->status = mjSTATUS_OK);
   }
 
   mj_markStack(d);
@@ -552,7 +552,7 @@ void mj_island(const mjModel* m, mjData* d) {
   if (!d->nisland) {
     d->nidof = 0;
     mj_freeStack(d);
-    return;
+    return (d->status = mjSTATUS_OK);
   }
 
   d->nidof = nidof;
@@ -560,7 +560,7 @@ void mj_island(const mjModel* m, mjData* d) {
   // allocate island arrays on arena
   if (!arenaAllocIsland(m, d)) {
     mj_freeStack(d);
-    return;
+    return (d->status = mjSTATUS_CNSTRFULL);
   }
 
   // local copy
@@ -702,4 +702,5 @@ void mj_island(const mjModel* m, mjData* d) {
   if (!mju_compare(island_nefc2, d->island_nefc, nisland)) mjERROR("island_nefc miscount");
 
   mj_freeStack(d);
+  return (d->status = mjSTATUS_OK);
 }

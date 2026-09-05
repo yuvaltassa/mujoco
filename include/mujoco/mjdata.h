@@ -128,6 +128,7 @@ typedef struct mjData_ {
   // diagnostics
   mjWarningStat warning[mjNWARNING];          // warning statistics (mutable)
   mjTimerStat   timer[mjNTIMER];              // timer statistics
+  int           status;                       // status of last top-level call (mjtStatus)
 
   // variable sizes
   int     ncon;              // number of detected contacts

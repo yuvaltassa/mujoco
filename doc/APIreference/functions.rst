@@ -169,7 +169,9 @@ The search is recursive, and the list includes the filename itself.
 Main simulation
 ^^^^^^^^^^^^^^^
 
-These are the main entry points to the simulator. Most users will only need to call :ref:`mj_step`, which computes
+These are the main entry points to the simulator. They return :ref:`mjtStatus`, a bitmask reporting any
+:ref:`simulation warnings<siDiagnostics>` encountered during the call (0 if none), whose handling is controlled by the
+:ref:`onwarn<option-onwarn>` option. Most users will only need to call :ref:`mj_step`, which computes
 everything and advanced the simulation state by one time step. Controls and applied forces must either be set in advance
 (in ``mjData.{ctrl, qfrc_applied, xfrc_applied}``), or a control callback :ref:`mjcb_control` must be installed which
 will be called just before the controls and applied forces are needed. Alternatively, one can use :ref:`mj_step1` and
@@ -419,7 +421,7 @@ Copy current state to the k-th model keyframe.
 
 .. mujoco-include:: mj_addContact
 
-Add contact to d->contact list; return 0 if success; 1 if buffer full.
+Add contact to d->contact list; return mjSTATUS_OK on success, mjSTATUS_CONTACTFULL if full.
 
 .. _mj_isPyramidal:
 
@@ -2157,7 +2159,8 @@ Free memory, using free() by default.
 
 .. mujoco-include:: mj_warning
 
-High-level warning function: count warnings in mjData, print only the first.
+High-level warning function: count warnings in mjData, print only the first,
+return the corresponding status bit.
 
 .. _mju_writeLog:
 

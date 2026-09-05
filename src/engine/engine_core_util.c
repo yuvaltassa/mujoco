@@ -1219,8 +1219,8 @@ mjtNum mj_actuatorArmature(const mjModel* m, mjtObj type, int id) {
 }
 
 
-// count warnings, print only the first time
-void mj_warning(mjData* d, int warning, int info) {
+// count warnings, print only the first time, return the corresponding status bit
+mjtStatus mj_warning(mjData* d, int warning, int info) {
   // check type
   if (warning < 0 || warning >= mjNWARNING) {
     mjERROR("invalid warning type %d", warning);
@@ -1236,6 +1236,8 @@ void mj_warning(mjData* d, int warning, int info) {
 
   // increase counter
   d->warning[warning].number++;
+
+  return 1 << warning;
 }
 
 

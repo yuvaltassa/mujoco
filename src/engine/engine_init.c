@@ -96,6 +96,7 @@ void mj_defaultOption(mjOption* opt) {
   opt->ls_iterations      = 50;
   opt->noslip_iterations  = 0;
   opt->ccd_iterations     = 35;
+  opt->onwarn             = mjONWARN_AUTO;
   opt->disableflags       = 0;
   opt->enableflags        = 0;
   opt->disableactuator    = 0;

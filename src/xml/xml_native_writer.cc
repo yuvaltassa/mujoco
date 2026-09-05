@@ -1074,7 +1074,6 @@ void mjXWriter::Option(XMLElement* root) {
     WRITEDSBL("sensor",         mjDSBL_SENSOR)
     WRITEDSBL("midphase",       mjDSBL_MIDPHASE)
     WRITEDSBL("eulerdamp",      mjDSBL_EULERDAMP)
-    WRITEDSBL("autoreset",      mjDSBL_AUTORESET)
     WRITEDSBL("nativeccd",      mjDSBL_NATIVECCD)
     WRITEDSBL("island",         mjDSBL_ISLAND)
     WRITEDSBL("multiccd",       mjDSBL_MULTICCD)

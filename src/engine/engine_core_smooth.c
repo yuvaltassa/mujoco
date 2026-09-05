@@ -1972,8 +1972,9 @@ void mj_makeM(const mjModel* m, mjData* d) {
 
 
 // sparse L'*D*L factorizaton of the inertia matrix M, assumed spd
-void mj_factorM(const mjModel* m, mjData* d) {
+mjtStatus mj_factorM(const mjModel* m, mjData* d) {
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
 
   // sleep filtering
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
@@ -2000,10 +2001,11 @@ void mj_factorM(const mjModel* m, mjData* d) {
 
   // near-singular inertia: a pivot was clamped
   if (clamped >= 0) {
-    mj_warning(d, mjWARN_INERTIA, clamped);
+    status = mj_warning(d, mjWARN_INERTIA, clamped);
   }
 
   TM_ADD(mjTIMER_POS_INERTIA);
+  return (d->status = status);
 }
 
 

@@ -102,7 +102,7 @@ Separation of model and data
 
    .. code:: C
 
-      void mj_step(const mjModel* m, mjData* d);
+      mjtStatus mj_step(const mjModel* m, mjData* d);
 
 Performance
    MuJoCo's runtime performs zero memory allocations after initialization -- all working memory is preallocated in
@@ -747,7 +747,9 @@ Divergence
 ~~~~~~~~~~
 
 Divergence of a simulation happens when elements of the state tend quickly to infinity. In MuJoCo this is usually
-manifested as an :ref:`mjWARN_BADQACC<mjtwarning>` warning. Divergence is endemic to all physics simulation and is not
+manifested as an :ref:`mjWARN_BADQACC<mjtwarning>` :ref:`simulation warning<siSimWarning>`, reported by the
+:ref:`mjtStatus` return value of :ref:`mj_step` and handled according to the :ref:`onwarn<option-onwarn>` option.
+Divergence is endemic to all physics simulation and is not
 necessarily indicative of a bad model or bug in the simulator, but is rather a hint that the timestep  is too large for
 the given choice of integrator. In physics simulation there is always a tension between speed (large time steps) and
 stability (small timesteps). A model which is well-tuned for speed has the largest possible timestep that does not

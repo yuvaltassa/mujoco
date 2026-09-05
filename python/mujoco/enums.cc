@@ -61,6 +61,12 @@ void DefEnum(py::module_& m) {
         }),
         py::arg("value"), py::prepend());
 
+  // Truthiness follows the underlying value, matching Python's IntEnum: a zero-valued
+  // enumerator (e.g. mjSTATUS_OK) is falsy, so `if mj_step(m, d):` detects impaired steps
+  e.def("__bool__", [](const typename Trait::type& v) {
+    return static_cast<std::int64_t>(v) != 0;
+  });
+
   // Arithmetic operators
   e.def(-py::self);
   e.def(py::self + std::int64_t());

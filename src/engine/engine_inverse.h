@@ -24,20 +24,20 @@ extern "C" {
 #endif
 
 // inverse dynamics
-MJAPI void mj_inverse(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_inverse(const mjModel* m, mjData* d);
 
 // Inverse dynamics with skip; skipstage is mjtStage.
-MJAPI void mj_inverseSkip(const mjModel* m, mjData* d,
+MJAPI mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
                           int skipstage, int skipsensor);
 
 // position-dependent computations
-MJAPI void mj_invPosition(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_invPosition(const mjModel* m, mjData* d);
 
 // velocity-dependent computations
-MJAPI void mj_invVelocity(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_invVelocity(const mjModel* m, mjData* d);
 
 // inverse constraint solver
-MJAPI void mj_invConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_invConstraint(const mjModel* m, mjData* d);
 
 // compare forward and inverse dynamics, without changing results of forward dynamics
 MJAPI void mj_compareFwdInv(const mjModel* m, mjData* d);
