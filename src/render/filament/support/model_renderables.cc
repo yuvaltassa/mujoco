@@ -209,6 +209,11 @@ void ModelRenderables::Update(const mjData* data) {
   mjrfContext* ctx = model_objects_->GetContext();
   const mjModel* model = model_objects_->GetModel();
 
+  // TODO: Geom and site colors, sizes and materials are read once when the
+  // renderables are built (AddGeomGeoms, AddSiteGeoms). In-place edits of
+  // mjModel (geom_rgba, geom_size, mat_*, ...) rendered live while the scene
+  // was rebuilt from mjvScene every frame, and still do in the classic
+  // renderer; diff against a cached copy here, as SetOptions does.
   for (int i = 0; i < model->ngeom; ++i) {
     const float3 pos = ReadFloat3(data->geom_xpos, i);
     const mat3f mat = ReadMat3(data->geom_xmat, i);

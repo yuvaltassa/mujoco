@@ -277,6 +277,9 @@ void ModelLights::UpdateShadowMapSize() {
 
 void ModelLights::Update(const mjData* data) {
   UpdateShadowMapSize();
+  // TODO: Only color and active are re-read each frame. Intensity, range,
+  // cutoff, castshadow and bulb radius are baked into mjrfLightParams when
+  // the light is created, so in-place edits of light_* are not reflected.
   if (data == nullptr) {
     return;
   }
