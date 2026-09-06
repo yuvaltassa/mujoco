@@ -204,8 +204,15 @@ void App::SwitchGraphicsMode(int width, int height,
 }
 
 void App::Recompile() {
-  mj_recompile(model_holder_->spec(), model_holder_->vfs(),
-               model_holder_->model(), model_holder_->data());
+  if (mj_recompile(model_holder_->spec(), model_holder_->vfs(),
+                   model_holder_->model(), model_holder_->data()) != 0) {
+    // The compiler has freed the model and data; detach them so the holder
+    // does not free them again, then fall back to an empty model.
+    model_holder_->ReleaseModel();
+    model_holder_->ReleaseData();
+    SetLoadError(mjs_getError(spec()));
+    return;
+  }
   // The model was rebuilt in place: same pointer, reallocated arrays.
   renderer_->ReloadModel(model());
   const int state_size = mj_stateSize(model(), mjSTATE_INTEGRATION);
