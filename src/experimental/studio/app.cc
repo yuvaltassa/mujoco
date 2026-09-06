@@ -206,6 +206,8 @@ void App::SwitchGraphicsMode(int width, int height,
 void App::Recompile() {
   mj_recompile(model_holder_->spec(), model_holder_->vfs(),
                model_holder_->model(), model_holder_->data());
+  // The model was rebuilt in place: same pointer, reallocated arrays.
+  renderer_->ReloadModel(model());
   const int state_size = mj_stateSize(model(), mjSTATE_INTEGRATION);
   sim_history_.Init(state_size);
   if (has_model() && has_data()) {

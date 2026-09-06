@@ -74,6 +74,8 @@ void ClassicRenderer::Init(const mjModel* model) {
   }
 }
 
+void ClassicRenderer::ReloadModel(const mjModel* model) { Init(model); }
+
 void ClassicRenderer::Deinit() {
   if (initialized_) {
     mjv_freeScene(&scene_);

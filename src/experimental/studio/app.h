@@ -190,7 +190,7 @@ class App {
   // Requests that the currently loaded model be reloaded at the next update.
   void RequestModelReload();
 
-  // Recompiles the spec, updating the model and data.
+  // Recompiles the spec in place, updating the model, data and renderer.
   void Recompile();
 
   // Updates the currently loaded model to the given model. If model is null,

@@ -34,6 +34,12 @@ class Renderer {
   // Initializes the renderer with the given mjModel.
   virtual void Init(const mjModel* model) = 0;
 
+  // Rebuilds the state derived from the model (meshes, textures, lights,
+  // renderables) while keeping the graphics context. For a model that was
+  // recompiled in place: the mjModel pointer is unchanged, but its arrays were
+  // reallocated and may have changed size.
+  virtual void ReloadModel(const mjModel* model) = 0;
+
   // Renders the simulation and ux state. Renders into `pixels` if provided,
   // otherwise renders to the `native_window` provided at construction.
   virtual void Render(const mjModel* model, mjData* data,

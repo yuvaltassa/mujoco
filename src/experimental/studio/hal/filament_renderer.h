@@ -52,6 +52,9 @@ class FilamentRenderer : public Renderer {
   // Initializes the renderer with the given mjModel.
   void Init(const mjModel* model) override;
 
+  // Rebuilds the model-derived state, keeping the Filament context.
+  void ReloadModel(const mjModel* model) override;
+
   // Renders the simulation and ux state. Renders into `pixels` if provided,
   // otherwise renders to the `native_window` provided at construction.
   void Render(const mjModel* model, mjData* data, const mjvPerturb* perturb,
@@ -80,6 +83,10 @@ class FilamentRenderer : public Renderer {
  private:
   // Resets the renderer; no rendering will occur until Init() is called again.
   void Deinit();
+
+  // Creates and destroys the objects derived from the model.
+  void LoadModel(const mjModel* model);
+  void UnloadModel();
 
   void BuildMainRenderRequest(mjrfRenderRequest* request,
                               const mjrRect& viewport, const mjrCamera& camera);

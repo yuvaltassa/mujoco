@@ -39,6 +39,9 @@ class ClassicRenderer : public Renderer {
   // Initializes the renderer with the given mjModel.
   void Init(const mjModel* model) override;
 
+  // Re-initializes: all of the classic renderer's state is model-derived.
+  void ReloadModel(const mjModel* model) override;
+
   // Renders the simulation and ux state. Renders into `pixels` if provided,
   // otherwise renders to the `native_window` provided at construction.
   void Render(const mjModel* model, mjData* data, const mjvPerturb* perturb,

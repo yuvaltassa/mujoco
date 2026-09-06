@@ -69,27 +69,7 @@ void FilamentRenderer::Init(const mjModel* model) {
                                                        : mjGRAPHICS_API_VULKAN;
     filament_context_ = CreateContext(cfg);
 
-    float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-    const int id = mj_name2id(model, mjOBJ_NUMERIC, "filament.clearColor");
-    if (id >= 0 && model->numeric_size[id] == 4) {
-      const mjtNum* ptr = model->numeric_data + model->numeric_adr[id];
-      for (int i = 0; i < 4; ++i) {
-        clear_color[i] = static_cast<float>(ptr[i]);
-      }
-    }
-    mjrf_setClearColor(filament_context_.get(), &clear_color[0]);
-
     main_scene_ = CreateScene(filament_context_.get(), {});
-    mjrf_configureSceneFromModel(main_scene_.get(), model);
-    model_objects_ =
-        std::make_unique<ModelObjects>(model, filament_context_.get());
-    model_lights_ =
-        std::make_unique<ModelLights>(main_scene_.get(), model_objects_.get());
-    model_renderables_ = std::make_unique<ModelRenderables>(
-        main_scene_.get(), model_objects_.get());
-    model_decorations_ = std::make_unique<ModelDecorations>(
-        filament_context_.get(), main_scene_.get(), model);
-
     ux_scene_ = CreateScene(filament_context_.get(), {});
     imgui_bridge_ =
         std::make_unique<ImguiBridge>(filament_context_.get(), ux_scene_.get());
@@ -99,21 +79,59 @@ void FilamentRenderer::Init(const mjModel* model) {
     config.color_format = mjPIXEL_FORMAT_RGB8;
     config.depth_format = mjPIXEL_FORMAT_DEPTH32F;
     render_target_ = CreateRenderTarget(filament_context_.get(), config);
+
+    LoadModel(model);
   }
+}
+
+void FilamentRenderer::ReloadModel(const mjModel* model) {
+  if (!filament_context_ || !model) {
+    Init(model);
+    return;
+  }
+  UnloadModel();
+  LoadModel(model);
 }
 
 void FilamentRenderer::Deinit() {
   if (filament_context_) {
-    model_objects_.reset();
-    model_lights_.reset();
-    model_renderables_.reset();
-    model_decorations_.reset();
+    UnloadModel();
     imgui_bridge_.reset();
     render_target_.reset();
     ux_scene_.reset();
     main_scene_.reset();
     filament_context_.reset();
   }
+}
+
+void FilamentRenderer::LoadModel(const mjModel* model) {
+  float clear_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+  const int id = mj_name2id(model, mjOBJ_NUMERIC, "filament.clearColor");
+  if (id >= 0 && model->numeric_size[id] == 4) {
+    const mjtNum* ptr = model->numeric_data + model->numeric_adr[id];
+    for (int i = 0; i < 4; ++i) {
+      clear_color[i] = static_cast<float>(ptr[i]);
+    }
+  }
+  mjrf_setClearColor(filament_context_.get(), &clear_color[0]);
+
+  mjrf_configureSceneFromModel(main_scene_.get(), model);
+  model_objects_ =
+      std::make_unique<ModelObjects>(model, filament_context_.get());
+  model_lights_ =
+      std::make_unique<ModelLights>(main_scene_.get(), model_objects_.get());
+  model_renderables_ = std::make_unique<ModelRenderables>(
+      main_scene_.get(), model_objects_.get());
+  model_decorations_ = std::make_unique<ModelDecorations>(
+      filament_context_.get(), main_scene_.get(), model);
+}
+
+void FilamentRenderer::UnloadModel() {
+  // Dependents first: lights and renderables refer to model_objects_.
+  model_decorations_.reset();
+  model_renderables_.reset();
+  model_lights_.reset();
+  model_objects_.reset();
 }
 
 void FilamentRenderer::Render(const mjModel* model, mjData* data,
