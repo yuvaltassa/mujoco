@@ -167,7 +167,17 @@ void FilamentRenderer::Render(const mjModel* model, mjData* data,
     perturb = &default_perturb;
   }
 
+  const mjrCamera gl_camera = mjv_camera2GLCamera(model, data, camera);
+
   model_lights_->Update(data);
+  // The headlight rides slightly behind the eye to avoid clipping artifacts.
+  if (mjrfLight* headlight = model_lights_->GetLight(model->nlight)) {
+    float pos[3];
+    for (int i = 0; i < 3; ++i) {
+      pos[i] = gl_camera.pos[i] - 0.05f * gl_camera.forward[i];
+    }
+    mjrf_setLightTransform(headlight, pos, gl_camera.forward);
+  }
   model_renderables_->Update(data);
 
   if (vis_option) {
@@ -189,8 +199,7 @@ void FilamentRenderer::Render(const mjModel* model, mjData* data,
   imgui_bridge_->Update();
 
   mjrfRenderRequest reqs[2];
-  BuildMainRenderRequest(&reqs[0], viewport,
-                         mjv_camera2GLCamera(model, data, camera));
+  BuildMainRenderRequest(&reqs[0], viewport, gl_camera);
   BuildUxRenderRequest(&reqs[1], viewport);
 
   mjrfFrameHandle frame = 0;
