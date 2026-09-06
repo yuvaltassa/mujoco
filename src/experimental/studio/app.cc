@@ -79,6 +79,20 @@ static void SelectParentPerturb(const mjModel* model, mjvPerturb& perturb) {
   // TODO: update selected element!
 }
 
+// Returns true if element belongs to spec. Compares pointers only, so it is
+// safe to call with an element that may have been deleted.
+static bool SpecHasElement(mjSpec* spec, const mjsElement* element) {
+  for (int type = mjOBJ_UNKNOWN + 1; type < mjNOBJECT; ++type) {
+    for (mjsElement* e = mjs_firstElement(spec, static_cast<mjtObj>(type));
+         e; e = mjs_nextElement(spec, e)) {
+      if (e == element) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 static std::string CheckPathForFile(const std::filesystem::path& path,
                                     const std::string& filename) {
   std::filesystem::path resolved = path / filename;
@@ -215,6 +229,7 @@ void App::Recompile() {
   }
   // The model was rebuilt in place: same pointer, reallocated arrays.
   renderer_->ReloadModel(model());
+  PruneSelections();
   const int state_size = mj_stateSize(model(), mjSTATE_INTEGRATION);
   sim_history_.Init(state_size);
   if (has_model() && has_data()) {
@@ -326,6 +341,10 @@ void App::OnModelLoaded(std::string filename, ModelKind model_kind) {
   timeline_.scrubber_active = false;
   timeline_.scrubber_grab_offset = 0.0f;
 
+  // The previous spec is gone, so its element cannot be selected anymore.
+  tmp_.curr_element = nullptr;
+  PruneSelections();
+
   if (!preserve_camera_on_load_) {
     const int model_cam = model->vis.global.cameraid;
     if (model_cam >= 0 && model_cam < model->ncam) {
@@ -355,6 +374,19 @@ void App::OnModelLoaded(std::string filename, ModelKind model_kind) {
   });
   tmp_.update_threadpool = true;
   last_pause_state_ = step_control_.GetPauseState();
+}
+
+void App::PruneSelections() {
+  // mjv_updateScene indexes the model with these without range checks.
+  if (!has_model() || perturb_.select >= model()->nbody ||
+      perturb_.flexselect >= model()->nflex ||
+      perturb_.skinselect >= model()->nskin) {
+    mjv_defaultPerturb(&perturb_);
+  }
+  if (tmp_.curr_element &&
+      !(has_spec() && SpecHasElement(spec(), tmp_.curr_element))) {
+    tmp_.curr_element = nullptr;
+  }
 }
 
 void App::UpdateFilePaths(const std::string& resolved_path) {

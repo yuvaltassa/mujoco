@@ -197,6 +197,9 @@ class App {
   // then compile the spec to a model.
   void OnModelLoaded(std::string filename, ModelKind model_kind);
 
+  // Clears selections that no longer refer to anything in the model or spec.
+  void PruneSelections();
+
   void SwitchGraphicsMode(int width, int height, GraphicsMode mode);
 
   void SetLoadError(std::string error);
