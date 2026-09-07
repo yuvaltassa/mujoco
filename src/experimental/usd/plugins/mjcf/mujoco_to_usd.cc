@@ -701,7 +701,6 @@ class ModelWriter {
         {MjcPhysicsTokens->mjcFlagSensor, mjDSBL_SENSOR},
         {MjcPhysicsTokens->mjcFlagMidphase, mjDSBL_MIDPHASE},
         {MjcPhysicsTokens->mjcFlagEulerdamp, mjDSBL_EULERDAMP},
-        {MjcPhysicsTokens->mjcFlagAutoreset, mjDSBL_AUTORESET},
         {MjcPhysicsTokens->mjcFlagNativeccd, mjDSBL_NATIVECCD},
         {MjcPhysicsTokens->mjcFlagIsland, mjDSBL_ISLAND},
         {MjcPhysicsTokens->mjcFlagMulticcd, mjDSBL_MULTICCD}};

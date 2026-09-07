@@ -169,7 +169,7 @@ To make the above discussion clearer, we provide the internal implementation of 
 
 .. code-block:: C
 
-   void mj_step(const mjModel* m, mjData* d) {
+   mjtStatus mj_step(const mjModel* m, mjData* d) {
      // common to all integrators
      mj_checkPos(m, d);
      mj_checkVel(m, d);
@@ -206,7 +206,7 @@ we have essentially unpacked the forward dynamics function. Note also that we al
 
 .. code-block:: C
 
-   void mj_step1(const mjModel* m, mjData* d) {
+   mjtStatus mj_step1(const mjModel* m, mjData* d) {
      mj_checkPos(m, d);
      mj_checkVel(m, d);
      mj_fwdPosition(m, d);
@@ -221,7 +221,7 @@ we have essentially unpacked the forward dynamics function. Note also that we al
        mjcb_control(m, d);
    }
 
-   void mj_step2(const mjModel* m, mjData* d) {
+   mjtStatus mj_step2(const mjModel* m, mjData* d) {
      mj_fwdActuation(m, d);
      mj_fwdAcceleration(m, d);
      mj_fwdConstraint(m, d);
@@ -452,7 +452,7 @@ skip arguments (mjSTAGE_NONE, 0), where the latter function is implemented as
 
 .. code-block:: C
 
-   void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
+   mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
      // position-dependent
      if (skipstage < mjSTAGE_POS) {
        mj_fwdPosition(m, d);
@@ -895,11 +895,67 @@ and :ref:`mj_stackAllocByte` is provided for allocation of arbitrary number of b
 Errors, warnings, logging
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-MuJoCo has a unified logging system for errors, warnings and informational messages. All log output is routed
-through a single callback of type :ref:`mjfLogHandler`, which receives a structured :ref:`mjLogMessage`
-containing the severity level, message text, and optional source location. Errors are fatal and terminate the
-program by default. Warnings indicate problematic but non-fatal conditions. Informational messages provide
-optional diagnostic output.
+MuJoCo reports problems through three distinct mechanisms, in decreasing order of severity:
+
+- **Errors** are fatal by contract: the engine cannot continue. Unless a handler intercepts control, the process
+  terminates.
+- **Simulation warnings** are recoverable runtime events that leave the physics impaired: divergence, dropped
+  contacts or constraints, zeroed controls, clamped inertia pivots. They are counted in ``mjData.warning``, returned
+  by pipeline functions as an :ref:`mjtStatus` bitmask, and the engine's response is selected by the
+  :ref:`onwarn<option-onwarn>` option.
+- **Log messages** are stateless text with a severity :ref:`level<mjtLogLevel>`, routed through a single
+  configurable handler. Here "warning" is a severity label, not an event.
+
+The first two are engine events; log messages are how they are reported: an error emits one error-level message
+before terminating, and each simulation warning emits one warning-level message when first triggered.
+
+.. _siErrors:
+
+Errors
+^^^^^^
+
+Errors are raised by :ref:`mju_error` when the engine encounters a condition it cannot recover from: invalid
+inputs, mis-sized models, exhausted stack memory, or internal inconsistencies. The error contract is that control
+does not return to the failing code path: the :ref:`default handler<siDefaultHandler>` terminates the process with
+``exit(EXIT_FAILURE)``, and a custom handler that intercepts errors must not return — it should ``longjmp`` to a
+previously established recovery point or otherwise transfer control before returning. This is how the model
+compiler and the Python bindings convert errors into exceptions. MuJoCo is written with the assumption that error
+handlers will not return; if they do, the behavior of the software is undefined.
+
+.. _siSimWarning:
+
+Simulation warnings
+^^^^^^^^^^^^^^^^^^^
+
+When the simulator detects a condition that is not a terminal error but leaves the physics impaired — a
+*simulation warning* — it applies a documented response and reports the event. There are several warning types,
+indexed by the enum type :ref:`mjtWarning`: divergence (invalid or unacceptably large values in ``qpos``, ``qvel``,
+``qacc`` or ``ctrl``), insufficient memory for contacts or constraints, and near-singular inertia. Simulation
+warnings are counted events with defined recovery, not merely messages: bad controls are zeroed, contacts and
+constraints that do not fit in memory are dropped, near-singular inertia pivots are clamped, and — under the
+default :ref:`onwarn<option-onwarn>` setting — a diverged state is reset. The :ref:`onwarn<option-onwarn>` option
+selects among three responses: :at-val:`auto` applies these recoveries and continues, :at-val:`continue` records
+the warning without resetting, and :at-val:`stop` makes the top-level call stop at the first warning, leaving
+``mjData`` valid up to the last completed pipeline stage, available for inspection.
+
+Simulation warnings are reported in three ways. First, every top-level pipeline function returns :ref:`mjtStatus`,
+a bitmask with one bit per warning type; 0 means the call completed unimpaired, and the most recent return value is
+also stored in ``mjData.status``. Second, the array ``mjData.warning`` accumulates per-type
+:ref:`statistics<siDiagnostics>`. Third, when a warning of a given type is first triggered, a warning-level
+:ref:`log message<siLogMessages>` is emitted. All this is done by the function :ref:`mj_warning` which the
+simulator calls internally when it encounters a warning; the user can also call this function directly to emulate a
+warning. There is deliberately no fatal mode: users who want one can escalate on a nonzero status, e.g.
+``if (mj_step(m, d)) mju_error(...)``.
+
+.. _siLogMessages:
+
+Log messages
+^^^^^^^^^^^^
+
+All of MuJoCo's text output — errors, warnings and informational messages — is routed through a single callback of
+type :ref:`mjfLogHandler`, which receives a structured :ref:`mjLogMessage` containing the severity level, message
+text, and optional source location. The following subsections describe the transport: installing a handler, the
+default handler and its configuration, opt-in informational messages, and integration with frameworks.
 
 .. _siLogHandler:
 
@@ -933,12 +989,8 @@ the default handler). The previous handler can be used in two ways:
   to preserve existing behavior. Conversely, handlers intended to intercept and recover from errors (e.g., via
   ``longjmp``) should not chain to the previous handler.
 
-When the handler is called with ``level == mjLOG_ERROR``, the error is always fatal: the :ref:`default handler
-<siDefaultHandler>` terminates the process with ``exit(EXIT_FAILURE)`` (unless a legacy error handler is installed).
-Handlers that wish to recover from errors (e.g., to throw a C++ exception or convert to a Python exception) must not
-return — they should ``longjmp`` to a previously established recovery point or otherwise transfer control before
-returning. This is how the compiler and Python bindings handle errors. MuJoCo is written with the assumption that
-error handlers will not return; if they do, the behavior of the software is undefined.
+When the handler is called with ``level == mjLOG_ERROR``, the :ref:`error contract<siErrors>` applies: the handler
+must transfer control and not return.
 
 .. warning::
    Log handlers must not call :ref:`mju_error` from within the callback; this will cause infinite recursion.
@@ -1082,14 +1134,11 @@ Diagnostics
 MuJoCo has several built-in diagnostics mechanisms that can be used to fine-tune the model. Their outputs are grouped
 in the diagnostics section at the beginning of mjData.
 
-When the simulator encounters a situation that is not a terminal error but is nevertheless suspicious and likely to
-result in inaccurate numerical results, it triggers a warning. There are several possible warning types, indexed by
-the enum type :ref:`mjtWarning`. The array ``mjData.warning`` contains one :ref:`mjWarningStat` data structure per
-warning type, indicating how many times each warning type has been triggered since the last reset and any information
-about the warning (usually the index of the problematic model element). The counters are cleared upon reset. When a
-warning of a given type is first triggered, the warning text is also printed by mju_warning as documented in
-:ref:`error and memory <siError>` above. All this is done by the function :ref:`mj_warning` which the simulator calls
-internally when it encounters a warning. The user can also call this function directly to emulate a warning.
+The first diagnostic is the :ref:`simulation warning<siSimWarning>` statistics: the array ``mjData.warning``
+contains one :ref:`mjWarningStat` data structure per warning type, indicating how many times each warning type has
+been triggered since the last reset and any information about the warning (usually the index of the problematic
+model element); the counters are cleared upon reset. The warning events themselves, their recovery and the
+:ref:`onwarn<option-onwarn>` policy are described in :ref:`Simulation warnings<siSimWarning>`.
 
 When a model needs to be optimized for high-speed simulation, it is important to know where in the pipeline the CPU
 time is spent. This can in turn suggest which parts of the model to simplify or how to design the user application.

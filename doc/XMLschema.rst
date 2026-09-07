@@ -96,6 +96,9 @@
             :ref:`ccd_iterations<option-ccd_iterations>`
 
          .. grid-item::
+            :ref:`onwarn<option-onwarn>`
+
+         .. grid-item::
             :ref:`sdf_iterations<option-sdf_iterations>`
 
          .. grid-item::
@@ -157,9 +160,6 @@
 
             .. grid-item::
                :ref:`eulerdamp<option-flag-eulerdamp>`
-
-            .. grid-item::
-               :ref:`autoreset<option-flag-autoreset>`
 
             .. grid-item::
                :ref:`nativeccd<option-flag-nativeccd>`

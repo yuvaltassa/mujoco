@@ -687,7 +687,7 @@ describe('MuJoCo WASM Bindings', () => {
       'Constraint',   'Equality',  'Frictionloss', 'Limit',     'Contact',
       'Spring',       'Damper',    'Gravity',      'Clampctrl', 'Warmstart',
       'Filterparent', 'Actuation', 'Refsafe',      'Sensor',    'Midphase',
-      'Eulerdamp',    'AutoReset', 'NativeCCD',    'Island',    'MultiCCD',
+      'Eulerdamp',    'NativeCCD', 'Island',       'MultiCCD',
     ]);
     expect(mujoco.mjRNDSTRING).toEqual([
       ['Shadow', '1', 'S'], ['Wireframe', '0', 'W'], ['Reflection', '1', 'R'],

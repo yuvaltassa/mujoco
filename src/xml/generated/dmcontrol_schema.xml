@@ -74,6 +74,7 @@
         <attribute name="ls_iterations" type="int" default="50" conflict_allowed="true" conflict_behavior="max"/>
         <attribute name="noslip_iterations" type="int" conflict_allowed="true" conflict_behavior="max"/>
         <attribute name="ccd_iterations" type="int" default="35" conflict_allowed="true" conflict_behavior="max"/>
+        <attribute name="onwarn" type="keyword" valid_values="auto continue stop" default="auto"/>
         <attribute name="sdf_iterations" type="int" default="10" conflict_allowed="true" conflict_behavior="max"/>
         <attribute name="sdf_initpoints" type="int" default="40" conflict_allowed="true" conflict_behavior="max"/>
         <attribute name="actuatorgroupdisable" type="array" array_type="int"/>
@@ -97,7 +98,6 @@
             <attribute name="sensor" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="midphase" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="eulerdamp" type="keyword" valid_values="disable enable" default="enable"/>
-            <attribute name="autoreset" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="nativeccd" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="island" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="multiccd" type="keyword" valid_values="disable enable" default="enable"/>

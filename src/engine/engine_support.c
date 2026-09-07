@@ -64,7 +64,6 @@ const char* mjDISABLESTRING[mjNDISABLE] = {
   "Sensor",
   "Midphase",
   "Eulerdamp",
-  "AutoReset",
   "NativeCCD",
   "Island",
   "MultiCCD"

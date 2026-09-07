@@ -537,10 +537,34 @@ These values are used by the solver internally to keep track of the constraint s
 mjtWarning
 ~~~~~~~~~~
 
-Warning types. The number of warning types is given by ``mjNWARNING`` which is also the length of the array
-``mjData.warning``.
+:ref:`Simulation warning<siDiagnostics>` types. The number of warning types is given by ``mjNWARNING`` which is also
+the length of the array ``mjData.warning``.
 
 .. mujoco-include:: mjtWarning
+
+
+.. _mjtStatus:
+
+mjtStatus
+~~~~~~~~~
+
+Status bitmask returned by the top-level pipeline functions (:ref:`mj_step` and related), reporting which
+:ref:`simulation warnings<siDiagnostics>` occurred during the call. The value 0 (``mjSTATUS_OK``) means nothing
+happened; each set bit corresponds to a :ref:`mjtWarning` value. The status of the most recently completed top-level
+call is also stored in ``mjData.status``. In :ref:`onwarn<option-onwarn>` mode :at-val:`stop` exactly one bit is set;
+in the other modes several bits may accumulate in one call. Per-warning details remain in ``mjData.warning``.
+
+.. mujoco-include:: mjtStatus
+
+
+.. _mjtOnWarn:
+
+mjtOnWarn
+~~~~~~~~~
+
+Response to :ref:`simulation warnings<siDiagnostics>`, set by the :ref:`onwarn<option-onwarn>` option.
+
+.. mujoco-include:: mjtOnWarn
 
 
 .. _mjtTimer:
