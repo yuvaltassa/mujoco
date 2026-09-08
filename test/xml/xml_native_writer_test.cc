@@ -21,6 +21,7 @@
 
 #include <array>
 #include <clocale>
+#include <cmath>
 #include <cstdio>
 #include <string>
 
@@ -30,11 +31,13 @@
 #include <mujoco/mjtype.h>
 #include <mujoco/mujoco.h>
 #include "src/xml/xml_numeric_format.h"
+#include "test/compare_model.h"
 #include "test/fixture.h"
 
 namespace mujoco {
 namespace {
 
+using ::testing::DoubleNear;
 using ::testing::ElementsAre;
 using ::testing::FloatEq;
 using ::testing::HasSubstr;
@@ -779,20 +782,22 @@ TEST_F(XMLWriterTest, WritesFrameDefaults) {
 
   <worldbody>
     <body name="body">
-      <frame name="f2" childclass="dframe">
-        <geom pos="0 2 0"/>
-        <frame name="f3" childclass="dframe">
-          <frame childclass="dframe">
-            <body pos="1 3 0">
+      <frame name="f2" childclass="dframe" pos="0 1 0">
+        <geom pos="0 1 0"/>
+        <frame name="f3" childclass="dframe" pos="0 1 0">
+          <frame childclass="dframe" pos="0 1 0">
+            <body pos="1 0 0">
               <geom pos="0 0 1"/>
             </body>
           </frame>
         </frame>
       </frame>
-      <light pos="0 0 1"/>
+      <frame>
+        <light pos="0 0 1"/>
+      </frame>
     </body>
-    <frame name="f1">
-      <geom size="0.5" quat="0.906308 0 0 0.422618"/>
+    <frame name="f1" quat="0.965926 0 0 0.258819">
+      <geom size="0.5" quat="0.984808 0 0 0.173648"/>
     </frame>
   </worldbody>
 </mujoco>
@@ -803,6 +808,67 @@ TEST_F(XMLWriterTest, WritesFrameDefaults) {
   EXPECT_THAT(model.get(), NotNull()) << error.data();
   std::string saved_xml = SaveAndReadXml(model.get());
   EXPECT_STREQ(saved_xml.c_str(), xml_expected);
+}
+
+// frames survive save/load with their authored pose, every element type under
+// them is written frame-relative, and the compiled model is unchanged
+TEST_F(XMLWriterTest, FramesRoundTrip) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <asset>
+      <mesh name="tetra" vertex="0 0 0  1 0 0  0 1 0  0 0 1"/>
+    </asset>
+    <worldbody>
+      <frame name="f1" pos="1 2 3" euler="0 0 90">
+        <geom name="ball" size=".1" pos=".1 .2 .3" euler="30 0 0"/>
+        <geom name="mesh" type="mesh" mesh="tetra" pos=".1 0 0" euler="0 30 0"/>
+        <site name="site" pos="0 .1 0" euler="0 45 0"/>
+        <camera name="cam" pos="0 0 1" euler="0 0 45"/>
+        <light name="light" pos="0 0 2" dir="1 0 -1"/>
+        <frame pos="0 0 1" euler="90 0 0">
+          <body name="b1" pos="1 0 0" euler="0 90 0">
+            <joint name="hinge" pos=".1 .2 .3" axis="0 1 0"/>
+            <geom size=".1"/>
+            <body name="b2" pos="0 1 0">
+              <joint name="slide" type="slide" axis="1 0 0"/>
+              <geom size=".1"/>
+            </body>
+          </body>
+        </frame>
+      </frame>
+    </worldbody>
+  </mujoco>
+  )";
+
+  FullFloatPrecision increase_precision;
+  std::array<char, 1024> error;
+  mjSpec* spec = mj_parseXMLString(xml, nullptr, error.data(), error.size());
+  ASSERT_THAT(spec, NotNull()) << error.data();
+  mjModel* model = mj_compile(spec, nullptr);
+  ASSERT_THAT(model, NotNull());
+
+  // save and reload
+  std::string saved = SaveAndReadXml(spec);
+  mjSpec* spec2 = mj_parseXMLString(saved.c_str(), nullptr, error.data(), error.size());
+  ASSERT_THAT(spec2, NotNull()) << error.data() << "\n" << saved;
+  mjModel* model2 = mj_compile(spec2, nullptr);
+  ASSERT_THAT(model2, NotNull());
+
+  // the frame is still there with its authored pose
+  mjsFrame* f1 = mjs_findFrame(spec2, "f1");
+  ASSERT_THAT(f1, NotNull());
+  EXPECT_THAT(f1->pos, ElementsAre(1, 2, 3));
+  EXPECT_THAT(f1->quat, ElementsAre(DoubleNear(std::sqrt(0.5), 1e-12), 0, 0,
+                                    DoubleNear(std::sqrt(0.5), 1e-12)));
+
+  // the compiled model is unchanged
+  std::string field;
+  EXPECT_LT(CompareModel(model, model2, field), MjTol(1e-12, 1e-6)) << field;
+
+  mj_deleteModel(model2);
+  mj_deleteSpec(spec2);
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
 }
 
 TEST_F(XMLWriterTest, WritesDensity) {

@@ -654,6 +654,7 @@ class mjCFrame : public mjCFrame_, private mjsFrame {
   friend class mjCCamera;
   friend class mjCLight;
   friend class mjCModel;
+  friend class mjXWriter;
 
  public:
   mjCFrame(mjCModel* = 0, mjCFrame* = 0);
