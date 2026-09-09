@@ -1051,6 +1051,7 @@
     X( size_t,    pbase              ) \
     X( size_t,    parena             ) \
     X( uintptr_t, threadpool         ) \
+    X( mjtBool,   threadlock         ) \
     X( size_t,    maxuse_stack       ) \
     X( size_t,    maxuse_arena       ) \
     X( int,       maxuse_con         ) \
