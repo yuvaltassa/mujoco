@@ -270,6 +270,79 @@ In every option errors are the negative values of the same scalar that carries w
 one field is the aggregate, which is what keeps `mjOK` a trivial macro rather than a real
 accessor.
 
+## Where does an error land? A survey of exit points
+
+The noexit doc's boundary "writes `d->status`" — which assumes an `mjData` in scope.
+Warnings never tested that assumption, because `mj_warning` takes `mjData` by construction.
+Errors do not. A survey of every `mjERROR`/`mju_error` site in `src/engine`:
+
+| enclosing function has | sites |
+|---|---|
+| `mjData` | 161 (65%) |
+| `mjModel` only | 36 |
+| neither | 49 |
+
+So no — 85 of 246 sites sit in functions with no `mjData`. But the leaf-level count
+overstates the problem, because of one fact:
+
+**The sink is a property of the boundary, not the leaf.** Errors unwind by `longjmp` to the
+outermost public entry. Most data-less *leaves* are helpers reached from d-bearing entries:
+`mj_checkDiscrete` from `mj_step1`, `mju_factorLUSparse` from `mj_implicitSkip`,
+`mju_makeFrame` from collision, `mj_wakeIsland`/`mj_dsuMerge` from the island and sleep
+machinery inside the step, `computeY_fill` from `mj_projectConstraint`. The boundary that
+catches them has `d` and writes `d->status`. Only **18 of the 37** data-less
+public-or-internal functions are actual `mujoco.h` entry points, and those split cleanly by
+what their messages say:
+
+| class | entry points | sites | messages |
+|---|---|---|---|
+| creators / OOM | `mju_malloc`, `mjv_makeScene` | 4 | "Could not allocate memory"; "could not allocate geom / flex / skin buffers" |
+| argument validation | `mj_copyModel`, `mjv_copyModel`, `mj_stateSize`, `mj_extractState`, `mju_euler2Quat`, `mju_rayGeom`, `mjv_connector`, eight `mjv_` camera/interaction functions | ~20 | "different buffer size"; "invalid state signature"; "seq must contain exactly 3 characters"; "unexpected action"; "cannot average perspective and orthographic cameras"; "unknown camera type" |
+
+**Zero of the 18 are runtime physics failures.** Every divergence, singular factorization,
+capacity exhaustion and degenerate-geometry failure in the engine lives under a d-bearing
+boundary. That is the reassuring finding.
+
+**The sink taxonomy that follows.**
+
+- **`mjData`** — every pipeline and data-bearing entry, and everything transitively under
+  it. All runtime physics failures. This is what noexit phase 1 covers and what `d->status`,
+  `mjOK` and `mjCHECK` are for.
+- **NULL return** — creators. `mju_malloc`, `mj_makeData`, `mj_copyData` return pointers;
+  `mj_loadXML`/`mj_loadModel` *already* return NULL on failure with the message through the
+  handler. noexit for creators is "return NULL instead of exit": the existing idiom made
+  universal, no new mechanism.
+- **Argument validation in data-less utilities** — programmer errors: "you called us wrong."
+  Two defensible policies. **(a) Stay fatal.** Never-exit is about the process surviving
+  *runtime failures*, not surviving the caller's bugs; an assert is the right response, and
+  Python still gets `FatalError` through the handler exactly as today. **(b)** A thread-local
+  `mju_lastStatus()` sink, so even these are catchable. Proposed: (a) for phase 1 — honest
+  scope, no fourth mechanism — with (b) available as an escalation if anyone ever needs to
+  catch `mjv_moveCamera("unexpected action")`, which nobody does. (The thread-local errno
+  dismissed earlier for *status* is exactly the right tool here, for the one class of errors
+  that owns no data.)
+
+**Consequences for NOEXIT_DESIGN.md** (to fold in once we converge): the `mjENTRY(d)`
+boundary is for d-bearing entries, so Saran's test becomes "every fallible **d-bearing**
+MJAPI function has it" — a smaller, more precise set than "every function returning
+`mjtStatus`"; creators get NULL paths; and the doc needs the sentence "the sink is a property
+of the boundary, not the leaf."
+
+**Two things the survey exposed, out of scope but worth logging.**
+
+1. `mju_factorLUSparse` "diagonal element too small" under the `implicit` integrator is
+   **fatal**, while the same singularity in `qH` under `implicitfast` is now an INERTIA
+   **warning** (clamped). onwarn created an asymmetry between sibling integrators. The LU
+   path is reached from `mj_implicitSkip` with `d` in scope and could warn instead.
+2. `mj_checkDiscrete` raises six option-validation errors at `mj_step1` — *every step*. They
+   are compile-time facts doing duty at runtime; under noexit they would poison the data on
+   each step. They belong at model compile or `mj_makeData`.
+
+**Does it bear on the main question?** No — neutrally. The data-less residue is creators
+(NULL) and validation (fatal or TLS), and neither the return-canonical nor the field-canonical
+design touches those: nobody proposes converting `mju_` signatures to return codes, so A and B
+share the identical residue. The survey scopes noexit; it does not reopen A vs B.
+
 ## The representation of `mjtStatus`: bitmask or signed status code?
 
 The onwarn design chose a bitmask (`1 << mjtWarning`, sign bit reserved for "error") over a
@@ -406,7 +479,7 @@ self-documenting failure check earns its keep. **D and E are dominated.**
    `d->status` — even under B where it leaves the signatures.
 5. *Resolved*: noexit uses Saran's single-outermost-boundary + in-body macro (no generated
    wrappers), merged with the clear-at-entry into one `mjENTRY(d)`, with one test asserting
-   every fallible entry has it.
+   every fallible **d-bearing** entry has it (the exit-point survey narrows the set).
 6. *Relitigated → proposed*: `mjtStatus` is a **signed status code**, not a bitmask (section
    above): zero OK, positive warning kinds, negative error kinds; warnings keep-first, errors
    overwrite; the counters remain the full record. Confirm the rule and the switch away from
@@ -415,3 +488,11 @@ self-documenting failure check earns its keep. **D and E are dominated.**
    fold GEOMETRY into INPUT? And their relationship to the noexit taxonomy (validation /
    exhaustion / invariant): INPUT+GEOMETRY ↔ validation, STACK+ARENA ↔ exhaustion,
    INTERNAL ↔ invariant.
+8. *New, from the exit-point survey*: policy for argument-validation errors in data-less
+   public utilities (~14 `mujoco.h` entries, all `mjv_`/`mju_`/copy/state functions) — stay
+   fatal as programmer errors (proposed for phase 1) vs a thread-local `mju_lastStatus()`
+   sink. Creators are settled: NULL return, the existing loader idiom.
+9. *Follow-ups logged by the survey, out of scope*: (a) `mju_factorLUSparse` singularity is
+   fatal under `implicit` while the same condition warns under `implicitfast` — make the LU
+   path an INERTIA warning; (b) `mj_checkDiscrete`'s six per-step option-validation errors
+   belong at compile / `mj_makeData`, not in `mj_step1`.
