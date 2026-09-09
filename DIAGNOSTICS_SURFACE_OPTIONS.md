@@ -334,9 +334,11 @@ of the boundary, not the leaf."
    **fatal**, while the same singularity in `qH` under `implicitfast` is now an INERTIA
    **warning** (clamped). onwarn created an asymmetry between sibling integrators. The LU
    path is reached from `mj_implicitSkip` with `d` in scope and could warn instead.
-2. `mj_checkDiscrete` raises six option-validation errors at `mj_step1` — *every step*. They
-   are compile-time facts doing duty at runtime; under noexit they would poison the data on
-   each step. They belong at model compile or `mj_makeData`.
+2. `mj_checkDiscrete` raises six option-validation errors at `mj_step1` — *every step*. That
+   is correct, not a smell: `mjOption` is user-modifiable at runtime, so the check cannot move
+   to compile time. Under noexit they are INPUT-class errors caught at a d-bearing boundary
+   and report as such; a caller who flips an unsupported option mid-run gets a poisoned step
+   until they fix it, which is the right behavior.
 
 **Does it bear on the main question?** No — neutrally. The data-less residue is creators
 (NULL) and validation (fatal or TLS), and neither the return-canonical nor the field-canonical
@@ -492,7 +494,7 @@ self-documenting failure check earns its keep. **D and E are dominated.**
    public utilities (~14 `mujoco.h` entries, all `mjv_`/`mju_`/copy/state functions) — stay
    fatal as programmer errors (proposed for phase 1) vs a thread-local `mju_lastStatus()`
    sink. Creators are settled: NULL return, the existing loader idiom.
-9. *Follow-ups logged by the survey, out of scope*: (a) `mju_factorLUSparse` singularity is
-   fatal under `implicit` while the same condition warns under `implicitfast` — make the LU
-   path an INERTIA warning; (b) `mj_checkDiscrete`'s six per-step option-validation errors
-   belong at compile / `mj_makeData`, not in `mj_step1`.
+9. *Follow-up logged by the survey, out of scope — confirmed as a fix*: `mju_factorLUSparse`
+   singularity is fatal under `implicit` while the same condition warns under `implicitfast`;
+   make the LU path an INERTIA warning. (The `mj_checkDiscrete` per-step check is correct as
+   is — `mjOption` is runtime-modifiable — and is not a follow-up.)
