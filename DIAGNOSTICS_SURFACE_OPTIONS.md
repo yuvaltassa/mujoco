@@ -4,6 +4,10 @@
 noexit follow-up (PR #8) are **one point** in this space; this steps back to the motivation
 and the user experience and lays out the alternatives, including Saran's `mjCHECK`.*
 
+*Outcome: Option B implemented on branch `mjok` (two commits on top of `onwarn`: the
+field-canonical revision, and the `mju_factorLUSparse` fix from Q9); `ONWARN_DESIGN.md`
+there records the revision.*
+
 ## What we are actually deciding
 
 Separate two questions that the onwarn PR currently answers together:
