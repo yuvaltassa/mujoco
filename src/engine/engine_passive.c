@@ -1045,6 +1045,7 @@ int mj_adhesion(const mjModel* m, mjData* d) {
 
 // all passive forces
 void mj_passive(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
   int nv = sleep_filter ? d->nv_awake : m->nv;
   const int* dof_awake_ind = sleep_filter ? d->dof_awake_ind : NULL;
@@ -1068,6 +1069,7 @@ void mj_passive(const mjModel* m, mjData* d) {
 
   // both spring and damping disabled: skip all passive forces
   if (mjDISABLED(mjDSBL_SPRING) && mjDISABLED(mjDSBL_DAMPER)) {
+    mjLEAVE(d);
     return;
   }
 
@@ -1123,7 +1125,7 @@ void mj_passive(const mjModel* m, mjData* d) {
 
   // user callback: add custom passive forces
   if (mjcb_passive) {
-    mjcb_passive(m, d);
+    mjCALLBACK(mjcb_passive(m, d));
   }
 
   // plugin: add custom passive forces
@@ -1132,6 +1134,11 @@ void mj_passive(const mjModel* m, mjData* d) {
 
     // iterate over plugins, call compute if type is mjPLUGIN_PASSIVE
     for (int i=0; i < m->nplugin; i++) {
+      // a callback in this loop can abandon the call: run nothing further on the data
+      if (mji_stop(m, d)) {
+        break;
+      }
+
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
@@ -1141,10 +1148,11 @@ void mj_passive(const mjModel* m, mjData* d) {
         if (!plugin->compute) {
           mjERROR("`compute` is a null function pointer for plugin at slot %d", slot);
         }
-        plugin->compute(m, d, i, mjPLUGIN_PASSIVE);
+        mjCALLBACK(plugin->compute(m, d, i, mjPLUGIN_PASSIVE));
       }
     }
   }
+  mjLEAVE(d);
 }
 
 

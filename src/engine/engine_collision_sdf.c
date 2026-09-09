@@ -1117,7 +1117,7 @@ int mjc_SDF(const mjModel* m, mjData* d, mjPreContact* con, int g1, int g2, mjtN
 
   // reset visualization count
   if (sdf_ptr[0]) {
-    sdf_ptr[0]->reset(m, NULL, (void*)(d->plugin_data[instance[0]]), instance[0]);
+    mjCALLBACK(sdf_ptr[0]->reset(m, NULL, (void*)(d->plugin_data[instance[0]]), instance[0]));
   }
 
   // copy into sdf
@@ -1153,7 +1153,7 @@ int mjc_SDF(const mjModel* m, mjData* d, mjPreContact* con, int g1, int g2, mjtN
 
     // start counters
     if (sdf_ptr[0]) {
-      sdf_ptr[0]->compute(m, d, instance[0], mjPLUGIN_SDF);
+      mjCALLBACK(sdf_ptr[0]->compute(m, d, instance[0], mjPLUGIN_SDF));
     }
 
     // gradient descent - we use a special function of the two SDF as objective

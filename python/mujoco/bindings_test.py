@@ -631,6 +631,71 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
     self.assertEqual(self.data.warning[mujoco.mjtWarning.mjWARN_BADQPOS].number, 1)
 
+  def test_mj_step_zero_steps_keeps_a_pending_error(self):
+    self.model.opt.integrator = 99
+    with self.assertRaises(mujoco.FatalError):
+      mujoco.mj_step(self.model, self.data)
+    self.assertLess(self.data.status, 0)
+
+    # no call is made, so the pending error stands and stepping stays refused
+    self.model.opt.integrator = mujoco.mjtIntegrator.mjINT_EULER
+    mujoco.mj_step(self.model, self.data, nstep=0)
+    self.assertLess(self.data.status, 0)
+    with self.assertRaisesRegex(mujoco.FatalError, 'pending error'):
+      mujoco.mj_step(self.model, self.data)
+    mujoco.mj_resetData(self.model, self.data)
+
+  def test_fatal_error_recovers_the_data(self):
+    self.model.opt.integrator = 99
+    with self.assertRaisesRegex(mujoco.FatalError, 'invalid integrator'):
+      mujoco.mj_step(self.model, self.data)
+
+    # the call was abandoned at its boundary: stack restored, error pending
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_ERROR)
+    self.assertEqual(mujoco.mjtStatus.mjSTATUS_ERROR, -1)
+    self.assertEqual(mujoco.mjtStatus.mjSTATUS_OOM, -2)
+    self.assertEqual(self.data.pstack, 0)
+    self.assertEqual(self.data.time, 0)
+
+    # the data refuses pipeline calls until reset
+    self.model.opt.integrator = mujoco.mjtIntegrator.mjINT_EULER
+    with self.assertRaisesRegex(mujoco.FatalError, 'pending error'):
+      mujoco.mj_step(self.model, self.data)
+    mujoco.mj_resetData(self.model, self.data)
+    self.assertEqual(self.data.status, 0)
+    mujoco.mj_step(self.model, self.data)
+    self.assertGreater(self.data.time, 0)
+
+  def test_mj_step_nstep_error_takes_precedence(self):
+    # a warning on the first step, an error raised during the second: the error is reported
+    # and the loop stops
+    calls = []
+    def control(m, d):
+      calls.append(d.time)
+      if len(calls) == 2:
+        m.opt.integrator = 99
+    self.data.qpos[0] = float('nan')
+    with temporary_callback(mujoco.set_mjcb_control, control):
+      with self.assertRaisesRegex(mujoco.FatalError, 'invalid integrator'):
+        mujoco.mj_step(self.model, self.data, nstep=4)
+    self.assertLess(self.data.status, 0)
+    self.assertEqual(len(calls), 2)
+
+  def test_mj_step_nstep_interrupt(self):
+    # an exception in a callback ends the loop, the data is not poisoned
+    calls = []
+    def control(m, d):
+      calls.append(d.time)
+      raise RuntimeError('stop stepping')
+    with temporary_callback(mujoco.set_mjcb_control, control):
+      with self.assertRaisesRegex(RuntimeError, 'stop stepping'):
+        mujoco.mj_step(self.model, self.data, nstep=4)
+    self.assertEqual(len(calls), 1)
+    self.assertEqual(self.data.time, 0)
+    self.assertEqual(self.data.status, 0)
+    mujoco.mj_step(self.model, self.data)
+    self.assertGreater(self.data.time, 0)
+
   def test_mj_step(self):
     displacement = 0.25
     self.data.qpos[2] += displacement

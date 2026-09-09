@@ -162,8 +162,8 @@ StepControl::Status StepControl::Advance(mjModel* m, mjData* d) {
     }
     mj_step(m, d);
 
-    // Stop stepping if the step stopped at a simulation warning.
-    if (m->opt.onwarn == mjONWARN_STOP && d->status > 0) {
+    // Stop stepping if the step failed, or stopped at a simulation warning.
+    if (d->status < 0 || (m->opt.onwarn == mjONWARN_STOP && d->status > 0)) {
       SetPauseState(PauseState::kNormalPaused);
       return Status::kDiverged;
     }

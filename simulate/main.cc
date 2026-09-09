@@ -193,8 +193,14 @@ void scanPluginLibraries() {
 
 //------------------------------------------- simulation -------------------------------------------
 
-// message of the simulation warning that stopped the step, or should stop the stepping; else NULL
+// message of the error or simulation warning that stopped the step, or should stop the
+// stepping; else NULL
 const char* Diverged(const mjModel* m, const mjData* d) {
+  // error: the data cannot be used until reset
+  if (d->status < 0) {
+    return "Error in mj_step, see the error message; reset to continue";
+  }
+
   // stop policy: the step stopped at a warning
   if (m->opt.onwarn == mjONWARN_STOP && d->status > 0) {
     return mju_warningText(d->status - 1, d->warning[d->status - 1].lastinfo);

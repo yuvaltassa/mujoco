@@ -488,5 +488,47 @@ TEST_F(OnWarnTest, XmlOnwarnAndRemovedAutoreset) {
   EXPECT_THAT(error, HasSubstr("autoreset"));
 }
 
+// under the stop policy, the finite-difference drivers stop perturbing after
+// the first warning instead of running every column on data the warning
+// abandoned
+int g_fd_calls = 0;
+int g_fd_calls_after = 0;
+
+TEST_F(OnWarnTest, StopEndsFiniteDifferencing) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <option onwarn="stop"/>
+    <worldbody><body><joint name="j" type="slide"/><geom size=".1"/></body></worldbody>
+    <actuator><motor joint="j"/></actuator>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+  g_fd_calls = g_fd_calls_after = 0;
+  mock_warning_handler.ExpectWarnings("Nan, Inf or huge value in CTRL");
+
+  struct Guard {
+    Guard() {
+      prev_ = mjcb_control;
+      mjcb_control = +[](const mjModel* m, mjData* d) {
+        g_fd_calls++;
+        if (d->status != mjSTATUS_OK) g_fd_calls_after++;
+        d->ctrl[0] = std::numeric_limits<mjtNum>::quiet_NaN();
+      };
+    }
+    ~Guard() { mjcb_control = prev_; }
+    mjfGeneric prev_;
+  } guard;
+
+  mjtNum A[4] = {0}, B[2] = {0};
+  mjd_transitionFD(model.get(), data.get(), 1e-6, 1, A, B, nullptr, nullptr);
+  EXPECT_EQ(data->status, mjSTATUS_BADCTRL);
+  EXPECT_EQ(g_fd_calls, 1);
+  EXPECT_EQ(g_fd_calls_after, 0);
+  EXPECT_EQ(data->pstack, 0);
+}
+
 }  // namespace
 }  // namespace mujoco

@@ -24,6 +24,11 @@
 extern "C" {
 MJAPI mjfLogHandler _mjPRIVATE_setTlsLogHandler(mjfLogHandler handler);
 MJAPI mjfLogHandler _mjPRIVATE_getGlobalLogHandler(void);
+MJAPI int _mjPRIVATE__hasBoundary(void);
+MJAPI void _mjPRIVATE__interrupt(void);
+MJAPI int _mjPRIVATE__takeInterrupt(void);
+MJAPI int _mjPRIVATE__interrupted(void);
+MJAPI const char* _mjPRIVATE__lastError(void);
 MJAPI void* mj_arenaAllocByte(mjData* d, int bytes, int alignment);
 }
 

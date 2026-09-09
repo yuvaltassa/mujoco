@@ -443,22 +443,26 @@ Once the context is created, users can follow MuJoCo's standard rendering, for e
 Error handling
 --------------
 
-MuJoCo reports irrecoverable errors via the :ref:`mju_error` mechanism, which immediately terminates the entire process.
-Users are permitted to install a custom error handler via the :ref:`mju_user_error` callback, but it too is expected
-to terminate the process, otherwise the behavior of MuJoCo after the callback returns is undefined. In actuality, it is
-sufficient to ensure that error callbacks do not return *to MuJoCo*, but it is permitted to use
-`longjmp <https://en.cppreference.com/w/c/program/longjmp>`__ to skip MuJoCo's call stack back to the external callsite.
+MuJoCo errors reach Python as exceptions of type ``mujoco.FatalError``, which are caught and processed in the usual
+Pythonic way. An error raised inside a :ref:`pipeline call<siErrors>` is recovered by the engine at the boundary of
+the call, and the exception is raised when the call returns. Reset the affected ``MjData`` before using it again:
 
-The Python bindings utilizes longjmp to allow it to convert irrecoverable MuJoCo errors into Python exceptions of type
-``mujoco.FatalError`` that can be caught and processed in the usual Pythonic way. Furthermore, it installs its error
-callback in a thread-local manner using a currently private API, thus allowing for concurrent calls into MuJoCo from
-multiple threads.
+.. code-block:: python
 
-Recoverable :ref:`simulation warnings<siSimWarning>` do not raise exceptions: after ``mujoco.mj_step`` and the
-related pipeline functions, ``data.status`` holds the :ref:`mjtStatus` of the call, ``mjSTATUS_OK`` (0) when it
-completed unimpaired. Together with the :ref:`onwarn<option-onwarn>` option this permits explicit handling, e.g.
-``mujoco.mj_step(m, d); if d.status: reset()``. With the ``nstep`` argument, ``mujoco.mj_step`` reports the first
-warning of all the steps taken.
+   try:
+     mujoco.mj_step(model, data)
+   except mujoco.FatalError:
+     mujoco.mj_resetData(model, data)
+
+:ref:`Simulation warnings<siSimWarning>` do not raise. After ``mujoco.mj_step`` and the related pipeline functions,
+``data.status`` holds the :ref:`mjtStatus` of the call, ``mjSTATUS_OK`` (0) when no warning or error was recorded.
+Together with the :ref:`onwarn<option-onwarn>` option this permits explicit handling. With the ``nstep`` argument,
+``mujoco.mj_step`` reports the first warning of all the steps taken.
+
+.. note::
+   Errors raised outside a pipeline call, in the model loaders for example, are unwound with
+   `longjmp <https://en.cppreference.com/w/c/program/longjmp>`__ instead. The handler is installed thread-locally
+   through a currently private API, so several threads can call into MuJoCo concurrently.
 
 .. _PyCallbacks:
 

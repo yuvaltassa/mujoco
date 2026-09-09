@@ -107,6 +107,11 @@ class ErrorBase : public pybind11::builtin_exception {
 static thread_local std::jmp_buf mju_error_jmp_buf;
 static thread_local std::array<char, 2048> mju_error_msg{0};
 
+// An error raised inside a pipeline call is recovered by MuJoCo at the boundary
+// of the call, which restores the mjData and returns; the handler then only
+// records the message and WrapFunc raises after the call returns.
+static thread_local bool mju_error_pending = false;
+
 // The handler to forward non-error messages to.  Set by WrapFunc before each
 // call into MuJoCo C code, pointing to either the previously installed TLS
 // handler or the active global handler.
@@ -128,6 +133,10 @@ static inline void MjErrorHandler(const mjLogMessage* msg) {
   } else {
     std::snprintf(mju_error_msg.data(), mju_error_msg.size(), "%s",
                   msg->subject);
+  }
+  if (_mjPRIVATE__hasBoundary()) {
+    mju_error_pending = true;
+    return;
   }
   std::longjmp(mju_error_jmp_buf, 1);
 }
@@ -160,43 +169,57 @@ struct MjErrorIntercepter {
       //   If replacing of std::longjmp with `throw` and setjmp with `catch`
       //   would execute a non-trivial destructor for any automatic object, the
       //   behavior of such std::longjmp is undefined.
+      mju_error_pending = false;
       if (setjmp(mju_error_jmp_buf) == 0) {
         if constexpr (std::is_void_v<decltype(callable(args...))>) {
           callable(args...);
           mju_forward_handler = old_forward;
           _mjPRIVATE_setTlsLogHandler(prev_handler);
+          if (_mjPRIVATE__takeInterrupt() || mju_error_pending) {
+            mju_error_pending = false;
+            ThrowError();
+          }
         } else {
           auto ret = callable(args...);
           static_assert(std::is_trivially_destructible_v<decltype(ret)>);
           mju_forward_handler = old_forward;
           _mjPRIVATE_setTlsLogHandler(prev_handler);
+          if (_mjPRIVATE__takeInterrupt() || mju_error_pending) {
+            mju_error_pending = false;
+            ThrowError();
+          }
           return ret;
         }
       } else {
         // This branch is entered via a longjmp back from our mju_error handler.
         mju_forward_handler = old_forward;
         _mjPRIVATE_setTlsLogHandler(prev_handler);
-        {
-          // Check if a Python callback has thrown an exception.
-          // We cannot use a py::gil_scoped_acquire here: on Windows its
-          // destructor isn't triggered before pybind returns control to the
-          // interpreter.
-          auto gil = PyGILState_Ensure();
-          if (PyErr_Occurred()) {
-            // We must hold the GIL when we create the py::error_already_set,
-            // since its constructor calls PyErr_Fetch.
-            pybind11::error_already_set err;
-
-            // But the GIL must be released before we throw, otherwise a
-            // deadlock ensues!
-            PyGILState_Release(gil);
-            throw err;
-          }
-          PyGILState_Release(gil);
-        }
-        throw InterceptAsType(std::string(mju_error_msg.data()));
+        ThrowError();
       }
     };
+  }
+
+  // Throws the recorded error, or the exception a Python callback has raised.
+  [[noreturn]] static void ThrowError() {
+    {
+      // Check if a Python callback has thrown an exception.
+      // We cannot use a py::gil_scoped_acquire here: on Windows its
+      // destructor isn't triggered before pybind returns control to the
+      // interpreter.
+      auto gil = PyGILState_Ensure();
+      if (PyErr_Occurred()) {
+        // We must hold the GIL when we create the py::error_already_set,
+        // since its constructor calls PyErr_Fetch.
+        pybind11::error_already_set err;
+
+        // But the GIL must be released before we throw, otherwise a
+        // deadlock ensues!
+        PyGILState_Release(gil);
+        throw err;
+      }
+      PyGILState_Release(gil);
+    }
+    throw InterceptAsType(std::string(mju_error_msg.data()));
   }
 };
 }  // namespace _impl

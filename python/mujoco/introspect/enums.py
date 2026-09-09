@@ -615,6 +615,8 @@ ENUMS: Mapping[str, EnumDecl] = dict([
              ('mjSTATUS_BADQVEL', 5),
              ('mjSTATUS_BADQACC', 6),
              ('mjSTATUS_BADCTRL', 7),
+             ('mjSTATUS_ERROR', -1),
+             ('mjSTATUS_OOM', -2),
          ]),
      )),
     ('mjtOnWarn',

@@ -4434,7 +4434,9 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .value("mjSTATUS_BADQPOS", mjSTATUS_BADQPOS)
     .value("mjSTATUS_BADQVEL", mjSTATUS_BADQVEL)
     .value("mjSTATUS_BADQACC", mjSTATUS_BADQACC)
-    .value("mjSTATUS_BADCTRL", mjSTATUS_BADCTRL);
+    .value("mjSTATUS_BADCTRL", mjSTATUS_BADCTRL)
+    .value("mjSTATUS_ERROR", mjSTATUS_ERROR)
+    .value("mjSTATUS_OOM", mjSTATUS_OOM);
   enum_<mjtStereo>("mjtStereo")
     .value("mjSTEREO_NONE", mjSTEREO_NONE)
     .value("mjSTEREO_QUADBUFFERED", mjSTEREO_QUADBUFFERED)

@@ -895,32 +895,46 @@ and :ref:`mj_stackAllocByte` is provided for allocation of arbitrary number of b
 Errors, warnings, logging
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-MuJoCo reports problems through three distinct mechanisms, in decreasing order of severity:
+MuJoCo reports two kinds of engine event, and routes all of its text output through one handler:
 
-- **Errors** are fatal by contract: the engine cannot continue. Unless a handler intercepts control, the process
-  terminates.
-- **Simulation warnings** are recoverable runtime events that leave the physics impaired: divergence, dropped
-  contacts or constraints, zeroed controls, clamped inertia pivots. They are counted in ``mjData.warning``, reported
-  by pipeline functions in ``mjData.status``, and the engine's response is selected by the
-  :ref:`onwarn<option-onwarn>` option.
-- **Log messages** are stateless text with a severity :ref:`level<mjtLogLevel>`, routed through a single
-  configurable handler. Here "warning" is a severity label, not an event.
+- **Errors** stop the work in progress. Raised inside a pipeline call, they abandon the call, and the ``mjData``
+  must be reset before it is used again; raised anywhere else, they terminate the process.
+- **Simulation warnings** are recoverable events that leave the physics impaired: divergence, dropped contacts or
+  constraints, zeroed controls, clamped inertia pivots. The :ref:`onwarn<option-onwarn>` option selects the
+  engine's response to them.
 
-The first two are engine events; log messages are how they are reported: an error emits one error-level message
-before terminating, and each simulation warning emits one warning-level message when first triggered.
+Both are reported as :ref:`log messages<siLogMessages>`, which also carry informational text. The severity
+:ref:`level<mjtLogLevel>` of a message labels the text, not the event: an error emits one error-level message, and
+a simulation warning emits one warning-level message the first time it is triggered.
 
 .. _siErrors:
 
 Errors
 ^^^^^^
 
-Errors are raised by :ref:`mju_error` when the engine encounters a condition it cannot recover from: invalid
-inputs, mis-sized models, exhausted stack memory, or internal inconsistencies. The error contract is that control
-does not return to the failing code path: the :ref:`default handler<siDefaultHandler>` terminates the process with
-``exit(EXIT_FAILURE)``, and a custom handler that intercepts errors must not return — it should ``longjmp`` to a
-previously established recovery point or otherwise transfer control before returning. This is how the model
-compiler and the Python bindings convert errors into exceptions. MuJoCo is written with the assumption that error
-handlers will not return; if they do, the behavior of the software is undefined.
+Errors are raised by :ref:`mju_error` when the engine meets a condition it cannot continue past: an invalid
+argument, a model or combination of options that cannot work, exhausted memory, or a broken internal invariant.
+Control never returns to the failing code path.
+
+With the default handler, an error raised during a pipeline call stops the call and records a negative
+:ref:`mjtStatus` in ``mjData.status``. Call :ref:`mj_resetData` before making another pipeline call on that data:
+until then every pipeline call on it is refused, with an error saying so.
+
+A pipeline call is a call to one of the public functions of the :ref:`Main simulation<Mainsimulation>`, Components,
+Sub components and Derivatives sections of the API that take a non-const ``mjData``, from :ref:`mj_step` down to
+:ref:`mj_solveM`. Each of them is a recovery boundary: the message is delivered to the
+:ref:`log handler<siLogHandler>`, the ``mjData`` stack and arena allocation state is restored to what it was on
+entry, and the call returns. Arrays written before the error keep what was written to them, which is why the data
+has to be reset. Errors raised from a :ref:`callback<glPhysics>` or from a worker thread of the
+:ref:`thread pool<siMultithread>` are recovered by the same boundary.
+
+Outside a pipeline call — in the model loaders, the creators, and the utility functions that take no ``mjData`` —
+the :ref:`default handler<siDefaultHandler>` terminates the process with ``exit(EXIT_FAILURE)``.
+
+A custom handler that intercepts errors may transfer control itself: ``longjmp`` to a recovery point, or an
+exception, which is how the model compiler works. A handler that returns hands the error back to the engine, which
+recovers it at the boundary of the pipeline call; a handler that returns outside a pipeline call leaves the
+behavior undefined.
 
 .. _siSimWarning:
 
@@ -990,8 +1004,9 @@ the default handler). The previous handler can be used in two ways:
   to preserve existing behavior. Conversely, handlers intended to intercept and recover from errors (e.g., via
   ``longjmp``) should not chain to the previous handler.
 
-When the handler is called with ``level == mjLOG_ERROR``, the :ref:`error contract<siErrors>` applies: the handler
-must transfer control and not return.
+When the handler is called with ``level == mjLOG_ERROR``, the :ref:`error contract<siErrors>` applies: a handler
+that returns hands the error back to the engine, which recovers at the boundary of the pipeline call, or terminates
+the process if the error was raised outside one.
 
 .. warning::
    Log handlers must not call :ref:`mju_error` from within the callback; this will cause infinite recursion.
@@ -1008,7 +1023,8 @@ handler that provides the following behavior:
    formatted message text. This provides backward compatibility with existing code.
 #. Otherwise, the message is written to the log file (default: ``MUJOCO_LOG.TXT``) and printed to the
    console (``stderr`` for errors and warnings, ``stdout`` for info).
-#. For errors, the program is terminated with ``exit(EXIT_FAILURE)`` (unless a legacy error handler is installed).
+#. For errors raised outside a pipeline call, the program is terminated with ``exit(EXIT_FAILURE)`` (unless a
+   legacy error handler is installed). Inside a pipeline call the engine :ref:`recovers<siErrors>` instead.
 
 The default handler's behavior can be configured using :ref:`mju_setLogConfig` and :ref:`mju_getLogConfig`,
 which control whether output goes to the console, the log file path (or disabling file logging by setting it to

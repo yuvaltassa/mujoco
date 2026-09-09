@@ -116,10 +116,17 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
           [](const MjModelWrapper& m, MjDataWrapper& d, int nstep) {
             const raw::MjModel* const m_ptr = m.get();
             raw::MjData* const d_ptr = d.get();
+            // report the first warning of the nstep steps, as one call would; an error or
+            // an interrupt ends the loop and takes precedence
+            if (nstep <= 0) {
+              return;  // no call was made: leave the status, in particular a pending error
+            }
             int status = mjSTATUS_OK;
             for (int i = 0; i < nstep; ++i) {
               ::mj_step(m_ptr, d_ptr);
-              // report the first warning of the nstep steps, as one call would
+              if (d_ptr->status < 0 || _mjPRIVATE__interrupted()) {
+                return;
+              }
               if (!status) {
                 status = d_ptr->status;
               }

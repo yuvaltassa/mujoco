@@ -568,14 +568,18 @@ typedef enum mjtWarning {           // warning types
 typedef enum mjtStatus {            // status of a pipeline call, stored in mjData.status
   mjSTATUS_OK          = 0,         // nothing to report
 
-  // simulation warnings, mjtWarning + 1; negative values are reserved for errors
+  // simulation warnings, mjtWarning + 1
   mjSTATUS_INERTIA     = 1,         // (near) singular inertia matrix
   mjSTATUS_CONTACTFULL,             // too many contacts in contact list
   mjSTATUS_CNSTRFULL,               // too many constraints
   mjSTATUS_BADQPOS,                 // bad number in qpos
   mjSTATUS_BADQVEL,                 // bad number in qvel
   mjSTATUS_BADQACC,                 // bad number in qacc
-  mjSTATUS_BADCTRL                  // bad number in ctrl
+  mjSTATUS_BADCTRL,                 // bad number in ctrl
+
+  // errors: the call was abandoned, the data cannot be used until mj_resetData
+  mjSTATUS_ERROR       = -1,        // error of unspecified kind
+  mjSTATUS_OOM         = -2         // out of memory: stack overflow
 } mjtStatus;
 
 

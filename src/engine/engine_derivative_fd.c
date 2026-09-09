@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "engine/engine_derivative_fd.h"
+#include "engine/engine_core_util.h"
 
 #include <stddef.h>
 
@@ -113,6 +114,13 @@ static int inRange(const mjtNum x1, const mjtNum x2, const mjtNum* range) {
 void mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
   TM_START;
 
+  // an abandoned call runs nothing further; this is the guard that keeps a perturbation of the
+  // finite-difference drivers from re-running the pipeline on data an earlier one gave up on
+  if (mji_stop(m, d)) {
+    TM_END(mjTIMER_STEP);
+    return;
+  }
+
   // common to all integrators
   mj_checkPos(m, d);
   mj_checkVel(m, d);
@@ -122,6 +130,12 @@ void mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
   // compare forward and inverse solutions if enabled
   if (mjENABLED(mjENBL_FWDINV)) {
     mj_compareFwdInv(m, d);
+  }
+
+  // the stages above can stop the call: do not integrate a state they did not finish
+  if (mji_stop(m, d)) {
+    TM_END(mjTIMER_STEP);
+    return;
   }
 
   // use selected integrator
@@ -156,6 +170,10 @@ void mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
 // compute qfrc_inverse, optionally subtracting qfrc_actuator
 static void inverseSkip(const mjModel* m, mjData* d, mjtStage stage, int skipsensor,
                         int flg_actuation, mjtNum* force) {
+  // as in mj_stepSkip: an abandoned call runs no further perturbation
+  if (mji_stop(m, d)) {
+    return;
+  }
   mj_inverseSkip(m, d, stage, skipsensor);
   mju_copy(force, d->qfrc_inverse, m->nv);
   if (flg_actuation) {
@@ -546,6 +564,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
 //      D: (nsensordata x nu)
 void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
                       mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D) {
+  mjENTER(d);
   if (m->opt.integrator == mjINT_RK4) {
     mjERROR("RK4 integrator is not supported");
   }
@@ -592,6 +611,7 @@ void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_cente
   if (D) mju_transpose(D, DT, nu, ns);
 
   mj_freeStack(d);
+  mjLEAVE(d);
 }
 
 // finite differenced Jacobians of (force, sensors) = mj_inverse(state, acceleration)
@@ -614,6 +634,7 @@ void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuatio
                    mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
                    mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
                    mjtNum *DmDq) {
+  mjENTER(d);
   int nq = m->nq, nv = m->nv, nC = m->nC, ns = m->nsensordata;
 
   if (m->opt.integrator == mjINT_RK4) {
@@ -712,4 +733,5 @@ void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuatio
   }
 
   mj_freeStack(d);
+  mjLEAVE(d);
 }

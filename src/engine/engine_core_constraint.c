@@ -388,7 +388,7 @@ static int mj_vertBodyWeight(const mjModel* m, const mjData* d, int f, int* v,
 
 // add contact to d->contact list; return 0 if success; 1 if buffer full
 int mj_addContact(const mjModel* m, mjData* d, const mjContact* con) {
-  mjENTER(d);
+  mjENTER_(d, 1);
   // move arena pointer back to the end of the existing contact array and invalidate efc_ arrays
   d->parena = d->ncon * sizeof(mjContact);
 #ifdef mjUSEASAN
@@ -3708,8 +3708,10 @@ void mj_constraintUpdate_impl(int ne, int nf, int nefc,
 // optional: cost(qacc) = s_hat(jar) where jar = Jac*qacc-aref; cone Hessians
 void mj_constraintUpdate(const mjModel* m, mjData* d, const mjtNum* jar,
                          mjtNum cost[1], int flg_coneHessian) {
+  mjENTER(d);
   mj_constraintUpdate_impl(d->ne, d->nf, d->nefc, d->efc_D, d->efc_R, d->efc_frictionloss,
                            jar, d->efc_type, d->efc_id, d->contact, d->efc_state, d->efc_force,
                            cost, flg_coneHessian);
   mj_mulJacTVec(m, d, d->qfrc_constraint, d->efc_force);
+  mjLEAVE(d);
 }

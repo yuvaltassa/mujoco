@@ -15,6 +15,7 @@
 #ifndef MUJOCO_SRC_ENGINE_ENGINE_UTIL_ERRMEM_H_
 #define MUJOCO_SRC_ENGINE_ENGINE_UTIL_ERRMEM_H_
 
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -23,6 +24,7 @@
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmacro.h>
 #include <mujoco/mjtype.h>
+#include "engine/engine_crossplatform.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,6 +57,103 @@ MJAPI extern void (*mju_user_free)(void*);
 // set the active log handler, return the previous handler
 // if handler is NULL, restore the default handler
 MJAPI mjfLogHandler mju_setLogHandler(mjfLogHandler handler);
+
+// setjmp/longjmp without the signal mask: a boundary jump is a plain unwind (setjmp saves the
+// mask with a system call on macOS, two orders of magnitude slower than the jump itself)
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
+  #define mjSETJMP(env)  setjmp(env)
+  #define mjLONGJMP(env) longjmp(env, 1)
+#else
+  #define mjSETJMP(env)  _setjmp(env)
+  #define mjLONGJMP(env) _longjmp(env, 1)
+#endif
+
+// error boundary of a pipeline call: the jump target of errors raised within the call, and the
+// memory state of the mjData to restore; boundaries form a thread-local chain, innermost first
+typedef struct mjBoundary_ {
+  jmp_buf env;                     // jump target
+  size_t pstack;                   // memory state of the mjData at entry
+  size_t pbase;
+  size_t parena;
+  mjtBool threadlock;
+  int callback;                    // callback flag at entry, restored at exit
+  struct mjBoundary_* prev;        // enclosing boundary on this thread
+} mjBoundary;
+
+// push/pop a boundary on the calling thread's chain; a pushed boundary clears the callback flag,
+// a popped one restores it
+void mju_pushBoundary(mjBoundary* b);
+void mju_popBoundary(mjBoundary* b);
+
+// the same for the pipeline entries: inline in C, where the thread-locals are accessible (a C
+// thread-local has no C++ access wrapper), through the functions above in C++
+#ifndef __cplusplus
+extern mjTHREADLOCAL mjBoundary* mju_boundaryHead;
+
+// a callback has been entered on the calling thread since the innermost boundary was armed:
+// the frames between that boundary and the next pipeline entry are foreign, so the entry arms
+// its own boundary rather than relying on the enclosing one
+extern mjTHREADLOCAL int mju_callbackFlag;
+
+static inline void mji_pushBoundary(mjBoundary* b) {
+  b->prev = mju_boundaryHead;
+  b->callback = mju_callbackFlag;
+  mju_callbackFlag = 0;
+  mju_boundaryHead = b;
+}
+static inline void mji_popBoundary(mjBoundary* b) {
+  mju_boundaryHead = b->prev;
+  mju_callbackFlag = b->callback;
+}
+
+// invoke a callback (or a plugin) from the engine: raise the flag for its duration
+#define mjCALLBACK(call)                      \
+  {                                           \
+    int mjcallback_saved_ = mju_callbackFlag; \
+    mju_callbackFlag = 1;                     \
+    call;                                     \
+    mju_callbackFlag = mjcallback_saved_;     \
+  }
+#else
+static inline void mji_pushBoundary(mjBoundary* b) { mju_pushBoundary(b); }
+static inline void mji_popBoundary(mjBoundary* b) { mju_popBoundary(b); }
+int mju_callbackFlagValue(void);
+#define mju_callbackFlag mju_callbackFlagValue()
+#endif
+
+// jump to the innermost boundary on the calling thread, return if there is none
+void mju_errorJump(void);
+
+// is a boundary armed on the calling thread
+MJAPI int _mjPRIVATE__hasBoundary(void);
+
+// interrupt the pipeline call in progress on the calling thread: unwind to the innermost
+// boundary and through the enclosing stages without recording an error; return if no boundary
+MJAPI void _mjPRIVATE__interrupt(void);
+
+// is an interrupt pending on the calling thread
+MJAPI int _mjPRIVATE__interrupted(void);
+
+// was the last pipeline call on the calling thread interrupted; clears the flag
+MJAPI int _mjPRIVATE__takeInterrupt(void);
+
+// record the kind (mjtStatus) of the error about to be raised on the calling thread; the kind
+// of the error being recovered, or 0, clearing it
+void mju_setErrorKind(int kind);
+int mju_takeErrorKind(void);
+
+// is an interrupt pending on the calling thread; clear it
+int mju_interrupted(void);
+void mju_clearInterrupt(void);
+
+// status of an interrupted call while it unwinds, internal: negative, so that the stages refuse
+// and the drivers unwind through the same checks as a pending error without reading anything
+// but the status; reset to mjSTATUS_OK by the outermost exit, before the call returns, and never
+// observed by user code since no callback runs while a call unwinds
+#define mjSTATUS_INTERRUPTED (-1000)
+
+// last error message raised on the calling thread
+MJAPI const char* _mjPRIVATE__lastError(void);
 
 // set/get default handler configuration
 MJAPI mjLogConfig mju_getLogConfig(void);

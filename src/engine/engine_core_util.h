@@ -19,6 +19,8 @@
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mjtype.h>
+#include <setjmp.h>
+#include "engine/engine_util_errmem.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -151,45 +153,140 @@ MJAPI mjtNum mj_actuatorArmature(const mjModel* m, mjtObj type, int id);
 // high-level warning function: count warnings in mjData, print the first time, record in status
 MJAPI void mj_warning(mjData* d, int warning, int info);
 
-// enter a pipeline call: the outermost call on d clears the status and marks d as in progress,
-// nested calls (pipeline stages, or calls made from callbacks) leave both alone;
-// return 1 if outermost
-static inline int mji_enter(mjData* d) {
+//-------------------------- pipeline calls -------------------------------------------------------
+//
+// A pipeline call is a public function that takes a non-const mjData; the set is fixed by the
+// header and checked by a scanner test. The protocol below has four invariants:
+//
+//   - only the outermost call on a data clears its status, so warnings and errors raised by the
+//     stages it runs, and by pipeline calls made from its callbacks, report into that one status;
+//   - an entry arms an error boundary when it is outermost on its data, or when a callback has
+//     been entered since the innermost boundary, so that an error never unwinds across a
+//     callback's frame;
+//   - a stop path frees what the call owns before it returns, as its ordinary return path would;
+//   - recovery restores the memory state snapshotted on entry, and nothing else: arrays written
+//     before the error keep what was written, which is why the data has to be reset.
+//
+// The transport this rests on (the boundary chain, the jump, the callback flag) is in
+// engine_util_errmem.h.
+
+// the pipeline entry states
+enum {
+  mjENTER_NESTED = 0,      // nested in a pipeline call on d, covered by its boundary
+  mjENTER_OUTERMOST,       // the outermost pipeline call on d: armed
+  mjENTER_CALLBACK         // nested, but entered from a callback: armed
+};
+
+// arm an error boundary: snapshot the memory state of d and push
+static inline void mji_arm(mjData* d, mjBoundary* b) {
+  b->pstack = d->pstack;
+  b->pbase = d->pbase;
+  b->parena = d->parena;
+  b->threadlock = d->threadlock;
+  mji_pushBoundary(b);
+}
+
+// enter a pipeline call: the outermost call on d clears the status (unless an error is
+// pending), marks d as in progress and arms a boundary; a nested call arms one only if a
+// callback has been entered since the innermost boundary, so that an error never unwinds
+// across the callback's frame; return the entry state (mjENTER_*)
+static inline int mji_enter(mjData* d, mjBoundary* b) {
   if (d->nested) {
-    return 0;
+    if (!mju_callbackFlag) {
+      return mjENTER_NESTED;
+    }
+    mji_arm(d, b);
+    return mjENTER_CALLBACK;
   }
   d->nested = 1;
-  d->status = mjSTATUS_OK;
+  if (d->status >= 0) {
+    d->status = mjSTATUS_OK;
+  }
+  mju_clearInterrupt();
+  mji_arm(d, b);
+  return mjENTER_OUTERMOST;
+}
+
+// exit a pipeline call: disarm the boundary if one was armed; the outermost call marks d as no
+// longer in progress and, if the call was interrupted, clears the transient status
+static inline void mji_leave(mjData* d, mjBoundary* b, int entry) {
+  if (entry) {
+    mji_popBoundary(b);
+  }
+  if (entry == mjENTER_OUTERMOST) {
+    d->nested = 0;
+    if (d->status == mjSTATUS_INTERRUPTED) {
+      d->status = mjSTATUS_OK;
+    }
+  }
+}
+
+// recover from an error caught at this boundary: restore the memory state of d, record the
+// error in the status unless the raise site recorded a more specific one, or mark the status
+// interrupted while the enclosing call unwinds; exit the call
+static inline void mji_recover(mjData* d, mjBoundary* b, int entry) {
+  d->pstack = b->pstack;
+  d->pbase = b->pbase;
+  d->parena = b->parena;
+  d->threadlock = b->threadlock;
+  if (mju_interrupted()) {
+    d->status = mjSTATUS_INTERRUPTED;
+  } else if (d->status >= 0) {
+    int kind = mju_takeErrorKind();
+    d->status = kind ? kind : mjSTATUS_ERROR;
+  }
+  mji_leave(d, b, entry);
+}
+
+// refuse a call on d with a pending error or an interrupt unwinding the enclosing call: the
+// outermost call raises an error (recovered at its own boundary), nested calls exit silently
+// as the enclosing call unwinds; return 1 if refused
+static inline int mji_refused(mjData* d, mjBoundary* b, int entry) {
+  if (d->status >= 0) {
+    return 0;
+  }
+  if (entry == mjENTER_OUTERMOST) {
+    mju_error("mjData has a pending error (status %d), call mj_resetData", d->status);
+  }
+  mji_leave(d, b, entry);
   return 1;
 }
 
-// exit a pipeline call: the outermost call marks d as no longer in progress
-static inline void mji_leave(mjData* d, int outermost) {
-  if (outermost) {
-    d->nested = 0;
+// pipeline entry and exit, to be paired on every return path of a pipeline function;
+// mjENTER_ takes the value returned when the call is abandoned (nothing for void functions);
+// locals modified after the entry are never read on the recovery path (setjmp)
+#define mjENTER_(d, retval)                                    \
+  mjBoundary mjenter_boundary_;                                \
+  const int mjenter_state_ = mji_enter(d, &mjenter_boundary_); \
+  if (mjenter_state_) {                                        \
+    if (mjSETJMP(mjenter_boundary_.env)) {                     \
+      mji_recover(d, &mjenter_boundary_, mjenter_state_);      \
+      return retval;                                           \
+    }                                                          \
+  }                                                            \
+  if (mji_refused(d, &mjenter_boundary_, mjenter_state_)) {    \
+    return retval;                                             \
   }
-}
-
-// pipeline entry and exit, to be paired on every return path of a pipeline function
-#define mjENTER(d) const int mjenter_outermost_ = mji_enter(d)
-#define mjLEAVE(d)  mji_leave(d, mjenter_outermost_)
+#define mjENTER(d) mjENTER_(d, )
+#define mjLEAVE(d)  mji_leave(d, &mjenter_boundary_, mjenter_state_)
 
 // run a pipeline stage and leave the call if the stage stopped it, with a pending error or a
 // warning under the stop policy; mjSTAGE_ runs a cleanup before leaving
-#define mjSTAGE_(call, cleanup)                                                   \
-  {                                                                               \
-    call;                                                                         \
-    if (mji_stop(m, d)) {                                                         \
-      cleanup;                                                                    \
-      mjLEAVE(d);                                                                 \
-      return;                                                                     \
-    }                                                                             \
+#define mjSTAGE_(call, cleanup) \
+  {                             \
+    call;                       \
+    if (mji_stop(m, d)) {       \
+      cleanup;                  \
+      mjLEAVE(d);               \
+      return;                   \
+    }                           \
   }
 #define mjSTAGE(call) mjSTAGE_(call, (void)0)
 
-// nonzero status under the stop policy: the pipeline call should unwind
+// the pipeline call should unwind: a pending error or interrupt, or a warning under the stop
+// policy
 static inline int mji_stop(const mjModel* m, const mjData* d) {
-  return d->status && m->opt.onwarn == mjONWARN_STOP;
+  return d->status < 0 || (d->status > 0 && m->opt.onwarn == mjONWARN_STOP);
 }
 
 

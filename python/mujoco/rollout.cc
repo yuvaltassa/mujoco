@@ -13,8 +13,11 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
+#include <cstdio>
 #include <iostream>
+#include <mutex>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -22,6 +25,7 @@
 
 #include <mujoco/mujoco.h>
 #include "errors.h"
+#include "private.h"
 #include "raw.h"
 #include "structs.h"
 #include "threadpool.h"
@@ -37,6 +41,34 @@ namespace {
 namespace py = ::pybind11;
 
 using PyCArray = py::array_t<mjtNum, py::array::c_style>;
+
+// The first error of a batch, recorded by whichever thread hits it and re-raised on the
+// calling thread after the join. A rollout worker runs on a thread of this module's own pool,
+// which carries no error interception: the engine recovers the failing mj_step at its boundary
+// and returns, so without this the batch would finish and hand back a padded trajectory.
+class RolloutError {
+ public:
+  // record the first failure; every thread stops once one is recorded
+  void Record(const char* message) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!failed_) {
+      failed_ = true;
+      std::snprintf(message_, sizeof(message_), "%s", message);
+    }
+  }
+  void Reset() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    failed_ = false;
+    message_[0] = '\0';
+  }
+  bool Failed() const { return failed_; }
+  const char* Message() const { return message_; }
+
+ private:
+  std::atomic<bool> failed_ = false;
+  std::mutex mutex_;
+  char message_[1024] = "";
+};
 
 // NOLINTBEGIN(whitespace/line_length)
 
@@ -74,7 +106,8 @@ Roll out batch of trajectories from initial states, get resulting states and sen
 void _unsafe_rollout(std::vector<const mjModel*>& m, mjData* d, int start_roll,
                      int end_roll, int nstep, unsigned int control_spec,
                      const mjtNum* state0, const mjtNum* warmstart0,
-                     const mjtNum* control, mjtNum* state, mjtNum* sensordata) {
+                     const mjtNum* control, mjtNum* state, mjtNum* sensordata,
+                     RolloutError* error) {
   // sizes
   size_t nstate = static_cast<size_t>(mj_stateSize(m[0], mjSTATE_FULLPHYSICS));
   size_t ncontrol = static_cast<size_t>(mj_stateSize(m[0], control_spec));
@@ -112,6 +145,11 @@ void _unsafe_rollout(std::vector<const mjModel*>& m, mjData* d, int start_roll,
       for (int i = 0; i < neq; i++) {
         d->eq_active[i] = m[r]->eq_active0[i];
       }
+    }
+
+    // another rollout of the batch has already failed
+    if (error->Failed() || _mjPRIVATE__interrupted()) {
+      return;
     }
 
     // set initial state
@@ -161,8 +199,15 @@ void _unsafe_rollout(std::vector<const mjModel*>& m, mjData* d, int start_roll,
         mj_setState(m[r], d, control + step*ncontrol, control_spec);
       }
 
-      // step
+      // step; an error abandons the call and poisons the data, and an interrupt asks the
+      // host to stop: either way the trajectory ends here and the batch is abandoned
       mj_step(m[r], d);
+      if (d->status < 0 || _mjPRIVATE__interrupted()) {
+        if (d->status < 0) {
+          error->Record(_mjPRIVATE__lastError());
+        }
+        return;
+      }
 
       // copy out new state
       if (state) {
@@ -183,7 +228,8 @@ void _unsafe_rollout_threaded(std::vector<const mjModel*>& m,
                               unsigned int control_spec, const mjtNum* state0,
                               const mjtNum* warmstart0, const mjtNum* control,
                               mjtNum* state, mjtNum* sensordata,
-                              ThreadPool* pool, int chunk_size) {
+                              ThreadPool* pool, int chunk_size,
+                              RolloutError* error) {
   int nfulljobs = nbatch / chunk_size;
   int chunk_remainder = nbatch % chunk_size;
   int njobs = (chunk_remainder > 0) ? nfulljobs + 1 : nfulljobs;
@@ -196,7 +242,8 @@ void _unsafe_rollout_threaded(std::vector<const mjModel*>& m,
     auto task = [=, &m, &d](void) {
       int id = pool->WorkerId();
       _unsafe_rollout(m, d[id], j*chunk_size, (j+1)*chunk_size,
-        nstep, control_spec, state0, warmstart0, control, state, sensordata);
+        nstep, control_spec, state0, warmstart0, control, state, sensordata,
+        error);
     };
     pool->Schedule(task);
   }
@@ -206,13 +253,19 @@ void _unsafe_rollout_threaded(std::vector<const mjModel*>& m,
     auto task = [=, &m, &d](void) {
       _unsafe_rollout(m, d[pool->WorkerId()], nfulljobs*chunk_size,
         nfulljobs*chunk_size+chunk_remainder,
-        nstep, control_spec, state0, warmstart0, control, state, sensordata);
+        nstep, control_spec, state0, warmstart0, control, state, sensordata,
+        error);
     };
     pool->Schedule(task);
   }
 
   // wait for counter to increment up to number of jobs submitted by this thread
   pool->WaitCount(njobs);
+
+  // re-raise the first failure of the batch here, where errors reach the caller
+  if (error->Failed()) {
+    mju_error("%s", error->Message());
+  }
 }
 
 // NOLINTEND(whitespace/line_length)
@@ -313,20 +366,24 @@ class Rollout {
         } else {
           chunk_size_final = *chunk_size;
         }
+        this->error_.Reset();
         InterceptMjErrors(_unsafe_rollout_threaded)(
             model_ptrs, data_ptrs, nbatch, nstep, control_spec, state0_ptr,
             warmstart0_ptr, control_ptr, state_ptr, sensordata_ptr,
-            this->pool_.get(), chunk_size_final);
+            this->pool_.get(), chunk_size_final, &this->error_);
       } else {
+        this->error_.Reset();
         InterceptMjErrors(_unsafe_rollout)(
             model_ptrs, data_ptrs[0], 0, nbatch, nstep, control_spec,
-            state0_ptr, warmstart0_ptr, control_ptr, state_ptr, sensordata_ptr);
+            state0_ptr, warmstart0_ptr, control_ptr, state_ptr, sensordata_ptr,
+            &this->error_);
       }
     }
   }
 
  private:
   int nthread_;
+  RolloutError error_;
   std::shared_ptr<ThreadPool> pool_;
 };
 

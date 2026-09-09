@@ -139,14 +139,16 @@ void mj_checkAcc(const mjModel* m, mjData* d) {
 
 // kinematics-related computations
 void mj_fwdKinematics(const mjModel* m, mjData* d) {
-  mj_kinematics(m, d);
-  mj_comPos(m, d);
-  mj_camlight(m, d);
-  mj_flex(m, d);
-  mj_tendon(m, d);
+  mjENTER(d);
+  mjSTAGE(mj_kinematics(m, d));
+  mjSTAGE(mj_comPos(m, d));
+  mjSTAGE(mj_camlight(m, d));
+  mjSTAGE(mj_flex(m, d));
+  mjSTAGE(mj_tendon(m, d));
   if (mj_wakeTendon(m, d)) {
     mj_updateSleep(m, d);
   }
+  mjLEAVE(d);
 }
 
 // position-dependent computations
@@ -158,12 +160,12 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   d->flg_energypos = 0;
 
   TM_START;
-  mj_fwdKinematics(m, d);
+  mjSTAGE(mj_fwdKinematics(m, d));
 
   TM_END(mjTIMER_POS_KINEMATICS);
 
   // inertia, timed internally (POS_INERTIA)
-  mj_makeM(m, d);
+  mjSTAGE(mj_makeM(m, d));
   mjSTAGE(mj_factorM(m, d));
 
   // collision, timed internally (POS_COLLISION)
@@ -179,8 +181,8 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   }
 
   TM_RESTART;
-  mj_makeConstraint(m, d);
-  mj_island(m, d);
+  mjSTAGE(mj_makeConstraint(m, d));
+  mjSTAGE(mj_island(m, d));
   TM_END(mjTIMER_POS_MAKE);
 
   TM_RESTART;
@@ -188,7 +190,7 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   TM_END(mjTIMER_POS_PROJECT);
 
   TM_RESTART;
-  mj_transmission(m, d);
+  mjSTAGE(mj_transmission(m, d));
   TM_ADD(mjTIMER_POS_KINEMATICS);
 
   // implicit effective metric Mtilde = M + K: build (or deactivate) for this step. Arena
@@ -234,8 +236,8 @@ void mj_fwdVelocity(const mjModel* m, mjData* d) {
   }
 
   // com-based velocities, passive forces, constraint references
-  mj_comVel(m, d);
-  mj_passive(m, d);
+  mjSTAGE(mj_comVel(m, d));
+  mjSTAGE(mj_passive(m, d));
 
   // under discrete, constraint references are computed at the actuation stage where the
   // metric is final (regularization, then references, which consume R via adhesion);
@@ -243,11 +245,11 @@ void mj_fwdVelocity(const mjModel* m, mjData* d) {
   if (mj_isMetric(m)) {
     mj_velocityConstraint(m, d);
   } else {
-    mj_referenceConstraint(m, d);
+    mjSTAGE(mj_referenceConstraint(m, d));
   }
 
   // compute qfrc_bias with abbreviated RNE (without acceleration)
-  mj_rne(m, d, 0, d->qfrc_bias);
+  mjSTAGE(mj_rne(m, d, 0, d->qfrc_bias));
 
   // add bias force due to tendon armature
   mj_tendonBias(m, d, d->qfrc_bias);
@@ -450,6 +452,11 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
   // act_dot for stateful actuators
   for (int i=0; i < nactuator; i++) {
+    // a callback in this loop can abandon the call: run nothing further on the data
+    if (mji_stop(m, d)) {
+      break;
+    }
+
     if (sleep_filter && mj_sleepState(m, d, mjOBJ_ACTUATOR, i) == mjS_ASLEEP) {
       continue;
     }
@@ -627,10 +634,10 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       if (mjcb_act_dyn) {
         if (actnum == 1) {
           // scalar activation dynamics, get act_dot
-          d->act_dot[act_last] = mjcb_act_dyn(m, d, i);
+          mjCALLBACK(d->act_dot[act_last] = mjcb_act_dyn(m, d, i));
         } else {
           // higher-order dynamics, mjcb_act_dyn writes into act_dot directly
-          mjcb_act_dyn(m, d, i);
+          mjCALLBACK(mjcb_act_dyn(m, d, i));
         }
       }
     }
@@ -640,6 +647,11 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   if (m->nplugin) {
     const int nslot = mjp_pluginCount();
     for (int i=0; i < m->nplugin; i++) {
+      // a callback in this loop can abandon the call: run nothing further on the data
+      if (mji_stop(m, d)) {
+        break;
+      }
+
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
@@ -647,7 +659,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       }
       if (plugin->capabilityflags & mjPLUGIN_ACTUATOR) {
         if (plugin->actuator_act_dot) {
-          plugin->actuator_act_dot(m, d, i);
+          mjCALLBACK(plugin->actuator_act_dot(m, d, i));
         }
       }
     }
@@ -655,6 +667,11 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
   // force = gain .* [ctrl/act] + bias
   for (int i=0; i < nactuator; i++) {
+    // a callback in this loop can abandon the call: run nothing further on the data
+    if (mji_stop(m, d)) {
+      break;
+    }
+
     // skip if sleeping
     if (sleep_filter && mj_sleepState(m, d, mjOBJ_ACTUATOR, i) == mjS_ASLEEP) {
       continue;
@@ -795,10 +812,15 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
     default:                        // user gain
       if (mjcb_act_gain) {
-        gain = mjcb_act_gain(m, d, i);
+        mjCALLBACK(gain = mjcb_act_gain(m, d, i));
       } else {
         gain = 1;
       }
+    }
+
+    // the gain callback can abandon the call: the bias callback below must not run on it
+    if (mji_stop(m, d)) {
+      break;
     }
 
     // set force = gain .* [ctrl/act]
@@ -899,7 +921,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
     default:                        // user bias
       if (mjcb_act_bias) {
-        bias = mjcb_act_bias(m, d, i);
+        mjCALLBACK(bias = mjcb_act_bias(m, d, i));
       } else {
         bias = 0;
       }
@@ -913,6 +935,11 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   if (m->nplugin) {
     const int nslot = mjp_pluginCount();
     for (int i=0; i < m->nplugin; i++) {
+      // a callback in this loop can abandon the call: run nothing further on the data
+      if (mji_stop(m, d)) {
+        break;
+      }
+
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
@@ -922,7 +949,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
         if (!plugin->compute) {
           mjERROR("`compute` is a null function pointer for plugin at slot %d", slot);
         }
-        plugin->compute(m, d, i, mjPLUGIN_ACTUATOR);
+        mjCALLBACK(plugin->compute(m, d, i, mjPLUGIN_ACTUATOR));
       }
     }
   }
@@ -1498,13 +1525,18 @@ static void mj_advance(const mjModel* m, mjData* d,
   if (m->nplugin) {
     const int nslot = mjp_pluginCount();
     for (int i = 0; i < m->nplugin; ++i) {
+      // a callback in this loop can abandon the call: run nothing further on the data
+      if (mji_stop(m, d)) {
+        break;
+      }
+
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
         mjERROR("invalid plugin slot: %d", slot);
       }
       if (plugin->advance) {
-        plugin->advance(m, d, i);
+        mjCALLBACK(plugin->advance(m, d, i));
       }
     }
   }
@@ -1942,12 +1974,12 @@ void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) 
     mjSTAGE(mj_fwdPosition(m, d));
 
     if (!skipsensor) {
-      mj_sensorPos(m, d);
+      mjSTAGE(mj_sensorPos(m, d));
     }
 
     if (!d->flg_energypos) {
       if (mjENABLED(mjENBL_ENERGY)) {
-        mj_energyPos(m, d);
+        mjSTAGE(mj_energyPos(m, d));
       } else {
         d->energy[0] = d->energy[1] = 0;
       }
@@ -1956,33 +1988,33 @@ void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) 
 
   // velocity-dependent
   if (skipstage < mjSTAGE_VEL) {
-    mj_fwdVelocity(m, d);
+    mjSTAGE(mj_fwdVelocity(m, d));
 
     if (!skipsensor) {
-      mj_sensorVel(m, d);
+      mjSTAGE(mj_sensorVel(m, d));
     }
 
     if (mjENABLED(mjENBL_ENERGY) && !d->flg_energyvel) {
-      mj_energyVel(m, d);
+      mjSTAGE(mj_energyVel(m, d));
     }
   }
 
   // acceleration-dependent
   if (mjcb_control && !mjDISABLED(mjDSBL_ACTUATION)) {
-    mjcb_control(m, d);
+    mjCALLBACK(mjcb_control(m, d));
   }
 
   mjSTAGE(mj_fwdActuation(m, d));
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
     mj_regularizeConstraint(m, d, /*flg_AR=*/1);
-    mj_referenceConstraint(m, d);
+    mjSTAGE(mj_referenceConstraint(m, d));
   }
   mjSTAGE(mj_fwdAcceleration(m, d));
-  mj_fwdConstraint(m, d);
+  mjSTAGE(mj_fwdConstraint(m, d));
   if (!skipsensor) {
     d->flg_rnepost = 0;  // clear flag for lazy evaluation
-    mj_sensorAcc(m, d);
+    mjSTAGE(mj_sensorAcc(m, d));
   }
 
   TM_END(mjTIMER_FORWARD);
@@ -2011,7 +2043,7 @@ void mj_step(const mjModel* m, mjData* d) {
 
   // compare forward and inverse solutions if enabled
   if (mjENABLED(mjENBL_FWDINV)) {
-    mj_compareFwdInv(m, d);
+    mjSTAGE(mj_compareFwdInv(m, d));
   }
 
   // use selected integrator
@@ -2051,24 +2083,24 @@ void mj_step1(const mjModel* m, mjData* d) {
   mjSTAGE(mj_checkPos(m, d));
   mjSTAGE(mj_checkVel(m, d));
   mjSTAGE(mj_fwdPosition(m, d));
-  mj_sensorPos(m, d);
+  mjSTAGE(mj_sensorPos(m, d));
 
   if (!d->flg_energypos) {
     if (mjENABLED(mjENBL_ENERGY)) {
-      mj_energyPos(m, d);
+      mjSTAGE(mj_energyPos(m, d));
     } else {
       d->energy[0] = d->energy[1] = 0;
     }
   }
 
-  mj_fwdVelocity(m, d);
-  mj_sensorVel(m, d);
+  mjSTAGE(mj_fwdVelocity(m, d));
+  mjSTAGE(mj_sensorVel(m, d));
   if (mjENABLED(mjENBL_ENERGY) && !d->flg_energyvel) {
-    mj_energyVel(m, d);
+    mjSTAGE(mj_energyVel(m, d));
   }
 
   if (mjcb_control) {
-    mjcb_control(m, d);
+    mjCALLBACK(mjcb_control(m, d));
   }
   TM_END(mjTIMER_STEP);
   mjLEAVE(d);
@@ -2087,17 +2119,17 @@ void mj_step2(const mjModel* m, mjData* d) {
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
     mj_regularizeConstraint(m, d, /*flg_AR=*/1);
-    mj_referenceConstraint(m, d);
+    mjSTAGE(mj_referenceConstraint(m, d));
   }
   mjSTAGE(mj_fwdAcceleration(m, d));
-  mj_fwdConstraint(m, d);
+  mjSTAGE(mj_fwdConstraint(m, d));
   d->flg_rnepost = 0;  // clear flag for lazy evaluation
-  mj_sensorAcc(m, d);
+  mjSTAGE(mj_sensorAcc(m, d));
   mjSTAGE(mj_checkAcc(m, d));
 
   // compare forward and inverse solutions if enabled
   if (mjENABLED(mjENBL_FWDINV)) {
-    mj_compareFwdInv(m, d);
+    mjSTAGE(mj_compareFwdInv(m, d));
   }
 
   // integrate with Euler, implicit or discrete; RK4 defaults to Euler

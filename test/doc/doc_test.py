@@ -14,6 +14,7 @@
 # ==============================================================================
 """Tests that the API reference documentation is complete and up to date."""
 
+import glob
 import os
 import re
 
@@ -359,6 +360,46 @@ class DocTest(googletest.TestCase):
     self.assertEqual(missing, [], 'mjData fields missing from the X macros in mjxmacro.h')
     unknown = sorted(xmacro_fields - set(fields))
     self.assertEqual(unknown, [], 'X macro entries that are not mjData fields')
+
+  def test_pipeline_entries(self):
+    """Checks that every pipeline function pairs mjENTER with mjLEAVE on every return path.
+
+    The pipeline functions are the public functions of the Main simulation, Components, Sub
+    components and Derivatives sections of mujoco.h that take a non-const mjData: each one is
+    an error boundary when called at top level or from a callback, so an error raised inside
+    it is recovered by that call rather than by an enclosing one.
+    """
+    with open(_get_path('include', 'mujoco', 'mujoco.h'), encoding='utf-8') as f:
+      header = f.read()
+    sources = ''
+    for path in sorted(glob.glob(_get_path('src', 'engine', '*.c'))):
+      with open(path, encoding='utf-8') as f:
+        sources += f.read()
+
+    sections = re.split(r'\n//-{20,} *(.*?) *-{5,}\n', header)
+    functions = []
+    for i in range(1, len(sections), 2):
+      if sections[i] not in ('Main simulation', 'Components', 'Sub components', 'Derivatives'):
+        continue
+      for match in re.finditer(r'MJAPI\s+[\w\* ]+?\b(mj\w*)\s*\(([^)]*)\);', sections[i + 1]):
+        params = match.group(2)
+        if re.search(r'\bmjData\s*\*\s*d\b', params) and 'const mjData' not in params:
+          functions.append(match.group(1))
+    self.assertGreater(len(functions), 50)
+
+    for function in functions:
+      match = re.search(r'\n[\w\* ]*?\b' + function + r'\([^)]*\)\s*\{\n', sources)
+      self.assertIsNotNone(match, f'{function}: definition not found in src/engine')
+      body = sources[match.end():sources.index('\n}\n', match.end())]
+      self.assertIn('mjENTER', body, f'{function}: missing mjENTER')
+      lines = [l for l in body.split('\n') if l.strip()]
+      for k, line in enumerate(lines):
+        if re.match(r'^\s*return\b', line):
+          self.assertEqual(lines[k - 1].strip(), 'mjLEAVE(d);',
+                           f'{function}: return without mjLEAVE: {line.strip()}')
+      last = lines[-1].strip()
+      self.assertTrue(last == 'mjLEAVE(d);' or last.startswith('return'),
+                      f'{function}: does not end with mjLEAVE: {last}')
 
   def test_element_constraints_diamond_inheritance(self):
     con = mjcf_schema.Constraint(

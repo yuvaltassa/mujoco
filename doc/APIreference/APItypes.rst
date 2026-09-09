@@ -549,10 +549,11 @@ mjtStatus
 ~~~~~~~~~
 
 Status of a pipeline call (:ref:`mj_step` and related), stored in ``mjData.status``. The value 0 (``mjSTATUS_OK``)
-means the call completed without :ref:`simulation warnings<siSimWarning>`; a positive value names the first warning
-raised during the call, in the order of :ref:`mjtWarning` (``mjSTATUS_INERTIA`` is ``mjWARN_INERTIA + 1``). Negative
-values are reserved for errors. The macro :ref:`mjOK` tests the status; per-warning statistics remain in
-``mjData.warning``.
+means that no :ref:`simulation warning<siSimWarning>` or :ref:`error<siErrors>` was recorded. A positive value names
+the first warning raised during the call, in the order of :ref:`mjtWarning` (``mjSTATUS_INERTIA`` is
+``mjWARN_INERTIA + 1``). A negative value names an error that abandoned the call; further pipeline calls on the data
+fail until it is reset with :ref:`mj_resetData`. The macro :ref:`mjOK` tests the status; per-warning statistics
+remain in ``mjData.warning``.
 
 .. mujoco-include:: mjtStatus
 

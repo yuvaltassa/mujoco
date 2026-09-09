@@ -194,7 +194,8 @@ mjcb_time
 Installing this callback enables the built-in profiler, and keeps timing statistics in ``mjData.timer``. The return type
 is mjtNum, while the time units are up to the user. Both :ref:`simulate.cc <saSimulate>` and the ``mjTOPIC_TIME_STP``
 informational :ref:`topic <mjtLogTopic>` assume the unit is 1 millisecond. In order to be useful, the callback should
-use high-resolution timers with at least microsecond precision.
+use high-resolution timers with at least microsecond precision. The callback must return normally: it must not
+raise an error, throw an exception, or otherwise unwind.
 
 .. code-block:: C
 
@@ -669,8 +670,9 @@ mjOK
 
    #define mjOK(d) ((d)->status == mjSTATUS_OK)
 
-Check that the most recent pipeline call on the given ``mjData*`` completed without
-:ref:`simulation warnings<siSimWarning>`, i.e. that ``mjData.status`` is :ref:`mjSTATUS_OK<mjtStatus>`.
+Check that the most recent pipeline call on the given ``mjData*`` recorded no
+:ref:`simulation warning<siSimWarning>` and no :ref:`error<siErrors>`, i.e. that ``mjData.status`` is
+:ref:`mjSTATUS_OK<mjtStatus>`.
 
 
 .. _mjMAX:

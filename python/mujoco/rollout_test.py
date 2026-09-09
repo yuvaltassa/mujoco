@@ -708,6 +708,41 @@ class MuJoCoRolloutTest(parameterized.TestCase):
     np.testing.assert_array_almost_equal(sensordata[0][0][:3], pos1)
     np.testing.assert_array_almost_equal(sensordata[0][0][3:], quat1)
 
+  # ---------------------------- test error propagation
+
+  ERROR_XML = """
+<mujoco>
+  <worldbody>
+    <body>
+      <joint name="j" type="slide"/>
+      <geom size=".1"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor joint="j"/>
+  </actuator>
+</mujoco>
+"""
+
+  @parameterized.parameters(0, 2)
+  def test_rollout_raises_the_first_engine_error(self, nthread):
+    """A failing step ends the batch and reaches the caller, named by its cause."""
+    model = mujoco.MjModel.from_xml_string(self.ERROR_XML)
+    model.opt.integrator = 99  # every mj_step raises "invalid integrator"
+    nstate = mujoco.mj_stateSize(model, mujoco.mjtState.mjSTATE_FULLPHYSICS)
+    ndata = max(1, nthread)
+    data = [mujoco.MjData(model) for _ in range(ndata)]
+    initial_state = np.zeros((4, nstate))
+    control = np.zeros((4, 5, model.nu))
+
+    # the message names the original failure, not the pending-error refusal that
+    # every later call on the poisoned data would raise
+    rollout_obj = rollout.Rollout(nthread=nthread)
+    with self.assertRaisesRegex(mujoco.FatalError, 'invalid integrator'):
+      rollout_obj.rollout(
+          [model] * 4, data, initial_state, control=control
+      )
+
   # ---------------------------- test correctness
 
   def test_intercept_mj_errors(self):

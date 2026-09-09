@@ -171,6 +171,7 @@ static inline void* stackallocinternal(mjData* d, mjStackInfo* stack_info, size_
     } else {
       info[0] = '\0';
     }
+    mju_setErrorKind(mjSTATUS_OOM);
     mju_error(
         "mj_stackAlloc: out of memory, stack overflow%s\n"
         "  max = %" PRIuPTR ", available = %" PRIuPTR ", requested = %" PRIuPTR
@@ -226,6 +227,7 @@ static inline void* stackalloc(mjData* d, size_t size, size_t alignment,
       } else {
         info[0] = '\0';
       }
+      mju_setErrorKind(mjSTATUS_OOM);
       mju_error(
           "mj_stackAlloc: out of memory, stack overflow%s (threadlock)\n"
           "  max = %" PRIuPTR ", available = %" PRIuPTR ", requested = %" PRIuPTR

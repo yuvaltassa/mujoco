@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #include "engine/engine_callback.h"  // IWYU pragma: export
+#include "engine/engine_util_errmem.h"
 
 //-------------------------------- utility macros --------------------------------------------------
 
@@ -33,12 +34,22 @@
 
 //-------------------------- timer macros ----------------------------------------------------------
 
-#define TM_START mjtNum _tm = (mjcb_time ? mjcb_time() : 0);
-#define TM_RESTART _tm = (mjcb_time ? mjcb_time() : 0);
-#define TM_END(i) {d->timer[i].duration += ((mjcb_time ? mjcb_time() : 0) - _tm); d->timer[i].number++;}
-#define TM_ADD(i) {d->timer[i].duration += ((mjcb_time ? mjcb_time() : 0) - _tm);}
-#define TM_START1 mjtNum _tm1 = (mjcb_time ? mjcb_time() : 0);
-#define TM_END1(i) {d->timer[i].duration += ((mjcb_time ? mjcb_time() : 0) - _tm1); d->timer[i].number++;}
+// current time from the user callback, if installed (a callback: see mjCALLBACK)
+static inline mjtNum mji_time(void) {
+  if (!mjcb_time) {
+    return 0;
+  }
+  mjtNum time;
+  mjCALLBACK(time = mjcb_time());
+  return time;
+}
+
+#define TM_START mjtNum _tm = mji_time();
+#define TM_RESTART _tm = mji_time();
+#define TM_END(i) {d->timer[i].duration += (mji_time() - _tm); d->timer[i].number++;}
+#define TM_ADD(i) {d->timer[i].duration += (mji_time() - _tm);}
+#define TM_START1 mjtNum _tm1 = mji_time();
+#define TM_END1(i) {d->timer[i].duration += (mji_time() - _tm1); d->timer[i].number++;}
 
 //-------------------------- compiler builtin ------------------------------------------------------
 

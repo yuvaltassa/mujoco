@@ -1398,7 +1398,7 @@ static void compute_or_read_sensor(const mjModel* m, mjData* d, int i, mjtNum* s
 // compute user sensors: call user callback and apply cutoff
 static void compute_user_sensors(const mjModel* m, mjData* d, mjtStage stage) {
   if (mjcb_sensor) {
-    mjcb_sensor(m, d, stage);
+    mjCALLBACK(mjcb_sensor(m, d, stage));
   }
 
   // apply cutoff to user sensors
@@ -1418,6 +1418,11 @@ static void compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) 
 
   const int nslot = mjp_pluginCount();
   for (int i=0; i < m->nplugin; i++) {
+    // a callback in this loop can abandon the call: run nothing further on the data
+    if (mji_stop(m, d)) {
+      break;
+    }
+
     const int slot = m->plugin[i];
     const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
     if (!plugin) {
@@ -1447,7 +1452,7 @@ static void compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) 
       mj_rnePostConstraint(m, d);
     }
 
-    plugin->compute(m, d, i, mjPLUGIN_SENSOR);
+    mjCALLBACK(plugin->compute(m, d, i, mjPLUGIN_SENSOR));
 
     // apply cutoff to all sensors attached to this plugin
     for (int j=0; j < m->nsensor; j++) {
@@ -1463,11 +1468,13 @@ static void compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) 
 
 // position-dependent sensors
 void mj_sensorPos(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nsensor = m->nsensor;
   int nusersensor = 0;
 
   // disabled sensors: return
   if (mjDISABLED(mjDSBL_SENSOR)) {
+    mjLEAVE(d);
     return;
   }
 
@@ -1509,15 +1516,18 @@ void mj_sensorPos(const mjModel* m, mjData* d) {
 
   // compute plugin sensor values
   compute_plugin_sensors(m, d, mjSTAGE_POS);
+  mjLEAVE(d);
 }
 
 
 // velocity-dependent sensors
 void mj_sensorVel(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nusersensor = 0;
 
   // disabled sensors: return
   if (mjDISABLED(mjDSBL_SENSOR)) {
+    mjLEAVE(d);
     return;
   }
 
@@ -1563,15 +1573,18 @@ void mj_sensorVel(const mjModel* m, mjData* d) {
 
   // trigger computation of plugins
   compute_plugin_sensors(m, d, mjSTAGE_VEL);
+  mjLEAVE(d);
 }
 
 
 // acceleration/force-dependent sensors
 void mj_sensorAcc(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int nusersensor = 0;
 
   // disabled sensors: return
   if (mjDISABLED(mjDSBL_SENSOR)) {
+    mjLEAVE(d);
     return;
   }
 
@@ -1617,6 +1630,7 @@ void mj_sensorAcc(const mjModel* m, mjData* d) {
 
   // trigger computation of plugins
   compute_plugin_sensors(m, d, mjSTAGE_ACC);
+  mjLEAVE(d);
 }
 
 
@@ -1624,6 +1638,7 @@ void mj_sensorAcc(const mjModel* m, mjData* d) {
 
 // position-dependent energy (potential)
 void mj_energyPos(const mjModel* m, mjData* d) {
+  mjENTER(d);
   int padr;
   mjtNum dif[3], quat[4], stiffness, x;
 
@@ -1726,11 +1741,13 @@ void mj_energyPos(const mjModel* m, mjData* d) {
 
   // mark as computed
   d->flg_energypos = 1;
+  mjLEAVE(d);
 }
 
 
 // velocity-dependent energy (kinetic)
 void mj_energyVel(const mjModel* m, mjData* d) {
+  mjENTER(d);
   mj_markStack(d);
   mjtNum *vec = mjSTACKALLOC(d, m->nv, mjtNum);
 
@@ -1742,4 +1759,5 @@ void mj_energyVel(const mjModel* m, mjData* d) {
 
   // mark as computed
   d->flg_energyvel = 1;
+  mjLEAVE(d);
 }

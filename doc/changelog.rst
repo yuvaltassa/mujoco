@@ -15,8 +15,13 @@ Engine
   before, :at-val:`continue` records the warning without resetting the state, and the new :at-val:`stop` mode stops
   the top-level call at the first warning, leaving the state available for inspection.
 - Added ``mjData.status`` of type :ref:`mjtStatus`, the status of the most recent pipeline call (:ref:`mj_step` and
-  related): 0 when the call completed without simulation warnings, otherwise naming the first warning raised; the
-  new macro :ref:`mjOK` tests it.
+  related): 0 when no simulation warning was recorded, otherwise naming the first warning raised; the new macro
+  :ref:`mjOK` tests it.
+- An :ref:`error<siErrors>` raised inside a pipeline call no longer terminates the process. The call is abandoned,
+  ``mjData.status`` records the error, and the data refuses further pipeline calls until :ref:`mj_resetData`.
+  Errors raised from callbacks and from thread-pool workers are recovered the same way; errors raised outside a
+  pipeline call still exit, and a log handler that intercepts errors keeps precedence. Python: ``FatalError`` is
+  raised once the engine has recovered the data. See :ref:`Errors<siErrors>` for the contract.
 - Python: ``data.status`` reports the status as above; ``mj_step(m, d, nstep)`` reports the first warning of
   the ``nstep`` steps.
 

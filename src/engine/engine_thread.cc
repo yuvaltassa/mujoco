@@ -15,7 +15,9 @@
 #include "engine/engine_thread.h"
 
 #include <atomic>
+#include <csetjmp>
 #include <cstdint>
+#include <cstdio>
 #include <thread>
 #include <vector>
 
@@ -23,6 +25,7 @@
 #include <mujoco/mjmacro.h>
 #include <mujoco/mjmodel.h>
 #include "engine/engine_memory.h"
+#include "engine/engine_util_errmem.h"
 
 // context for thread pool stored on mjData
 class ThreadPoolContext {
@@ -57,6 +60,7 @@ class ThreadPoolContext {
     ntask_ = ntask;
     next_.store(0, std::memory_order_relaxed);
     ndone_.store(0, std::memory_order_relaxed);
+    nerror_.store(0, std::memory_order_relaxed);
     signal_.store(-signal_.load(std::memory_order_relaxed),
                  std::memory_order_release);
     signal_.notify_all();
@@ -67,7 +71,7 @@ class ThreadPoolContext {
       if (taskId >= ntask_) {
         break;
       }
-      func_(model_, data_, arg_, 0, taskId);
+      RunTask(0, taskId);
     }
 
     // busy wait for rest of workers to finish
@@ -78,7 +82,26 @@ class ThreadPoolContext {
 
   int ThreadCount() const { return threads_.size(); }
 
+  // the first error raised by a task of the last batch, if any: its message and kind
+  bool HasError() const { return nerror_.load(std::memory_order_acquire) > 0; }
+  const char* Error() const { return error_; }
+  int ErrorKind() const { return error_kind_; }
+
  private:
+  // run one task inside an error boundary: an error abandons the task and is recorded, the
+  // first one with its message, for mju_dispatch to raise on the calling thread after the batch
+  void RunTask(int threadId, int taskId) {
+    mjBoundary boundary;
+    mju_pushBoundary(&boundary);
+    if (mjSETJMP(boundary.env) == 0) {
+      func_(model_, data_, arg_, threadId, taskId);
+    } else if (nerror_.fetch_add(1, std::memory_order_acq_rel) == 0) {
+      error_kind_ = mju_takeErrorKind();
+      std::snprintf(error_, sizeof(error_), "%s", _mjPRIVATE__lastError());
+    }
+    mju_popBoundary(&boundary);
+  }
+
   // worker loop for each worker thread
   void Worker(int threadId) {
     int status = 1;
@@ -100,7 +123,7 @@ class ThreadPoolContext {
         if (taskId >= ntask_) {
           break;
         }
-        func_(model_, data_, arg_, threadId, taskId);
+        RunTask(threadId, taskId);
       }
 
       // let main thread know this worker is done
@@ -120,6 +143,11 @@ class ThreadPoolContext {
 
   // atomic counter for number of workers who completed their tasks
   alignas(64) std::atomic<int> ndone_{0};
+
+  // number of tasks that raised an error in the current batch, the first message and its kind
+  std::atomic<int> nerror_{0};
+  char error_[2048] = "";
+  int error_kind_ = 0;
 
   // alternating signal from -1, 1 to start / halt the worker threads,
   // set to 0 to force all workers to exit
@@ -178,6 +206,12 @@ void mju_dispatch(const mjModel* m, mjData* d, mjTaskFunc func, void* arg,
     // unlock mjData and free stack used during worker execution
     d->threadlock = false;
     mj_freeStack(d);
+  }
+
+  // raise the first error of the batch on the calling thread
+  if (ctx.HasError()) {
+    mju_setErrorKind(ctx.ErrorKind());
+    mju_error("%s", ctx.Error());
   }
 }
 

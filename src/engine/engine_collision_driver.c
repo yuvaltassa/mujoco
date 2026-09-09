@@ -575,7 +575,14 @@ static int filterCollisionPair(const mjModel* m, mjData* d, int g1, int g2, int 
 
   if (ipair < 0) {
     if (mjcb_contactfilter) {
-      if (mjcb_contactfilter(m, d, g1, g2)) {
+      // the filter can abandon the call, by raising an error or by a nested pipeline call that
+      // does: drop the remaining pairs rather than call it again on data the call has given up on
+      if (mji_stop(m, d)) {
+        return 0;
+      }
+      int filtered;
+      mjCALLBACK(filtered = mjcb_contactfilter(m, d, g1, g2));
+      if (filtered) {
         return 0;
       }
     } else if (filterBitmask(m->geom_contype[g1], m->geom_conaffinity[g1],
@@ -828,7 +835,12 @@ void mj_collision(const mjModel* m, mjData* d) {
       }
     }
   }
-  mjSTAGE(mj_freeStack(d));
+  // the loops above stop at the first failure, so the frame is freed before leaving
+  mj_freeStack(d);
+  if (mji_stop(m, d)) {
+    mjLEAVE(d);
+    return;
+  }
 
   // finish merging predefined geom pairs
   for (; pairadr < npair; pairadr++) {
@@ -1952,6 +1964,15 @@ static void collisionTask(const mjModel* m, mjData* d, void* arg, int thread_id,
 
   mjc_setCCDBuffer(epabuffer + thread_id * conargs->ccd_size);
   for (int i = 0; i < n; i++) {
+    // a callback in this loop can abandon the call: run nothing further on the data, and report
+    // no contacts for the pairs left unprocessed since the counts are read after the join
+    if (mji_stop(m, d)) {
+      for (int k=i; k < n; k++) {
+        ncon[k] = 0;
+      }
+      break;
+    }
+
     int g1 = pair[i].geom_geom.g1;
     int g2 = pair[i].geom_geom.g2;
     int ipair = pair[i].geom_geom.ipair;
@@ -1960,7 +1981,7 @@ static void collisionTask(const mjModel* m, mjData* d, void* arg, int thread_id,
     mjfCollision collision_func = mjCOLLISIONFUNC[m->geom_type[g1]][m->geom_type[g2]];
     mjtNum margin = getMargin(m, g1, g2, ipair);
     mjtNum gap = getGap(m, g1, g2, ipair);
-    ncon[i] = collision_func(m, d, conbuffer + conpos, g1, g2, margin + gap);
+    mjCALLBACK(ncon[i] = collision_func(m, d, conbuffer + conpos, g1, g2, margin + gap));
 
     // SHOULD NOT OCCUR
     int expected_max = (globalidx + i + 1 < npair ? pair[i+1].conpos : conargs->maxcon) - conpos;

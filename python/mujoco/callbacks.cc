@@ -35,6 +35,9 @@ namespace py = ::pybind11;
 
 
 [[noreturn]] static void EscapeWithPythonException() {
+  // inside a pipeline call: unwind the engine to the call the binding made, which restores
+  // the mjData without recording an error, and let the binding raise the exception
+  _mjPRIVATE__interrupt();
   mju_error("Python exception raised");
   std::terminate();  // not actually reachable, mju_error doesn't return
 }

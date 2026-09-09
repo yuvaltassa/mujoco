@@ -269,6 +269,7 @@ static void mju_defaultLogHandler(const mjLogMessage* msg) {
     mju_user_error(mju_legacy_text(msg, buf, sizeof(buf)));
     return;
   }
+  const mjtBool fatal = (msg->level == mjLOG_ERROR && !_mjPRIVATE__hasBoundary());
 
   if (msg->level == mjLOG_WARNING && mju_user_warning) {
     char buf[2048];
@@ -294,9 +295,12 @@ static void mju_defaultLogHandler(const mjLogMessage* msg) {
     mju_fprint_message(stream, msg->timestamp ? timestr : "", msg);
   }
 
-  if (msg->level == mjLOG_ERROR) {
+  // the error is fatal when no pipeline call can recover it; the exit lives here rather than
+  // in mju_message so that it survives a handler chaining to this one as its previous handler
+  if (fatal) {
     exit(EXIT_FAILURE);
   }
+
 }
 
 
@@ -304,6 +308,25 @@ static void mju_defaultLogHandler(const mjLogMessage* msg) {
 
 // thread-local log handler override
 static mjTHREADLOCAL mjfLogHandler _mjPRIVATE_tls_log_handler = NULL;
+
+// error boundaries of the pipeline calls in progress on this thread, innermost first
+mjTHREADLOCAL mjBoundary* mju_boundaryHead = NULL;
+
+// a callback has been entered on this thread since the innermost boundary was armed
+mjTHREADLOCAL int mju_callbackFlag = 0;
+
+// the chain, detached while an error is delivered to a handler: a handler that transfers
+// control out of the engine leaves no boundaries behind, dead or alive
+static mjTHREADLOCAL mjBoundary* delivering_chain = NULL;
+
+// last error message raised on this thread
+static mjTHREADLOCAL char last_error[2048] = "";
+
+// an interrupt is unwinding the pipeline call in progress on this thread
+static mjTHREADLOCAL bool interrupted = false;
+
+// kind of the error being raised on this thread, recorded by the raise site (mjtStatus, or 0)
+static mjTHREADLOCAL int error_kind = 0;
 
 // recursion guard for log handler
 static mjTHREADLOCAL bool in_log = false;
@@ -325,7 +348,21 @@ void mju_message(const mjLogMessage* msg) {
     mju_activeHandler()(msg);
     in_log = false;
   } else {
-    mju_activeHandler()(msg);
+    // record the message and deliver it with the boundary chain detached; a handler that
+    // returns recovers at the innermost boundary on this thread if there is one, otherwise the
+    // default handler exits the process and a custom handler returns to the raise site as before
+    if (msg->func) {
+      snprintf(last_error, sizeof(last_error), "%s: %s", msg->func, msg->subject);
+    } else {
+      snprintf(last_error, sizeof(last_error), "%s", msg->subject);
+    }
+    mjfLogHandler handler = mju_activeHandler();
+    delivering_chain = mju_boundaryHead;
+    mju_boundaryHead = NULL;
+    handler(msg);
+    mju_boundaryHead = delivering_chain;
+    delivering_chain = NULL;
+    mju_errorJump();
   }
 }
 
@@ -377,6 +414,91 @@ void mju_writeLog(const char* type, const char* msg) {
 
 
 //------------------------------ internal helpers --------------------------------------------------
+
+// push/pop a boundary on the calling thread's chain
+void mju_pushBoundary(mjBoundary* b) {
+  mji_pushBoundary(b);
+}
+void mju_popBoundary(mjBoundary* b) {
+  mji_popBoundary(b);
+}
+
+
+// the callback flag, for C++
+int mju_callbackFlagValue(void) {
+  return mju_callbackFlag;
+}
+
+
+// jump to the innermost boundary on the calling thread, return if there is none
+void mju_errorJump(void) {
+  if (mju_boundaryHead) {
+    mjLONGJMP(mju_boundaryHead->env);
+  }
+}
+
+
+// is a boundary armed on the calling thread, including while an error is being delivered
+int _mjPRIVATE__hasBoundary(void) {
+  return mju_boundaryHead != NULL || delivering_chain != NULL;
+}
+
+
+// interrupt the pipeline call in progress on the calling thread
+void _mjPRIVATE__interrupt(void) {
+  if (mju_boundaryHead) {
+    interrupted = true;
+    mjLONGJMP(mju_boundaryHead->env);
+  }
+}
+
+
+// is an interrupt pending on the calling thread
+int _mjPRIVATE__interrupted(void) {
+  return interrupted;
+}
+
+
+// record the kind of the error about to be raised on the calling thread
+void mju_setErrorKind(int kind) {
+  error_kind = kind;
+}
+
+
+// kind of the error being recovered on the calling thread, or 0; clears it
+int mju_takeErrorKind(void) {
+  int kind = error_kind;
+  error_kind = 0;
+  return kind;
+}
+
+
+// was the last pipeline call on the calling thread interrupted; clears the flag
+int _mjPRIVATE__takeInterrupt(void) {
+  int result = interrupted;
+  interrupted = false;
+  return result;
+}
+
+
+// is an interrupt unwinding the calling thread's pipeline call
+int mju_interrupted(void) {
+  return interrupted;
+}
+
+
+// clear the interrupt
+void mju_clearInterrupt(void) {
+  interrupted = false;
+  error_kind = 0;
+}
+
+
+// last error message raised on the calling thread
+const char* _mjPRIVATE__lastError(void) {
+  return last_error;
+}
+
 
 // set thread-local log handler; return previous
 mjfLogHandler _mjPRIVATE_setTlsLogHandler(mjfLogHandler handler) {
