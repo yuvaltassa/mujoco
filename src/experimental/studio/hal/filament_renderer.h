@@ -81,7 +81,7 @@ class FilamentRenderer : public Renderer {
   // Resets the renderer; no rendering will occur until Init() is called again.
   void Deinit();
 
-  void BuildMainRenderRequest(mjrfRenderRequest* request,
+  void BuildMainRenderRequest(mjrfRenderRequest* request, const mjModel* model,
                               const mjvOption* vis_option,
                               const mjrRect& viewport, const mjrCamera& camera);
   void BuildUxRenderRequest(mjrfRenderRequest* request,
