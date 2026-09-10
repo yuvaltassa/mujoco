@@ -706,7 +706,7 @@ void mjccd_support(const void *_obj, const ccd_vec3_t *_dir, ccd_vec3_t *vec) {
     return;
 
   default:
-    mjERROR("ccd support function is undefined for geom type %d", obj->geom_type);
+    mjERROR_INTERNAL("ccd support function is undefined for geom type %d", obj->geom_type);
   }
 
   // add local_dir*margin/2 to result

@@ -22,6 +22,9 @@ Engine
   Errors raised from callbacks and from thread-pool workers are recovered the same way; errors raised outside a
   pipeline call still exit, and a log handler that intercepts errors keeps precedence. Python: ``FatalError`` is
   raised once the engine has recovered the data. See :ref:`Errors<siErrors>` for the contract.
+- Errors now carry a kind, saying what the caller can do about them: out of memory, bad input, or an internal
+  MuJoCo bug. It appears in ``mjData.status`` (see :ref:`mjtStatus`) and in the new ``status`` field of
+  :ref:`mjLogMessage`.
 - Python: ``data.status`` reports the status as above; ``mj_step(m, d, nstep)`` reports the first warning of
   the ``nstep`` steps.
 

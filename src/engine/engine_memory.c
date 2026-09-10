@@ -171,8 +171,7 @@ static inline void* stackallocinternal(mjData* d, mjStackInfo* stack_info, size_
     } else {
       info[0] = '\0';
     }
-    mju_setErrorKind(mjSTATUS_OOM);
-    mju_error(
+    mjERROR_OOM(
         "mj_stackAlloc: out of memory, stack overflow%s\n"
         "  max = %" PRIuPTR ", available = %" PRIuPTR ", requested = %" PRIuPTR
         "\n nefc = %d, ncon = %d",
@@ -227,8 +226,7 @@ static inline void* stackalloc(mjData* d, size_t size, size_t alignment,
       } else {
         info[0] = '\0';
       }
-      mju_setErrorKind(mjSTATUS_OOM);
-      mju_error(
+      mjERROR_OOM(
           "mj_stackAlloc: out of memory, stack overflow%s (threadlock)\n"
           "  max = %" PRIuPTR ", available = %" PRIuPTR ", requested = %" PRIuPTR
           "\n nefc = %d, ncon = %d",
@@ -300,7 +298,7 @@ static inline void freestackinternal(mjStackInfo* stack_info) {
 #ifdef mjUSEASAN
   // raise an error if caller function name doesn't match the most recent caller of mj_markStack
   if (!mj__comparePcFuncName(s->pc, __sanitizer_return_address())) {
-    mjERROR("mj_markStack %s has no corresponding mj_freeStack (detected %s)",
+    mjERROR_INTERNAL("mj_markStack %s has no corresponding mj_freeStack (detected %s)",
             mj__getPcDebugInfo(s->pc),
             mj__getPcDebugInfo(__sanitizer_return_address()));
   }
@@ -352,7 +350,7 @@ void* mj_stackAllocInfo(mjData* d, size_t bytes, size_t alignment,
 // allocate mjtNums on the stack
 mjtNum* mj_stackAllocNum(mjData* d, size_t size) {
   if (mjUNLIKELY(size >= SIZE_MAX / sizeof(mjtNum))) {
-    mjERROR("requested size is too large (more than 2^64 bytes).");
+    mjERROR_INPUT("requested size is too large (more than 2^64 bytes).");
   }
   return (mjtNum*) stackalloc(d, size * sizeof(mjtNum), _Alignof(mjtNum), NULL, 0);
 }
@@ -361,7 +359,7 @@ mjtNum* mj_stackAllocNum(mjData* d, size_t size) {
 // allocate ints on the stack
 int* mj_stackAllocInt(mjData* d, size_t size) {
   if (mjUNLIKELY(size >= SIZE_MAX / sizeof(int))) {
-    mjERROR("requested size is too large (more than 2^64 bytes).");
+    mjERROR_INPUT("requested size is too large (more than 2^64 bytes).");
   }
   return (int*) stackalloc(d, size * sizeof(int), _Alignof(int), NULL, 0);
 }

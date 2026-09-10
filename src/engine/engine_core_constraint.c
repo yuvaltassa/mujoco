@@ -254,7 +254,7 @@ static int mj_elemBodyWeight(const mjModel* m, const mjData* d, int f, int e, in
   // normalize weights
   mjtNum sum = mju_sum(weight, dim+1);
   if (sum < mjMINVAL) {
-    mjERROR("element body weight sum < mjMINVAL");
+    mjERROR_INPUT("element body weight sum < mjMINVAL");
   }
   mju_scl(weight, weight, 1.0/sum, dim+1);
   return dim+1;
@@ -463,7 +463,7 @@ static void mj_addConstraint(const mjModel* m, mjData* d,
 
     // chain required in sparse mode
     if (NV && !chain) {
-      mjERROR("called with dense arguments");
+      mjERROR_INTERNAL("called with dense arguments");
     }
 
     // process size elements
@@ -809,7 +809,7 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
 
       // only order 1 (trilinear) and 2 (quadratic) are supported
       if (order > 2) {
-        mjERROR("flex strain constraints only support order 1 and 2, got %d", order);
+        mjERROR_INPUT("flex strain constraints only support order 1 and 2, got %d", order);
       }
 
       int cx = m->flex_cellnum[3*f+0];
@@ -1028,7 +1028,7 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
       break;
 
     default:                    // SHOULD NOT OCCUR
-      mjERROR("invalid equality constraint type %d", m->eq_type[i]);
+      mjERROR_INTERNAL("invalid equality constraint type %d", m->eq_type[i]);
     }
 
     // add constraint
@@ -1858,7 +1858,7 @@ void mj_diagApprox(const mjModel* m, mjData* d) {
       }
 
       default:
-        mjERROR("unknown constraint type %d", d->efc_type[i]);    // SHOULD NOT OCCUR
+        mjERROR_INTERNAL("unknown constraint type %d", d->efc_type[i]);    // SHOULD NOT OCCUR
       }
       break;
 
@@ -2607,7 +2607,7 @@ static int mj_ne(const mjModel* m, mjData* d, int* nnz) {
 
     default:
       // might occur in case of the now-removed distance equality constraint
-      mjERROR("unknown constraint type %d", m->eq_type[i]);    // SHOULD NOT OCCUR
+      mjERROR_INTERNAL("unknown constraint type %d", m->eq_type[i]);    // SHOULD NOT OCCUR
     }
 
     // accumulate counts; flex NV already accumulated
@@ -2681,7 +2681,7 @@ static int mj_nc(const mjModel* m, mjData* d, int* nnz) {
         int asleep1 = d->body_awake[b1] == mjS_ASLEEP;
         int asleep2 = d->body_awake[b2] == mjS_ASLEEP;
         if (asleep1 || asleep2) {
-          mjERROR("contact %d involves sleeping geom %d", i, asleep1 ? g1 : g2);
+          mjERROR_INTERNAL("contact %d involves sleeping geom %d", i, asleep1 ? g1 : g2);
         }
       }
 
@@ -2690,7 +2690,7 @@ static int mj_nc(const mjModel* m, mjData* d, int* nnz) {
         if (con->geom[side] >= 0) continue;
         int b = mj_flexBody(m, con, side);
         if (d->body_awake[m->body_weldid[b]] == mjS_ASLEEP) {
-          mjERROR("contact %d involves sleeping flex %d", i, con->flex[side]);
+          mjERROR_INTERNAL("contact %d involves sleeping flex %d", i, con->flex[side]);
         }
       }
     }
@@ -2885,7 +2885,7 @@ static void computeY_fill(mjtNum* Y, int* Y_colind,
 
     // compare with Y_rownnz: SHOULD NOT OCCUR
     if (nnzY != Y_rownnz[r]) {
-      mjERROR("pre and post-count of Y_rownnz are not equal on row %d", r);
+      mjERROR_INTERNAL("pre and post-count of Y_rownnz are not equal on row %d", r);
     }
   }
 }
@@ -2967,31 +2967,34 @@ void mj_makeConstraint(const mjModel* m, mjData* d) {
   // check sparse allocation
   if (mj_isSparse(m)) {
     if (d->ne != ne_allocated) {
-      mjERROR("ne mis-allocation: found ne=%d but allocated %d", d->ne, ne_allocated);
+      mjERROR_INTERNAL("ne mis-allocation: found ne=%d but allocated %d", d->ne, ne_allocated);
     }
 
     if (d->nf != nf_allocated) {
-      mjERROR("nf mis-allocation: found nf=%d but allocated %d", d->nf, nf_allocated);
+      mjERROR_INTERNAL("nf mis-allocation: found nf=%d but allocated %d", d->nf, nf_allocated);
     }
 
     if (d->nl != nl_allocated) {
-      mjERROR("nl mis-allocation: found nl=%d but allocated %d", d->nl, nl_allocated);
+      mjERROR_INTERNAL("nl mis-allocation: found nl=%d but allocated %d", d->nl, nl_allocated);
     }
 
     // check that nefc was computed correctly
     if (d->nefc != nefc_allocated) {
-      mjERROR("nefc mis-allocation: found nefc=%d but allocated %d", d->nefc, nefc_allocated);
+      mjERROR_INTERNAL("nefc mis-allocation: found nefc=%d but allocated %d",
+                       d->nefc, nefc_allocated);
     }
 
     // check that nJ was computed correctly
     if (d->nefc > 0) {
       int nJ = d->efc_J_rownnz[d->nefc - 1] + d->efc_J_rowadr[d->nefc - 1];
       if (d->nJ != nJ) {
-        mjERROR("constraint Jacobian mis-allocation: found nJ=%d but allocated %d", nJ, d->nJ);
+        mjERROR_INTERNAL("constraint Jacobian mis-allocation: found nJ=%d but allocated %d",
+                         nJ, d->nJ);
       }
     }
   } else if (d->nefc > nefc_allocated) {
-    mjERROR("nefc under-allocation: found nefc=%d but allocated only %d", d->nefc, nefc_allocated);
+    mjERROR_INTERNAL("nefc under-allocation: found nefc=%d but allocated only %d",
+                     d->nefc, nefc_allocated);
   }
 
   // collect memory use statistics

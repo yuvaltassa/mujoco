@@ -2832,8 +2832,10 @@ typedef enum mjtStatus {            // status of a pipeline call, stored in mjDa
   mjSTATUS_BADCTRL,                 // bad number in ctrl
 
   // errors: the call was abandoned, the data cannot be used until mj_resetData
-  mjSTATUS_ERROR       = -1,        // error of unspecified kind
-  mjSTATUS_OOM         = -2         // out of memory: stack overflow
+  mjSTATUS_ERROR       = -1,        // error raised by code that did not classify it
+  mjSTATUS_OOM         = -2,        // out of memory: stack, arena or a fixed-size buffer
+  mjSTATUS_INPUT       = -3,        // the call cannot succeed: bad argument, model or option
+  mjSTATUS_INTERNAL    = -4         // MuJoCo invariant violated: please report a bug
 } mjtStatus;
 typedef enum mjtOnWarn {            // response to simulation warnings
   mjONWARN_AUTO = 0,                // apply per-warning automatic recovery and continue
@@ -2890,6 +2892,7 @@ typedef enum mjtLogTopic {        // log topic identifiers
 typedef struct mjLogMessage_ {    // structured log message
   int level;                      // mjtLogLevel
   int topic;                      // mjtLogTopic (0 for error/warning/user)
+  int status;                     // kind of the error (mjtStatus, negative; 0 for non-errors)
   char subject[1024];             // message subject (one-liner, printf-formatted)
   const char* body;               // message body (multi-line detail, or NULL)
   const char* func;               // __func__ or NULL

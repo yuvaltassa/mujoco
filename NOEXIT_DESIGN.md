@@ -136,13 +136,21 @@ message on the calling thread, where the pipeline boundary catches it. This also
 that existed independently: a worker-thread `mjERROR` used to bypass the bindings'
 thread-local handler and exit the process under Python.
 
-**Kinds.** `mjSTATUS_ERROR` (-1) is the code of unspecified kind. A raise site that knows its
-kind records it on its own thread before raising (`mju_setErrorKind`): `mj_stackAlloc`
-records `mjSTATUS_OOM` (-2) on stack overflow, and the recovery takes the kind when it writes
-the status. Nothing is written to the shared `mjData` from a worker thread; a worker's kind
-travels with its message to the calling thread. A taxonomy of the ~250
-raise sites (input validation, geometry, internal invariants) is a follow-up; nothing in the
-mechanism depends on it.
+**Kinds.** Every raise site names the kind of its error, in the macro it raises with:
+`mjERROR_OOM` (-2) when a memory region is exhausted, `mjERROR_INPUT` (-3) when the argument,
+the model or the combination of options cannot work, `mjERROR_INTERNAL` (-4) when an engine
+invariant is violated. `mjSTATUS_ERROR` (-1) is what plain `mju_error` produces, which after
+the sweep of the engine means code outside it: a plugin, a user callback, a host. The kind
+travels in the `status` field of the `mjLogMessage`, so the log handler sees it too;
+`mju_message` copies it to a thread-local for the recovery, which writes it into the status.
+Nothing is written to the shared `mjData` from a worker thread; a worker's kind travels with
+its message to the calling thread. The 250 engine sites split almost evenly, 117 `INPUT`
+against 113 `INTERNAL` and 20 `OOM`, and that is the distinction which earns the taxonomy its
+keep: half of what the engine raises is addressed to the caller and half to us, and the
+message text alone does not say which. A scanner test refuses an unclassified `mjERROR` or
+`mju_error` in `src/engine`, so a new raise site has to choose. Numerical degeneracies (a
+rank-deficient Hessian, a zero-mass moving body) are classified as `INPUT`; several of them
+would be better raised as warnings, which is a separate question.
 
 **Bindings.** The bindings' handler used to `longjmp` out of the engine to raise
 `FatalError`, leaking the `mjData` stack frame of the interrupted call. Now, when a boundary
@@ -174,10 +182,6 @@ checks read only `d->status`; the flag is read once, at the recovery. Outside a 
 
 ## Follow-ups
 
-- Compliance: a scanner test that every public function taking a non-const `mjData*`
-  carries `mjENTER`/`mjLEAVE` on every return path, so that making a function fallible or
-  infallible cannot silently drop or duplicate the boundary.
-- Error kinds beyond `mjSTATUS_OOM`.
 - Creators (`mj_makeData`, `mjv_makeScene`) returning `NULL` on allocation failure; the
   data-less argument-validation errors in `mju_`/`mjv_` utilities stay fatal as programmer
   errors.

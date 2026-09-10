@@ -246,7 +246,7 @@ static inline int mji_refused(mjData* d, mjBoundary* b, int entry) {
     return 0;
   }
   if (entry == mjENTER_OUTERMOST) {
-    mju_error("mjData has a pending error (status %d), call mj_resetData", d->status);
+    mjERROR_INPUT("mjData has a pending error (status %d), call mj_resetData", d->status);
   }
   mji_leave(d, b, entry);
   return 1;

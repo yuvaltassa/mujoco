@@ -44,6 +44,11 @@ STRUCTS: Mapping[str, StructDecl] = dict([
                  doc='mjtLogTopic (0 for error/warning/user)',
              ),
              StructFieldDecl(
+                 name='status',
+                 type=ValueType(name='int'),
+                 doc='kind of error (mjtStatus, negative; 0 if unclassified)',
+             ),
+             StructFieldDecl(
                  name='subject',
                  type=ArrayType(
                      inner_type=ValueType(name='char'),

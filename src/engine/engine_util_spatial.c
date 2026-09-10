@@ -513,7 +513,7 @@ void mju_makeFrame(mjtNum frame[9]) {
 
   // normalize xaxis
   if (mju_normalize3(frame) < 0.5) {
-    mjERROR("xaxis of contact frame undefined");
+    mjERROR_INPUT("xaxis of contact frame undefined");
   }
 
   // if yaxis undefined, set yaxis to (0,1,0) if possible, otherwise (0,0,1)
@@ -541,7 +541,7 @@ void mju_makeFrame(mjtNum frame[9]) {
 // seq[0,1,2] must be in 'xyzXYZ', lower/upper-case mean intrinsic/extrinsic rotations
 void mju_euler2Quat(mjtNum quat[4], const mjtNum euler[3], const char* seq) {
   if (strnlen(seq, 4) != 3) {
-    mjERROR("seq must contain exactly 3 characters");
+    mjERROR_INPUT("seq must contain exactly 3 characters");
   }
 
   // init
@@ -559,7 +559,7 @@ void mju_euler2Quat(mjtNum quat[4], const mjtNum euler[3], const char* seq) {
     } else if (seq[i]=='z' || seq[i]=='Z') {
       rot[3] = sa;
     } else {
-      mjERROR("seq[%d] is '%c', should be one of x, y, z, X, Y, Z", i, seq[i]);
+      mjERROR_INPUT("seq[%d] is '%c', should be one of x, y, z, X, Y, Z", i, seq[i]);
     }
 
     // accumulate rotation

@@ -552,8 +552,12 @@ Status of a pipeline call (:ref:`mj_step` and related), stored in ``mjData.statu
 means that no :ref:`simulation warning<siSimWarning>` or :ref:`error<siErrors>` was recorded. A positive value names
 the first warning raised during the call, in the order of :ref:`mjtWarning` (``mjSTATUS_INERTIA`` is
 ``mjWARN_INERTIA + 1``). A negative value names an error that abandoned the call; further pipeline calls on the data
-fail until it is reset with :ref:`mj_resetData`. The macro :ref:`mjOK` tests the status; per-warning statistics
-remain in ``mjData.warning``.
+fail until it is reset with :ref:`mj_resetData`. The negative values classify the error by what the caller can do
+about it: ``mjSTATUS_OOM`` asks for more memory or a smaller model, ``mjSTATUS_INPUT`` for a different argument,
+model or combination of options, and ``mjSTATUS_INTERNAL`` is a bug in MuJoCo, which should be reported;
+``mjSTATUS_ERROR`` is an error raised by code that did not classify it, such as a plugin or a user callback. The
+same value reaches the log handler in the ``status`` field of the message. The macro :ref:`mjOK` tests the status;
+per-warning statistics remain in ``mjData.warning``.
 
 .. mujoco-include:: mjtStatus
 

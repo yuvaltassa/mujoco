@@ -4436,7 +4436,9 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .value("mjSTATUS_BADQACC", mjSTATUS_BADQACC)
     .value("mjSTATUS_BADCTRL", mjSTATUS_BADCTRL)
     .value("mjSTATUS_ERROR", mjSTATUS_ERROR)
-    .value("mjSTATUS_OOM", mjSTATUS_OOM);
+    .value("mjSTATUS_OOM", mjSTATUS_OOM)
+    .value("mjSTATUS_INPUT", mjSTATUS_INPUT)
+    .value("mjSTATUS_INTERNAL", mjSTATUS_INTERNAL);
   enum_<mjtStereo>("mjtStereo")
     .value("mjSTEREO_NONE", mjSTEREO_NONE)
     .value("mjSTEREO_QUADBUFFERED", mjSTEREO_QUADBUFFERED)
@@ -4840,6 +4842,7 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .property("func", &MjLogMessage::func, reference())
     .property("level", &MjLogMessage::level, &MjLogMessage::set_level)
     .property("line", &MjLogMessage::line, &MjLogMessage::set_line)
+    .property("status", &MjLogMessage::status, &MjLogMessage::set_status)
     .property("subject", &MjLogMessage::subject)
     .property("timestamp", &MjLogMessage::timestamp, &MjLogMessage::set_timestamp)
     .property("topic", &MjLogMessage::topic, &MjLogMessage::set_topic);

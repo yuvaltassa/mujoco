@@ -283,7 +283,7 @@ mjtNum mju_wrap(mjtNum wpnt[6], const mjtNum x0[3], const mjtNum x1[3],
                 int type, const mjtNum side[3]) {
   // check object type;  SHOULD NOT OCCUR
   if (type != mjWRAP_SPHERE && type != mjWRAP_CYLINDER) {
-    mjERROR("unknown wrapping object type %d", type);
+    mjERROR_INTERNAL("unknown wrapping object type %d", type);
   }
 
   // map sites to wrap object's local frame
@@ -1405,7 +1405,7 @@ void mju_historyInit(mjtNum* buf, int n, int dim, const mjtNum* times, const mjt
   // check strict monotonicity of times
   for (int i = 0; i < n-1; i++) {
     if (times[i+1] - times[i] < mjMINVAL) {
-      mjERROR("times must be strictly increasing, got times[%d]=%g >= times[%d]=%g",
+      mjERROR_INPUT("times must be strictly increasing, got times[%d]=%g >= times[%d]=%g",
               i, times[i], i+1, times[i+1]);
     }
   }
@@ -1668,7 +1668,7 @@ int mju_outsideBox(const mjtNum point[3], const mjtNum pos[3], const mjtNum mat[
                    const mjtNum size[3], mjtNum inflate) {
   // check inflation coefficient
   if (inflate < 1) {
-    mjERROR("inflation coefficient must be >= 1")
+    mjERROR_INPUT("inflation coefficient must be >= 1")
   }
 
   // vector from pos to point, projected to box frame

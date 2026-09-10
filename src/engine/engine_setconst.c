@@ -424,10 +424,10 @@ static void setFixed(mjModel* m, mjData* d) {
         else if (policy == mjSLEEP_ALLOWED || policy == mjSLEEP_INIT) {
           mj_freeStack(d);
           if (treenum > 2) {
-            mjERROR("tree %d connected to tendon %d which spans more than 2 trees, "
+            mjERROR_INPUT("tree %d connected to tendon %d which spans more than 2 trees, "
                     "sleeping not allowed", treeid, i);
           } else {
-            mjERROR("tree %d connected to tendon %d with non-zero stiffness or damping, "
+            mjERROR_INPUT("tree %d connected to tendon %d with non-zero stiffness or damping, "
                     "sleeping not allowed", treeid, i);
           }
         }
@@ -688,7 +688,7 @@ static void makeFlexSparse(mjModel* m, mjData* d) {
           dx[2] *= 2 * m->flex_size[3 * f + 2];
 
           if (mju_abs(dx[2]) > mjMINVAL) {
-            mjERROR("flex vertices are not in the same plane");
+            mjERROR_INPUT("flex vertices are not in the same plane");
           }
 
           // get mass of neighbor vertex
@@ -920,7 +920,7 @@ static void set0(mjModel* m, mjData* d) {
     else if (m->body_simple[i] == 2) {
       mjtNum mass = m->body_mass[i];
       if (!mass) {  // SHOULD NOT OCCUR
-        mjERROR("moving body %d has 0 mass", i);
+        mjERROR_INPUT("moving body %d has 0 mass", i);
       }
       m->body_invweight0[2*i+0] = 1/mju_max(mjMINVAL, mass);
       m->body_invweight0[2*i+1] = 0;
@@ -949,7 +949,7 @@ static void set0(mjModel* m, mjData* d) {
       int bi = m->jnt_bodyid[i];
       mjtNum mass = m->body_mass[bi];
       if (!mass) {  // SHOULD NOT OCCUR
-        mjERROR("moving body %d has 0 mass", bi);
+        mjERROR_INPUT("moving body %d has 0 mass", bi);
       }
       m->dof_invweight0[id] = 1/mju_max(mjMINVAL, mass);
     }
@@ -1074,7 +1074,7 @@ static void set0(mjModel* m, mjData* d) {
           mju_zero(m->eq_data+mjNEQDATA*i, mjNEQDATA);
           break;
         default:
-          mjERROR("invalid objtype in connect constraint %d", i);
+          mjERROR_INTERNAL("invalid objtype in connect constraint %d", i);
       }
     }
 
@@ -1105,7 +1105,7 @@ static void set0(mjModel* m, mjData* d) {
           break;
         }
         default:
-          mjERROR("invalid objtype in weld constraint %d", i);
+          mjERROR_INTERNAL("invalid objtype in weld constraint %d", i);
       }
     }
   }
@@ -1400,8 +1400,8 @@ static void setEfm0Factor(mjModel* m, mjData* d) {
   }
   if (3*nfree != nbd) {
     mj_freeStack(d);
-    mjERROR("constant metric factor dof count mismatch: compiler sized %d, engine found %d",
-            nbd, 3*nfree);
+    mjERROR_INTERNAL("constant metric factor dof count mismatch: "
+                     "compiler sized %d, engine found %d", nbd, 3*nfree);
   }
 
   // fill row -> dof address (row 3*slot + k, coordinate fastest)
@@ -1494,7 +1494,7 @@ static void setEfm0Factor(mjModel* m, mjData* d) {
                                    Hu_rownnz, Hu_rowadr, Hu_colind, nbd, d);
   if (nnz != m->nefm0L) {
     mj_freeStack(d);
-    mjERROR("constant metric factor size mismatch: compiler sized %d, symbolic found %d",
+    mjERROR_INTERNAL("constant metric factor size mismatch: compiler sized %d, symbolic found %d",
             (int)m->nefm0L, nnz);
   }
 
@@ -1513,7 +1513,7 @@ static void setEfm0Factor(mjModel* m, mjData* d) {
                                    Hl_val, Hl_rownnz, Hl_rowadr, Hl_colind, scratch);
   if (rank != nbd) {
     mj_freeStack(d);
-    mjERROR("constant metric factor is rank-deficient (%d of %d)", rank, nbd);
+    mjERROR_INPUT("constant metric factor is rank-deficient (%d of %d)", rank, nbd);
   }
 
   mj_freeStack(d);
@@ -1538,7 +1538,7 @@ void mj_setConst(mjModel* m, mjData* d) {
   // error if simple body lost sameframe (user must set simple="false")
   for (int i = 1; i < m->nbody; i++) {
     if (m->body_simple[i] > 0 && m->body_sameframe[i] != mjSAMEFRAME_BODY) {
-      mjERROR("body %d is compiled as simple but sameframe no longer holds, "
+      mjERROR_INTERNAL("body %d is compiled as simple but sameframe no longer holds, "
               "use body/simple='false'", i);
     }
   }
@@ -1606,7 +1606,7 @@ int mj_setLengthRange(mjModel* m, mjData* d, int index,
                       const mjLROpt* opt, char* error, int error_sz) {
   // check index
   if (index < 0 || index >= m->nactuator) {
-    mjERROR("invalid actuator index");
+    mjERROR_INPUT("invalid actuator index");
   }
   int out = m->actuator_outadr[index];
 

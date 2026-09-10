@@ -210,8 +210,7 @@ void mju_dispatch(const mjModel* m, mjData* d, mjTaskFunc func, void* arg,
 
   // raise the first error of the batch on the calling thread
   if (ctx.HasError()) {
-    mju_setErrorKind(ctx.ErrorKind());
-    mju_error("%s", ctx.Error());
+    mjERROR_(ctx.ErrorKind(), "%s", ctx.Error());
   }
 }
 

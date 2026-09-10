@@ -566,7 +566,7 @@ mjtNum mj_rayHfield(const mjModel* m, const mjData* d, int geomid,
 
   // check geom type
   if (m->geom_type[geomid] != mjGEOM_HFIELD) {
-    mjERROR("geom with hfield type expected");
+    mjERROR_INTERNAL("geom with hfield type expected");
   }
 
   // hfield id and dimensions
@@ -781,7 +781,7 @@ mjtNum mju_rayTree(const mjModel* m, const mjData* d, int id, const mjtNum pnt[3
   const int* child = m->bvh_child + 2*bvhadr;
 
   if (meshid == -1) {
-    mjERROR("mesh id of geom %d is -1", meshid);  // SHOULD NOT OCCUR
+    mjERROR_INTERNAL("mesh id of geom %d is -1", meshid);  // SHOULD NOT OCCUR
   }
 
   // initialize stack
@@ -864,7 +864,7 @@ mjtNum mju_rayTree(const mjModel* m, const mjData* d, int id, const mjtNum pnt[3
     for (int i=0; i < 2; i++) {
       if (child[2*node+i] != -1) {
         if (nstack >= mjMAXTREEDEPTH) {
-          mjERROR("BVH stack depth exceeded in geom %d.", id);
+          mjERROR_OOM("BVH stack depth exceeded in geom %d.", id);
         }
         stack[nstack] = child[2*node+i];
         nstack++;
@@ -956,7 +956,7 @@ mjtNum mj_rayMesh(const mjModel* m, const mjData* d, int id, const mjtNum pnt[3]
 
   // check geom type
   if (m->geom_type[id] != mjGEOM_MESH) {
-    mjERROR("geom with mesh type expected");
+    mjERROR_INTERNAL("geom with mesh type expected");
   }
 
   // bounding box test
@@ -992,7 +992,7 @@ mjtNum mju_rayGeom(const mjtNum pos[3], const mjtNum mat[9], const mjtNum size[3
     return ray_box(pos, mat, size, pnt, vec, NULL, normal);
 
   default:
-    mjERROR("unexpected geom type %d", geomtype);
+    mjERROR_INTERNAL("unexpected geom type %d", geomtype);
     return -1;
   }
 }
@@ -1315,7 +1315,7 @@ mjtNum mj_ray(const mjModel* m, const mjData* d, const mjtNum pnt[3], const mjtN
 
   // check vector length
   if (mju_norm3(vec) < mjMINVAL) {
-    mjERROR("vector length is too small");
+    mjERROR_INPUT("vector length is too small");
   }
 
   // clear result
@@ -1356,7 +1356,7 @@ void mju_multiRayPrepare(const mjModel* m, const mjData* d, const mjtNum pnt[3],
                          const mjtNum ray_xmat[9], const mjtByte* geomgroup, mjtBool flg_static,
                          int bodyexclude, mjtNum cutoff, mjtNum* geom_ba, int* geom_eliminate) {
   if (ray_xmat) {
-    mjERROR("ray_xmat is currently unused, should be NULL");
+    mjERROR_INPUT("ray_xmat is currently unused, should be NULL");
   }
 
   // compute eliminate flag for all geoms

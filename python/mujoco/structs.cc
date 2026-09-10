@@ -617,6 +617,9 @@ This is useful for example when the MJB is not available as a file on disk.)"));
       "topic", [](const MjLogMessageWrapper& d) { return d.get()->topic; },
       [](MjLogMessageWrapper& d, int rhs) { d.get()->topic = rhs; });
   mjLogMessage.def_property(
+      "status", [](const MjLogMessageWrapper& d) { return d.get()->status; },
+      [](MjLogMessageWrapper& d, int rhs) { d.get()->status = rhs; });
+  mjLogMessage.def_property(
       "subject",
       [](const MjLogMessageWrapper& d) {
         return std::string(d.get()->subject);

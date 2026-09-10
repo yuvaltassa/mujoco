@@ -198,7 +198,14 @@ void scanPluginLibraries() {
 const char* Diverged(const mjModel* m, const mjData* d) {
   // error: the data cannot be used until reset
   if (d->status < 0) {
-    return "Error in mj_step, see the error message; reset to continue";
+    switch (d->status) {
+    case mjSTATUS_OOM:
+      return "Out of memory in mj_step; raise memory or simplify the model; reset to continue";
+    case mjSTATUS_INTERNAL:
+      return "Internal error in mj_step, please report it; reset to continue";
+    default:
+      return "Error in mj_step, see the error message; reset to continue";
+    }
   }
 
   // stop policy: the step stopped at a warning

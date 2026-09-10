@@ -105,7 +105,7 @@ static void mj_discreteAcc(const mjModel* m, mjData* d) {
 
   case mjINT_RK4:
     // not supported by RK4
-    mjERROR("discrete inverse dynamics is not supported by RK4 integrator");
+    mjERROR_INPUT("discrete inverse dynamics is not supported by RK4 integrator");
     return;
 
   case mjINT_EULER:

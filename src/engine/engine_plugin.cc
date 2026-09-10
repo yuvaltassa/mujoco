@@ -468,13 +468,13 @@ bool GlobalTable<mjpEncoder>::CopyObject(mjpEncoder& dst, const mjpEncoder& src,
 // globally register a plugin (thread-safe), return new slot id
 int mjp_registerPlugin(const mjpPlugin* plugin) {
   if (!plugin->name) {
-    mju_error("plugin->name is a null pointer");
+    mjERROR_INPUT("plugin->name is a null pointer");
   } else if (plugin->name[0] == '\0') {
-    mju_error("plugin->name is an empty string");
+    mjERROR_INPUT("plugin->name is an empty string");
   } else if (plugin->nattribute < 0) {
-    mju_error("plugin->nattribute is negative");
+    mjERROR_INPUT("plugin->nattribute is negative");
   } else if (plugin->nattribute > kMaxAttributes) {
-    mju_error("plugin->nattribute exceeds the maximum limit of %i",
+    mjERROR_INPUT("plugin->nattribute exceeds the maximum limit of %i",
               kMaxAttributes);
   }
 
@@ -715,9 +715,9 @@ void mj_loadPluginLibrary(const char* path) {
   if (!handle) {
     const char* error = dlerror();
     if (error) {
-      mju_error("Error loading plugin library '%s': %s\n", path, error);
+      mjERROR_INPUT("Error loading plugin library '%s': %s\n", path, error);
     } else {
-      mju_error("Unknown error loading plugin library '%s'\n", path);
+      mjERROR_INPUT("Unknown error loading plugin library '%s'\n", path);
     }
   }
 #endif

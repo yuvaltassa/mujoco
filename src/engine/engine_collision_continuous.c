@@ -529,7 +529,7 @@ mjtNum mjc_pairGap(const mjcFlexPair* pair, const mjModel* m, const mjData* d, c
       return dd - radii[a];  // flex edge radius
     }
     default:
-      mju_error("mjc_pairGap: unknown pair type %d", pair->type);
+      mjERROR_INTERNAL("mjc_pairGap: unknown pair type %d", pair->type);
       return 0;
   }
 }
@@ -614,7 +614,7 @@ static mjtNum conGapAdv(const mjcFlexPair* con, const mjModel* m, const mjData* 
       return mjc_SegSeg(eg, eg + 3, P[0], P[1], c1, c2, st) - radii[con->idx[1]];
     }
     default:
-      mju_error("conGapAdv: unknown pair type %d", con->type);
+      mjERROR_INTERNAL("conGapAdv: unknown pair type %d", con->type);
       return 0;
   }
 }

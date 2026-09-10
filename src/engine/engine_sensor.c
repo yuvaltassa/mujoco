@@ -246,7 +246,7 @@ static void get_xpos_xmat(const mjData* d, mjtObj type, int id, int sensor_id,
     *xmat = d->cam_xmat + 9*id;
     break;
   default:
-    mjERROR("invalid object type in sensor %d", sensor_id);
+    mjERROR_INTERNAL("invalid object type in sensor %d", sensor_id);
   }
 }
 
@@ -271,7 +271,7 @@ static void get_xquat(const mjModel* m, const mjData* d, mjtObj type, int id, in
     mju_mulQuat(quat, d->xquat+4*m->cam_bodyid[id], m->cam_quat+4*id);
     break;
   default:
-    mjERROR("invalid object type in sensor %d", sensor_id);
+    mjERROR_INTERNAL("invalid object type in sensor %d", sensor_id);
   }
 }
 
@@ -823,7 +823,7 @@ static void mj_computeSensorPos(const mjModel* m, mjData* d, int i, mjtNum* sens
     break;
 
   default:
-    mjERROR("invalid sensor type in POS stage, sensor %d", i);
+    mjERROR_INTERNAL("invalid sensor type in POS stage, sensor %d", i);
   }
 }
 
@@ -942,7 +942,7 @@ static void mj_computeSensorVel(const mjModel* m, mjData* d, int i, mjtNum* sens
     break;
 
   default:
-    mjERROR("invalid type in VEL stage, sensor %d", i);
+    mjERROR_INTERNAL("invalid type in VEL stage, sensor %d", i);
   }
 }
 
@@ -1321,7 +1321,7 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
     break;
 
   default:
-    mjERROR("invalid type in ACC stage, sensor %d", i);
+    mjERROR_INTERNAL("invalid type in ACC stage, sensor %d", i);
   }
 }
 
@@ -1342,7 +1342,7 @@ void mj_computeSensor(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
     break;
 
   default:
-    mjERROR("invalid sensor stage for sensor %d", i);
+    mjERROR_INTERNAL("invalid sensor stage for sensor %d", i);
   }
 
   // apply cutoff
@@ -1426,7 +1426,7 @@ static void compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) 
     const int slot = m->plugin[i];
     const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
     if (!plugin) {
-      mjERROR("invalid plugin slot: %d", slot);
+      mjERROR_INTERNAL("invalid plugin slot: %d", slot);
     }
 
     // check if plugin is a sensor plugin matching this stage
@@ -1441,7 +1441,7 @@ static void compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) 
     }
 
     if (!plugin->compute) {
-      mjERROR("`compute` is a null function pointer for plugin at slot %d", slot);
+      mjERROR_INPUT("`compute` is a null function pointer for plugin at slot %d", slot);
     }
 
     // call stage-specific preparation if needed

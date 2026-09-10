@@ -151,7 +151,7 @@ static inline int mj_stateElemSize(const mjModel* m, mjtState sig) {
   case mjSTATE_USERDATA:      return m->nuserdata;
   case mjSTATE_PLUGIN:        return m->npluginstate;
   default:
-    mjERROR("invalid state element %u", sig);
+    mjERROR_INTERNAL("invalid state element %u", sig);
     return 0;
   }
 }
@@ -174,7 +174,7 @@ static inline mjtNum* mj_stateElemPtr(const mjModel* m, mjData* d, mjtState sig)
   case mjSTATE_USERDATA:      return d->userdata;
   case mjSTATE_PLUGIN:        return d->plugin_state;
   default:
-    mjERROR("invalid state element %u", sig);
+    mjERROR_INTERNAL("invalid state element %u", sig);
     return NULL;
   }
 }
@@ -188,12 +188,12 @@ static inline const mjtNum* mj_stateElemConstPtr(const mjModel* m, const mjData*
 // get size of state signature
 int mj_stateSize(const mjModel* m, int sig) {
   if (sig < 0) {
-    mjERROR("invalid state signature %d < 0", sig);
+    mjERROR_INPUT("invalid state signature %d < 0", sig);
     return 0;
   }
 
   if (sig >= (1<<mjNSTATE)) {
-    mjERROR("invalid state signature %d >= 2^mjNSTATE", sig);
+    mjERROR_INPUT("invalid state signature %d >= 2^mjNSTATE", sig);
     return 0;
   }
 
@@ -212,12 +212,12 @@ int mj_stateSize(const mjModel* m, int sig) {
 // get state
 void mj_getState(const mjModel* m, const mjData* d, mjtNum* state, int sig) {
   if (sig < 0) {
-    mjERROR("invalid state signature %d < 0", sig);
+    mjERROR_INPUT("invalid state signature %d < 0", sig);
     return;
   }
 
   if (sig >= (1<<mjNSTATE)) {
-    mjERROR("invalid state signature %d >= 2^mjNSTATE", sig);
+    mjERROR_INPUT("invalid state signature %d >= 2^mjNSTATE", sig);
     return;
   }
 
@@ -249,17 +249,17 @@ void mj_getState(const mjModel* m, const mjData* d, mjtNum* state, int sig) {
 // extract a sub-state from a state
 void mj_extractState(const mjModel* m, const mjtNum* src, int srcsig, mjtNum* dst, int dstsig) {
   if (srcsig < 0) {
-    mjERROR("invalid srcsig %d < 0", srcsig);
+    mjERROR_INPUT("invalid srcsig %d < 0", srcsig);
     return;
   }
 
   if (srcsig >= (1<<mjNSTATE)) {
-    mjERROR("invalid srcsig %d >= 2^mjNSTATE", srcsig);
+    mjERROR_INPUT("invalid srcsig %d >= 2^mjNSTATE", srcsig);
     return;
   }
 
   if ((srcsig & dstsig) != dstsig) {
-    mjERROR("dstsig is not a subset of srcsig");
+    mjERROR_INPUT("dstsig is not a subset of srcsig");
     return;
   }
 
@@ -280,12 +280,12 @@ void mj_extractState(const mjModel* m, const mjtNum* src, int srcsig, mjtNum* ds
 // set state
 void mj_setState(const mjModel* m, mjData* d, const mjtNum* state, int sig) {
   if (sig < 0) {
-    mjERROR("invalid state signature %d < 0", sig);
+    mjERROR_INPUT("invalid state signature %d < 0", sig);
     return;
   }
 
   if (sig >= (1<<mjNSTATE)) {
-    mjERROR("invalid state signature %d >= 2^mjNSTATE", sig);
+    mjERROR_INPUT("invalid state signature %d >= 2^mjNSTATE", sig);
     return;
   }
 
@@ -317,12 +317,12 @@ void mj_setState(const mjModel* m, mjData* d, const mjtNum* state, int sig) {
 // copy state from src to dst
 void mj_copyState(const mjModel* m, const mjData* src, mjData* dst, int sig) {
   if (sig < 0) {
-    mjERROR("invalid state signature %d < 0", sig);
+    mjERROR_INPUT("invalid state signature %d < 0", sig);
     return;
   }
 
   if (sig >= (1<<mjNSTATE)) {
-    mjERROR("invalid state signature %d >= 2^mjNSTATE", sig);
+    mjERROR_INPUT("invalid state signature %d >= 2^mjNSTATE", sig);
     return;
   }
 
@@ -354,10 +354,10 @@ void mj_copyState(const mjModel* m, const mjData* src, mjData* dst, int sig) {
 void mj_setKeyframe(mjModel* m, const mjData* d, int k) {
   // check keyframe index
   if (k >= m->nkey) {
-    mjERROR("index must be smaller than %" PRId64 " (keyframes allocated in model)", m->nkey);
+    mjERROR_INPUT("index must be smaller than %" PRId64 " (keyframes allocated in model)", m->nkey);
   }
   if (k < 0) {
-    mjERROR("keyframe index cannot be negative");
+    mjERROR_INPUT("keyframe index cannot be negative");
   }
 
   // copy state to model keyframe
@@ -447,7 +447,7 @@ void mj_applyFT(const mjModel* m, mjData* d,
 
   // make sure body is in range
   if (body < 0 || body >= m->nbody) {
-    mjERROR("invalid body %d", body);
+    mjERROR_INPUT("invalid body %d", body);
   }
 
   // sparse case
@@ -933,7 +933,7 @@ void mju_camIntrinsics(const mjModel* m, int camid,
 mjtNum mj_readCtrl(const mjModel* m, const mjData* d, int id, mjtNum time, int interp) {
   // validate actuator id
   if (id < 0 || id >= m->nactuator) {
-    mjERROR("invalid actuator id %d", id);
+    mjERROR_INPUT("invalid actuator id %d", id);
     return 0;
   }
 
@@ -960,7 +960,7 @@ const mjtNum* mj_readSensor(const mjModel* m, const mjData* d, int id, mjtNum ti
                             mjtNum* result, int interp) {
   // validate sensor id
   if (id < 0 || id >= m->nsensor) {
-    mjERROR("invalid sensor id %d", id);
+    mjERROR_INPUT("invalid sensor id %d", id);
     return NULL;
   }
 
@@ -986,14 +986,14 @@ void mj_initCtrlHistory(const mjModel* m, mjData* d, int id,
                         const mjtNum* times, const mjtNum* values) {
   // validate actuator id
   if (id < 0 || id >= m->nactuator) {
-    mjERROR("invalid actuator id %d", id);
+    mjERROR_INPUT("invalid actuator id %d", id);
     return;
   }
 
   // check that actuator has a history buffer
   int nsample = m->actuator_history[2*id];
   if (nsample == 0) {
-    mjERROR("actuator %d has no history buffer", id);
+    mjERROR_INPUT("actuator %d has no history buffer", id);
     return;
   }
 
@@ -1016,14 +1016,14 @@ void mj_initSensorHistory(const mjModel* m, mjData* d, int id,
                           const mjtNum* times, const mjtNum* values, mjtNum phase) {
   // validate sensor id
   if (id < 0 || id >= m->nsensor) {
-    mjERROR("invalid sensor id %d", id);
+    mjERROR_INPUT("invalid sensor id %d", id);
     return;
   }
 
   // check that sensor has a history buffer
   int nsample = m->sensor_history[2*id];
   if (nsample == 0) {
-    mjERROR("sensor %d has no history buffer", id);
+    mjERROR_INPUT("sensor %d has no history buffer", id);
     return;
   }
 

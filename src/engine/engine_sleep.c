@@ -197,7 +197,7 @@ int mj_wakeIsland(int* tree_asleep, int ntree, int i, int wakeval, const char* r
 
   // i is invalid; SHOULD NOT OCCUR
   if (i < 0 || i >= ntree) {
-    mjERROR("invalid tree %d", i);
+    mjERROR_INTERNAL("invalid tree %d", i);
     return nwoke;
   }
 
@@ -218,7 +218,7 @@ int mj_wakeIsland(int* tree_asleep, int ntree, int i, int wakeval, const char* r
 
       // next is invalid; SHOULD NOT OCCUR
       if (next < 0 || next >= ntree) {
-        mjERROR("invalid sleep state index %d when waking tree %d", next, i);
+        mjERROR_INTERNAL("invalid sleep state index %d when waking tree %d", next, i);
         return 0;
       }
 
@@ -231,7 +231,7 @@ int mj_wakeIsland(int* tree_asleep, int ntree, int i, int wakeval, const char* r
 
     // did not come back to tree i, not a cycle; SHOULD NOT OCCUR
     if (current != i) {
-      mjERROR("tree %d is not in a cycle", i);
+      mjERROR_INTERNAL("tree %d is not in a cycle", i);
       return 0;
     }
 
@@ -353,7 +353,7 @@ int mj_wakeCollision(const mjModel* m, mjData* d) {
 
     // both trees asleep; SHOULD NOT OCCUR
     if (!awake1 && !awake2) {
-      mjERROR("contact between sleeping bodies %d and %d", b1, b2);
+      mjERROR_INTERNAL("contact between sleeping bodies %d and %d", b1, b2);
     }
 
     // wake sleeping tree
@@ -473,7 +473,7 @@ int mj_wakeEquality(const mjModel* m, mjData* d) {
       break;
 
     case mjEQ_TENDON:
-      mjERROR("tendon equality does not yet support sleeping");
+      mjERROR_INPUT("tendon equality does not yet support sleeping");
       continue;
 
     case mjEQ_FLEX:
@@ -578,9 +578,9 @@ static inline void mj_sleepTrees(const mjModel* m, mjData* d, const int* tree, i
 
     // SHOULD NOT OCCUR
     else if (d->tree_asleep[current] >= 0) {
-      mjERROR("trying to sleep tree %d which is already asleep", i);
+      mjERROR_INTERNAL("trying to sleep tree %d which is already asleep", i);
     } else {
-      mjERROR("trying to sleep tree %d which is not ready to sleep", i);
+      mjERROR_INTERNAL("trying to sleep tree %d which is not ready to sleep", i);
     }
 
     // set tree velocity and acceleration to zero
@@ -649,7 +649,7 @@ int mj_sleep(const mjModel* m, mjData* d) {
 
       // sleeping tree in an island; SHOULD NOT OCCUR
       else if (tree_asleep >= 0) {
-        mjERROR("found sleeping tree %d in island %d", d->map_itree2tree[j], i);
+        mjERROR_INTERNAL("found sleeping tree %d in island %d", d->map_itree2tree[j], i);
       }
     }
 
@@ -901,9 +901,9 @@ mjtSleepState mj_sleepState(const mjModel* m, const mjData* d, mjtObj type, int 
   default:
     typename = mju_type2Str(type);
     if (typename) {
-      mjERROR("unsupported object type '%s'", typename);
+      mjERROR_INPUT("unsupported object type '%s'", typename);
     } else {
-      mjERROR("unsupported object type %d", type);
+      mjERROR_INPUT("unsupported object type %d", type);
     }
     return mjS_AWAKE;
   }

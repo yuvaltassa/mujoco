@@ -569,6 +569,12 @@ struct MjLogMessage {
   void set_topic(int value) {
     ptr_->topic = value;
   }
+  int status() const {
+    return ptr_->status;
+  }
+  void set_status(int value) {
+    ptr_->status = value;
+  }
   emscripten::val subject() const {
     return emscripten::val(emscripten::typed_memory_view(1024, ptr_->subject));
   }

@@ -650,10 +650,13 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     with self.assertRaisesRegex(mujoco.FatalError, 'invalid integrator'):
       mujoco.mj_step(self.model, self.data)
 
-    # the call was abandoned at its boundary: stack restored, error pending
-    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_ERROR)
+    # the call was abandoned at its boundary: stack restored, error pending,
+    # classified by what the caller can do about it
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_INPUT)
     self.assertEqual(mujoco.mjtStatus.mjSTATUS_ERROR, -1)
     self.assertEqual(mujoco.mjtStatus.mjSTATUS_OOM, -2)
+    self.assertEqual(mujoco.mjtStatus.mjSTATUS_INPUT, -3)
+    self.assertEqual(mujoco.mjtStatus.mjSTATUS_INTERNAL, -4)
     self.assertEqual(self.data.pstack, 0)
     self.assertEqual(self.data.time, 0)
 
@@ -1300,7 +1303,7 @@ Euler integrator, semi-implicit in velocity.
   def test_can_raise_error(self):
     self.data.pstack = self.data.narena
     with self.assertRaisesRegex(
-        mujoco.FatalError, r'\Amj_stackAlloc: out of memory, stack overflow'
+        mujoco.FatalError, r'\Astackallocinternal: mj_stackAlloc: out of memory'
     ):
       mujoco.mj_forward(self.model, self.data)
 

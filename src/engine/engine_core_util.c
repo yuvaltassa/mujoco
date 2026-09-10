@@ -344,7 +344,7 @@ void mj_jacSparse(const mjModel* m, const mjData* d,
         da = m->dof_parentid[da];
         continue;
       }
-      mjERROR("dof index %d not found in chain", da);
+      mjERROR_INTERNAL("dof index %d not found in chain", da);
     }
 
     const mjtNum* cdof = d->cdof + 6*da;
@@ -716,7 +716,7 @@ void mj_jacDotSparse(const mjModel* m, const mjData* d,
 
     // dof not in chain: SHOULD NOT OCCUR
     if (ci < 0 || chain[ci] != da) {
-      mjERROR("dof index %d not found in chain", da);
+      mjERROR_INTERNAL("dof index %d not found in chain", da);
     }
 
     mjtNum cdof_dot[6];
@@ -875,7 +875,7 @@ void mj_objectVelocity(const mjModel* m, const mjData* d,
 
   // object without spatial frame
   else {
-    mjERROR("invalid object type %d", objtype);
+    mjERROR_INPUT("invalid object type %d", objtype);
   }
 
   // dof-less body (static or mocap): quick return
@@ -949,7 +949,7 @@ void mj_objectAcceleration(const mjModel* m, const mjData* d,
 
   // object without spatial frame
   else {
-    mjERROR("invalid object type %d", objtype);
+    mjERROR_INPUT("invalid object type %d", objtype);
   }
 
   // dof-less body (static or mocap): quick return
@@ -1119,7 +1119,7 @@ int tendonLimit(const mjModel* m, const mjtNum* ten_length, int i) {
 // return actuator damping contribution to joint or tendon
 mjtNum mj_actuatorDamping(const mjModel* m, mjtObj type, int id, mjtNum poly[mjNPOLY]) {
   if (type != mjOBJ_TENDON && type != mjOBJ_JOINT) {
-    mjERROR("only joint and tendon objects can inherit damping from actuators");
+    mjERROR_INPUT("only joint and tendon objects can inherit damping from actuators");
     return 0;
   }
 
@@ -1173,7 +1173,7 @@ mjtNum mj_actuatorDamping(const mjModel* m, mjtObj type, int id, mjtNum poly[mjN
 // return actuator armature contribution to joint or tendon
 mjtNum mj_actuatorArmature(const mjModel* m, mjtObj type, int id) {
   if (type != mjOBJ_TENDON && type != mjOBJ_JOINT) {
-    mjERROR("only joint and tendon objects can inherit armature from actuators");
+    mjERROR_INPUT("only joint and tendon objects can inherit armature from actuators");
     return 0;
   }
 
@@ -1227,7 +1227,7 @@ _Static_assert(mjSTATUS_INERTIA == mjWARN_INERTIA + 1 && mjSTATUS_BADCTRL == mjW
 void mj_warning(mjData* d, int warning, int info) {
   // check type
   if (warning < 0 || warning >= mjNWARNING) {
-    mjERROR("invalid warning type %d", warning);
+    mjERROR_INPUT("invalid warning type %d", warning);
   }
 
   // save info (override previous)

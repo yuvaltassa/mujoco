@@ -148,7 +148,7 @@ void mj_kinematics1(const mjModel* m, mjData* d) {
           break;
 
         default:
-          mjERROR("unknown joint type %d", jtype);  // SHOULD NOT OCCUR
+          mjERROR_INTERNAL("unknown joint type %d", jtype);  // SHOULD NOT OCCUR
         }
 
         // assign xanchor and xaxis
@@ -616,7 +616,7 @@ void mj_flex(const mjModel* m, mjData* d) {
       int ny_g = cy * order + 1;
       int nz_g = cz * order + 1;
       if (nend - nstart != nx_g * ny_g * nz_g) {
-        mjERROR("flex_interp_order mismatch");
+        mjERROR_INTERNAL("flex_interp_order mismatch");
       }
 
       // shell mode: reconstruct interior node positions from boundary via TFI
@@ -1045,7 +1045,7 @@ void mj_tendon(const mjModel* m, mjData* d) {
         // do wrapping, possibly get 2 extra points (wlen>=0)
         int sideid = mju_round(m->wrap_prm[adr+j+1]);
         if (sideid < -1 || sideid >= m->nsite) {
-          mjERROR("invalid sideid %d in wrap_prm", sideid);  // SHOULD NOT OCCUR
+          mjERROR_INTERNAL("invalid sideid %d in wrap_prm", sideid);  // SHOULD NOT OCCUR
         }
 
         wlen = mju_wrap(wpnt+3, d->site_xpos+3*id0, d->site_xpos+3*id1,
@@ -1187,7 +1187,7 @@ mjtNum mj_tendonDot(const mjModel* m, mjData* d, int id, const mjtNum* vec) {
     // second object is geom: process site-geom-site
     if (type1 == mjWRAP_SPHERE || type1 == mjWRAP_CYLINDER) {
       // TODO(tassa) support geom wrapping (requires derivatives of mju_wrap)
-      mjERROR("geom wrapping not supported");
+      mjERROR_INPUT("geom wrapping not supported");
     } else {
       wraptype = mjWRAP_NONE;
     }
@@ -1849,7 +1849,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
       break;
 
     default:
-      mjERROR("unknown transmission type %d", m->actuator_trntype[i]);  // SHOULD NOT OCCUR
+      mjERROR_INTERNAL("unknown transmission type %d", m->actuator_trntype[i]);  // SHOULD NOT OCCUR
     }
   }
 
@@ -2524,7 +2524,7 @@ void mj_rnePostConstraint(const mjModel* m, mjData* d) {
   int i = 0, ne = d->ne;
   while (i < ne) {
     if (d->efc_type[i] != mjCNSTR_EQUALITY) {
-      mjERROR("row %d of efc is not an equality constraint", i);  // SHOULD NOT OCCUR
+      mjERROR_INTERNAL("row %d of efc is not an equality constraint", i);  // SHOULD NOT OCCUR
     }
 
     int id = d->efc_id[i];
@@ -2624,7 +2624,7 @@ void mj_rnePostConstraint(const mjModel* m, mjData* d) {
     }
 
     default:
-      mjERROR("unknown constraint type type %d", m->eq_type[id]);    // SHOULD NOT OCCUR
+      mjERROR_INTERNAL("unknown constraint type type %d", m->eq_type[id]);    // SHOULD NOT OCCUR
     }
   }
 

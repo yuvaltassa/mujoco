@@ -451,7 +451,12 @@ void App::UpdatePhysics() {
       ResetPhysics();
     } else if (status == StepControl::Status::kDiverged) {
       stepped = true;
-      if (data()->status < 0) {
+      if (data()->status == mjSTATUS_OOM) {
+        step_error_ =
+            "Out of memory in mj_step; raise memory or simplify the model; reset to continue";
+      } else if (data()->status == mjSTATUS_INTERNAL) {
+        step_error_ = "Internal error in mj_step, please report it; reset to continue";
+      } else if (data()->status < 0) {
         step_error_ = "Error in mj_step, see the error message; reset to continue";
       } else if (data()->status > 0) {
         step_error_ = mju_warningText(data()->status - 1,

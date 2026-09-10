@@ -545,7 +545,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
       // verify allocated state size matches parameters; SHOULD NOT OCCUR
       if (mj_dcmotorSlots(dynprm, gainprm).num_slots != actnum) {
-        mjERROR("inconsistent state array dimension in DC motor (actuator %d)", i);
+        mjERROR_INTERNAL("inconsistent state array dimension in DC motor (actuator %d)", i);
       }
 
       int adr = act_first;
@@ -655,7 +655,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
-        mjERROR("invalid plugin slot: %d", slot);
+        mjERROR_INTERNAL("invalid plugin slot: %d", slot);
       }
       if (plugin->capabilityflags & mjPLUGIN_ACTUATOR) {
         if (plugin->actuator_act_dot) {
@@ -777,7 +777,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
       // verify allocated state size matches parameters; SHOULD NOT OCCUR
       if (slots.num_slots != actnum) {
-        mjERROR("inconsistent state array dimension in DC motor (actuator %d)", i);
+        mjERROR_INTERNAL("inconsistent state array dimension in DC motor (actuator %d)", i);
       }
 
       int adr = m->actuator_actadr[i];
@@ -807,7 +807,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
     }
 
     case mjGAIN_SO3:                // handled above via early continue
-      mjERROR("mjGAIN_SO3 reached SISO switch (actuator %d)", i);
+      mjERROR_INTERNAL("mjGAIN_SO3 reached SISO switch (actuator %d)", i);
       break;
 
     default:                        // user gain
@@ -943,11 +943,11 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
-        mjERROR("invalid plugin slot: %d", slot);
+        mjERROR_INTERNAL("invalid plugin slot: %d", slot);
       }
       if (plugin->capabilityflags & mjPLUGIN_ACTUATOR) {
         if (!plugin->compute) {
-          mjERROR("`compute` is a null function pointer for plugin at slot %d", slot);
+          mjERROR_INPUT("`compute` is a null function pointer for plugin at slot %d", slot);
         }
         mjCALLBACK(plugin->compute(m, d, i, mjPLUGIN_ACTUATOR));
       }
@@ -1313,7 +1313,7 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
 
   // check for invalid solver type
   if (m->opt.solver != mjSOL_PGS && m->opt.solver != mjSOL_CG && m->opt.solver != mjSOL_NEWTON) {
-    mjERROR("unknown solver type %d", m->opt.solver);
+    mjERROR_INTERNAL("unknown solver type %d", m->opt.solver);
   }
 
   // warmstart solver
@@ -1533,7 +1533,7 @@ static void mj_advance(const mjModel* m, mjData* d,
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
-        mjERROR("invalid plugin slot: %d", slot);
+        mjERROR_INTERNAL("invalid plugin slot: %d", slot);
       }
       if (plugin->advance) {
         mjCALLBACK(plugin->advance(m, d, i));
@@ -1676,7 +1676,7 @@ void mj_RungeKutta(const mjModel* m, mjData* d, int N) {
 
   // check order
   if (!A) {
-    mjERROR("supported RK orders: N=4");
+    mjERROR_INPUT("supported RK orders: N=4");
   }
 
   // allocate space for intermediate solutions
@@ -1778,7 +1778,7 @@ void mj_checkDiscrete(const mjModel* m) {
   if (!mj_isMetric(m)) {
     for (int f=0; f < m->nflex; f++) {
       if (mj_effFlexContactPossible(m, f)) {
-        mjERROR("passive flex contact requires an integrator with the effective metric: "
+        mjERROR_INPUT("passive flex contact requires an integrator with the effective metric: "
                 "set integrator='discrete'");
       }
     }
@@ -1789,7 +1789,7 @@ void mj_checkDiscrete(const mjModel* m) {
     if (m->opt.integrator == mjINT_IMPLICIT || m->opt.integrator == mjINT_IMPLICITFAST) {
       for (int f=0; f < m->nflex; f++) {
         if (mj_effFlexStiffPossible(m, f)) {
-          mjERROR("flex elasticity is no longer integrated implicitly under "
+          mjERROR_INPUT("flex elasticity is no longer integrated implicitly under "
                   "integrator='implicit' and 'implicitfast': set "
                   "integrator='discrete'");
         }
@@ -1798,7 +1798,7 @@ void mj_checkDiscrete(const mjModel* m) {
     return;
   }
   if (m->opt.solver == mjSOL_NEWTON && !mjd_flexInterpAssemblable(m)) {
-    mjERROR("discrete integrator: interpolated flex with non-simple nodes not yet "
+    mjERROR_INPUT("discrete integrator: interpolated flex with non-simple nodes not yet "
             "supported with the Newton solver");
   }
   if (m->opt.solver == mjSOL_PGS || m->opt.noslip_iterations > 0) {
@@ -1809,15 +1809,15 @@ void mj_checkDiscrete(const mjModel* m) {
     // noslip post-pass consumes the backbone AR as an approximation. Flex cannot be
     // excluded: explicit flex elasticity is the divergence the metric exists to prevent
     if (effFlexAny(m)) {
-      mjERROR("discrete integrator: PGS and noslip not yet supported with flex");
+      mjERROR_INPUT("discrete integrator: PGS and noslip not yet supported with flex");
     }
   }
   if (mjENABLED(mjENBL_SLEEP)) {
     if (mjDISABLED(mjDSBL_ISLAND)) {
-      mjERROR("discrete integrator: sleep without islands not yet supported");
+      mjERROR_INPUT("discrete integrator: sleep without islands not yet supported");
     }
     if (effFlexAny(m)) {
-      mjERROR("discrete integrator: sleep with flex not yet supported");
+      mjERROR_INPUT("discrete integrator: sleep with flex not yet supported");
     }
   }
 }
@@ -1881,7 +1881,7 @@ void mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
         }
       }
     } else {
-      mjERROR("integrator must be implicit or implicitfast");
+      mjERROR_INPUT("integrator must be implicit or implicitfast");
     }
 
     // standard factorization (implicit / implicitfast)
@@ -2066,7 +2066,7 @@ void mj_step(const mjModel* m, mjData* d) {
     break;
 
   default:
-    mjERROR("invalid integrator");
+    mjERROR_INPUT("invalid integrator");
   }
 
   TM_END(mjTIMER_STEP);

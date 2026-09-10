@@ -160,7 +160,7 @@ void mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
     break;
 
   default:
-    mjERROR("invalid integrator");
+    mjERROR_INPUT("invalid integrator");
   }
 
   TM_END(mjTIMER_STEP);
@@ -286,7 +286,7 @@ void mjd_smooth_velFD(const mjModel* m, mjData* d, mjtNum eps) {
   // make sure final row counters equal rownnz
   for (int i=0; i < nv; i++) {
     if (cnt[i] != m->D_rownnz[i]) {
-      mjERROR("error in constructing FD sparse derivative");
+      mjERROR_INTERNAL("error in constructing FD sparse derivative");
     }
   }
 
@@ -319,7 +319,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
                 mjtNum* DyDq, mjtNum* DyDv, mjtNum* DyDa, mjtNum* DyDu,
                 mjtNum* DsDq, mjtNum* DsDv, mjtNum* DsDa, mjtNum* DsDu) {
   if (m->nhistory) {
-    mjERROR("delays are not supported");
+    mjERROR_INPUT("delays are not supported");
   }
 
   int nq = m->nq, nv = m->nv, na = m->na, nu = m->nu, ns = m->nsensordata;
@@ -566,10 +566,10 @@ void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_cente
                       mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D) {
   mjENTER(d);
   if (m->opt.integrator == mjINT_RK4) {
-    mjERROR("RK4 integrator is not supported");
+    mjERROR_INPUT("RK4 integrator is not supported");
   }
   if (m->nhistory) {
-    mjERROR("delays are not supported");
+    mjERROR_INPUT("delays are not supported");
   }
 
   int nv = m->nv, na = m->na, nu = m->nu, ns = m->nsensordata;
@@ -638,11 +638,11 @@ void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuatio
   int nq = m->nq, nv = m->nv, nC = m->nC, ns = m->nsensordata;
 
   if (m->opt.integrator == mjINT_RK4) {
-    mjERROR("RK4 integrator is not supported");
+    mjERROR_INPUT("RK4 integrator is not supported");
   }
 
   if (m->opt.noslip_iterations) {
-    mjERROR("noslip solver is not supported");
+    mjERROR_INPUT("noslip solver is not supported");
   }
 
   // skip sensor computations if no sensor Jacobians requested

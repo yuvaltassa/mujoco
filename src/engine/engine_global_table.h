@@ -174,7 +174,7 @@ class GlobalTable {
     // registration failed, throw an mju_error
     if (slot < 0) {
       err[sizeof(err) - 1] = '\0';
-      mju_error("%s", err);
+      mjERROR_INPUT("%s", err);
     }
 
     return slot;

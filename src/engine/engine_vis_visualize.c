@@ -192,7 +192,7 @@ mjvGeom* acquireGeom(mjvScene* scn, int objid, int category, int objtype) {
 void releaseGeom(mjvGeom** geom, mjvScene* scn) {
   // check geom being released was most recently acquired, SHOULD NOT OCCUR
   if (*geom != scn->geoms + scn->ngeom) {
-    mju_error("Unexpected geom pointer; did you call acquireGeom?");
+    mjERROR_INTERNAL("Unexpected geom pointer; did you call acquireGeom?");
   }
 
   scn->ngeom++;
@@ -264,7 +264,7 @@ void mjv_connector(mjvGeom* geom, int type, mjtNum width,
   if (type != mjGEOM_CAPSULE && type != mjGEOM_CYLINDER &&
       type != mjGEOM_ARROW && type != mjGEOM_ARROW1 && type != mjGEOM_ARROW2
       && type != mjGEOM_LINE) {
-    mjERROR("invalid geom type %d for connector", type);
+    mjERROR_INPUT("invalid geom type %d for connector", type);
   }
 
   // assign type
@@ -479,7 +479,7 @@ void mjv_cameraFrame(mjtNum headpos[3], mjtNum forward[3], mjtNum up[3], mjtNum 
       if (headpos) {
         if (cam->type == mjCAMERA_TRACKING && cam->trackbodyid >= 0) {
           if (!d) {
-            mjERROR("data pointer is NULL");
+            mjERROR_INPUT("data pointer is NULL");
           }
           mju_addScl3(headpos, d->subtree_com + 3*cam->trackbodyid, forward, -cam->distance);
         } else {
@@ -492,7 +492,7 @@ void mjv_cameraFrame(mjtNum headpos[3], mjtNum forward[3], mjtNum up[3], mjtNum 
     case mjCAMERA_FIXED: {
       const int cid = cam->fixedcamid;
       if (!d) {
-        mjERROR("data pointer is NULL");
+        mjERROR_INPUT("data pointer is NULL");
       }
       const mjtNum* mat = d->cam_xmat + 9*cid;
       if (forward) {
@@ -517,7 +517,7 @@ void mjv_cameraFrame(mjtNum headpos[3], mjtNum forward[3], mjtNum up[3], mjtNum 
     }
 
     default: {
-      mjERROR("unknown camera type");
+      mjERROR_INTERNAL("unknown camera type");
     }
   }
 }
@@ -542,7 +542,7 @@ void mjv_cameraFrustum(float zver[2], float zhor[2], float zclip[2], const mjMod
     // get id, check range
     cid = cam->fixedcamid;
     if (cid < 0 || cid >= m->ncam) {
-      mjERROR("fixed camera id is outside valid range");
+      mjERROR_INPUT("fixed camera id is outside valid range");
     }
     orthographic = m->cam_projection[cid] == mjPROJ_ORTHOGRAPHIC;
     fovy = m->cam_fovy[cid];
@@ -555,7 +555,7 @@ void mjv_cameraFrustum(float zver[2], float zhor[2], float zclip[2], const mjMod
     break;
 
   default:
-    mjERROR("unknown camera type");
+    mjERROR_INTERNAL("unknown camera type");
   }
 
   const float znear = m->vis.map.znear * m->stat.extent;
@@ -2115,7 +2115,7 @@ static void addJointGeoms(const mjModel* m, mjData* d, const mjvOption* vopt, mj
       break;
 
     default:
-      mjERROR("unknown joint type %d", m->jnt_type[i]);
+      mjERROR_INTERNAL("unknown joint type %d", m->jnt_type[i]);
     }
 
     // loop over limit constraints, get impedance if this joint is limited
@@ -3033,7 +3033,7 @@ void mjv_updateCamera(const mjModel* m, const mjData* d, mjvCamera* cam, mjvScen
     // get id and check
     int bid = cam->trackbodyid;
     if (bid < 0 || bid >= m->nbody) {
-      mjERROR("track body id is outside valid range");
+      mjERROR_INPUT("track body id is outside valid range");
     }
 
     mju_copy3(cam->lookat, d->subtree_com + 3*bid);
@@ -3061,14 +3061,14 @@ void mjv_updateCamera(const mjModel* m, const mjData* d, mjvCamera* cam, mjvScen
     // get id, check range
     cid = cam->fixedcamid;
     if (cid < 0 || cid >= m->ncam) {
-      mjERROR("fixed camera id is outside valid range");
+      mjERROR_INPUT("fixed camera id is outside valid range");
     }
     ipd = m->cam_ipd[cid];
     orthographic = m->cam_projection[cid] == mjPROJ_ORTHOGRAPHIC;
     break;
 
   default:
-    mjERROR("unknown camera type");
+    mjERROR_INTERNAL("unknown camera type");
   }
 
   // compute GL cameras
@@ -3400,7 +3400,7 @@ void mjv_updateActiveFlex(const mjModel* m, mjData* d, mjvScene* scn, const mjvO
 
     // check face count, SHOULD NOT OCCUR
     if (scn->flexfaceused[f] > scn->flexfacenum[f]) {
-      mju_error("too many flex faces in mjv_updateActiveFlex");
+      mjERROR_OOM("too many flex faces in mjv_updateActiveFlex");
     }
   }
 }
@@ -3557,7 +3557,7 @@ void mjv_updateScene(const mjModel* m, mjData* d, const mjvOption* opt,
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
-        mjERROR("invalid plugin slot: %d", slot);
+        mjERROR_INTERNAL("invalid plugin slot: %d", slot);
       }
       if (plugin->visualize) {
         plugin->visualize(m, d, opt, scn, i);

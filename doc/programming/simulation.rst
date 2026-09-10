@@ -920,6 +920,12 @@ With the default handler, an error raised during a pipeline call stops the call 
 :ref:`mjtStatus` in ``mjData.status``. Call :ref:`mj_resetData` before making another pipeline call on that data:
 until then every pipeline call on it is refused, with an error saying so.
 
+The status classifies the error by what the caller can do about it: ``mjSTATUS_OOM`` asks for more memory or a
+smaller model, ``mjSTATUS_INPUT`` for a different argument, model or combination of options, and
+``mjSTATUS_INTERNAL`` is a bug in MuJoCo, which should be reported; ``mjSTATUS_ERROR`` is an error raised by code
+that did not classify it, such as a plugin or a user callback. The same value reaches the log handler in the
+``status`` field of the message.
+
 A pipeline call is a call to one of the public functions of the :ref:`Main simulation<Mainsimulation>`, Components,
 Sub components and Derivatives sections of the API that take a non-const ``mjData``, from :ref:`mj_step` down to
 :ref:`mj_solveM`. Each of them is a recovery boundary: the message is delivered to the

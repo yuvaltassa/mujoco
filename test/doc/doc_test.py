@@ -401,6 +401,29 @@ class DocTest(googletest.TestCase):
       self.assertTrue(last == 'mjLEAVE(d);' or last.startswith('return'),
                       f'{function}: does not end with mjLEAVE: {last}')
 
+  def test_error_kinds(self):
+    """Checks that every error raised in the engine names its kind.
+
+    The kind is the action available to the caller: mjERROR_OOM asks for more memory or a
+    smaller model, mjERROR_INPUT for a different argument, model or combination of options,
+    and mjERROR_INTERNAL is a bug in MuJoCo. Unclassified mjERROR and mju_error are left to
+    code outside the engine, where they mean exactly that the raiser did not classify.
+    """
+    unclassified = []
+    for path in sorted(glob.glob(_get_path('src', 'engine', '*.c'))
+                       + glob.glob(_get_path('src', 'engine', '*.cc'))
+                       + glob.glob(_get_path('src', 'engine', '*.h'))):
+      if os.path.basename(path).startswith('engine_util_errmem'):
+        continue
+      with open(path, encoding='utf-8') as f:
+        lines = f.read().split('\n')
+      for number, line in enumerate(lines, 1):
+        if re.match(r'\s*(//|\*)', line):
+          continue
+        if re.search(r'\b(mjERROR|mju_error)\s*\(', line):
+          unclassified.append(f'{os.path.basename(path)}:{number}: {line.strip()}')
+    self.assertEqual(unclassified, [], 'engine errors that do not name their kind')
+
   def test_element_constraints_diamond_inheritance(self):
     con = mjcf_schema.Constraint(
         kind='exclusive', bundles=(('a',), ('b',)), doc=None, line=1

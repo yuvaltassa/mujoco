@@ -517,7 +517,7 @@ static void addToParent(const mjModel* m, mjData* d, mjtNum* mat, int n) {
 
     // child nonzeroes must be subset of parent; SHOULD NOT OCCUR
     else {
-      mjERROR("child nonzeroes must be subset of parent");
+      mjERROR_INTERNAL("child nonzeroes must be subset of parent");
     }
   }
 }
@@ -588,7 +588,7 @@ static void mjd_comVel_vel(const mjModel* m, mjData* d, mjtNum* Dcvel, mjtNum* D
         break;
 
       default:
-        mjERROR("unknown joint type");
+        mjERROR_INTERNAL("unknown joint type");
       }
     }
   }
@@ -3328,7 +3328,7 @@ void mjd_smooth_vel(const mjModel* m, mjData* d, int flg_bias) {
 static void* effAlloc(mjData* d, size_t bytes, size_t align) {
   void* p = mj_arenaAllocByte(d, bytes, align);
   if (!p) {
-    mjERROR("arena overflow in implicit effective metric");
+    mjERROR_OOM("arena overflow in implicit effective metric");
   }
   return p;
 }

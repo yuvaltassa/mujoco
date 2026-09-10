@@ -136,7 +136,7 @@ void mjv_makeScene(const mjModel* m, mjvScene* scn, int maxgeom) {
 
     // check allocation
     if (!scn->geoms || !scn->geomorder) {
-      mjERROR("could not allocate geom buffers");
+      mjERROR_OOM("could not allocate geom buffers");
     }
   }
 
@@ -223,7 +223,7 @@ void mjv_makeScene(const mjModel* m, mjvScene* scn, int maxgeom) {
         (nface && !scn->flexface)   ||
         (nface && !scn->flexnormal) ||
         (nface && !scn->flextexcoord)) {
-      mju_error("Could not allocate flex buffers");
+      mjERROR_OOM("Could not allocate flex buffers");
     }
 
     // copy constant edge and vertex data
@@ -263,7 +263,7 @@ void mjv_makeScene(const mjModel* m, mjvScene* scn, int maxgeom) {
         !scn->skinvertnum ||
         !scn->skinvert    ||
         !scn->skinnormal) {
-      mjERROR("could not allocate skin buffers");
+      mjERROR_OOM("could not allocate skin buffers");
     }
 
     // copy constant data

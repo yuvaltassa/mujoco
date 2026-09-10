@@ -955,7 +955,7 @@ int mju_factorLUSparse(mjtNum* LU, int n, int* scratch,
 
     // make sure ii is on diagonal
     if (colind[ii] != i) {
-      mjERROR("missing diagonal element");
+      mjERROR_INPUT("missing diagonal element");
     }
 
     // near-singular pivot: clamp, preserving the sign
@@ -999,13 +999,13 @@ int mju_factorLUSparse(mjtNum* LU, int n, int* scratch,
 
           // only (i,k) non-zero
           else {
-            mjERROR("requires fill-in");
+            mjERROR_INPUT("requires fill-in");
           }
         }
 
         // make sure both rows fully processed
         if (icnt != rowadr[i]+remaining[r] || jcnt != rowadr[j]+remaining[c]) {
-          mjERROR("row processing incomplete");
+          mjERROR_INTERNAL("row processing incomplete");
         }
       }
     }
@@ -1015,7 +1015,7 @@ int mju_factorLUSparse(mjtNum* LU, int n, int* scratch,
   for (int r=0; r < n; r++) {
     int i = index ? index[r] : r;
     if (remaining[r] < 0 || colind[rowadr[i]+remaining[r]] != i) {
-      mjERROR("unexpected sparse matrix structure");
+      mjERROR_INPUT("unexpected sparse matrix structure");
     }
   }
 
@@ -1357,7 +1357,7 @@ int mju_QCQP(mjtNum* res, const mjtNum* Ain, const mjtNum* bin,
 
   // check size
   if (n > 5) {
-    mjERROR("n is only supported up to 5");
+    mjERROR_INPUT("n is only supported up to 5");
   }
 
   // scale A,b so that constraint becomes x'*x <= r*r
@@ -1542,12 +1542,12 @@ int mju_boxQPoption(mjtNum* res, mjtNum* R, int* index,               // outputs
 
   // basic checks
   if (n <= 0) {
-    mjERROR("problem size n must be positive");
+    mjERROR_INPUT("problem size n must be positive");
   }
   if (upper && lower) {
     for (int i=0; i < n; i++) {
       if (lower[i] >= upper[i]) {
-        mjERROR("upper bounds must be stricly larger than lower bounds");
+        mjERROR_INPUT("upper bounds must be stricly larger than lower bounds");
       }
     }
   }

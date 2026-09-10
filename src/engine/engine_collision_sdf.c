@@ -77,7 +77,7 @@ static int findOct(mjtNum w[8], mjtNum dw[8][3], const mjtNum* oct_aabb,
     mjtNum vmin[3], vmax[3];
 
     if (node == -1) {  // SHOULD NOT OCCUR
-      mju_error("Invalid node number");
+      mjERROR_INTERNAL("Invalid node number");
       return -1;
     }
 
@@ -130,7 +130,7 @@ static int findOct(mjtNum w[8], mjtNum dw[8][3], const mjtNum* oct_aabb,
     stack = oct_child[8 * node + 4*z + 2*y + x];
   }
 
-  mju_error("Node not found");  // SHOULD NOT OCCUR
+  mjERROR_INTERNAL("Node not found");  // SHOULD NOT OCCUR
   return -1;
 }
 
@@ -142,7 +142,7 @@ mjtNum oct_distance(const mjModel* m, const mjtNum p[3], int meshid) {
   mjtNum* oct_coeff = m->oct_coeff + 8*octadr;
 
   if (octadr == -1) {
-    mjERROR("Octree not found in mesh %d", meshid);
+    mjERROR_INTERNAL("Octree not found in mesh %d", meshid);
     return 0;
   }
 
@@ -169,7 +169,7 @@ void oct_gradient(const mjModel* m, mjtNum grad[3], const mjtNum point[3], int m
   mjtNum* oct_coeff = m->oct_coeff + 8*octadr;
 
   if (octadr == -1) {
-    mjERROR("Octree not found in mesh %d", meshid);
+    mjERROR_INTERNAL("Octree not found in mesh %d", meshid);
   }
 
   // analytic in the interior
@@ -280,13 +280,13 @@ static mjtNum geomDistance(const mjModel* m, const mjData* d, const mjpPlugin* p
 
   case mjGEOM_MESH:
     if (m->mesh_octadr[i] == -1) {
-      mjERROR("sdf queries require needsdf=\"true\" on mesh %d", i);
+      mjERROR_INPUT("sdf queries require needsdf=\"true\" on mesh %d", i);
       return 0;
     }
     return oct_distance(m, x, i);
 
   default:
-    mjERROR("sdf collisions not available for geom type %d", type);
+    mjERROR_INPUT("sdf collisions not available for geom type %d", type);
     return 0;
   }
 }
@@ -399,14 +399,14 @@ static void geomGradient(mjtNum gradient[3], const mjModel* m, const mjData* d,
 
   case mjGEOM_MESH:
     if (m->mesh_octadr[i] == -1) {
-      mjERROR("sdf queries require needsdf=\"true\" on mesh %d", i);
+      mjERROR_INPUT("sdf queries require needsdf=\"true\" on mesh %d", i);
       return;
     }
     oct_gradient(m, gradient, x, i);
     break;
 
   default:
-    mjERROR("sdf collisions not available for geom type %d", type);
+    mjERROR_INPUT("sdf collisions not available for geom type %d", type);
   }
 }
 
@@ -441,7 +441,7 @@ mjtNum mjc_distance(const mjModel* m, const mjData* d, const mjSDF* s, const mjt
     return A + B + mju_abs(mju_max(A, B));
 
   default:
-    mjERROR("SDF type not available");
+    mjERROR_INTERNAL("SDF type not available");
     return 0;
   }
 }
@@ -496,7 +496,7 @@ void mjc_gradient(const mjModel* m, const mjData* d, const mjSDF* s,
     geomGradient(gradient, m, d, s->plugin[0], s->id[0], point[0], s->geomtype[0]);
     break;
   default:
-    mjERROR("SDF type not available");
+    mjERROR_INTERNAL("SDF type not available");
   }
 }
 
@@ -507,9 +507,9 @@ const mjpPlugin* mjc_getSDF(const mjModel* m, int id) {
   const int nslot = mjp_pluginCount();
   const int slot = m->plugin[instance];
   const mjpPlugin* sdf = mjp_getPluginAtSlotUnsafe(slot, nslot);
-  if (!sdf) mjERROR("invalid plugin slot: %d", slot);
+  if (!sdf) mjERROR_INTERNAL("invalid plugin slot: %d", slot);
   if (!(sdf->capabilityflags & mjPLUGIN_SDF)) {
-    mjERROR("Plugin is not a signed distance field at slot %d", slot);
+    mjERROR_INPUT("Plugin is not a signed distance field at slot %d", slot);
   }
   return sdf;
 }
@@ -931,7 +931,7 @@ static void traverseBVH(const mjtNum* bvh, const int* nodeid, const int* child,
     for (int i = 0; i < 2; i++) {
       if (child[2*node+i] != -1) {
         if (nstack >= 64) {
-          mjERROR("BVH stack depth exceeded.");
+          mjERROR_OOM("BVH stack depth exceeded.");
         }
         stack[nstack++] = child[2*node+i];
       }
@@ -1053,7 +1053,7 @@ int mjc_SDF(const mjModel* m, mjData* d, mjPreContact* con, int g1, int g2, mjtN
 
   // second geom must be an SDF
   if (m->geom_type[g2] != mjGEOM_SDF) {
-    mjERROR("geom is not an SDF");
+    mjERROR_INTERNAL("geom is not an SDF");
   }
 
   // compute transformations from/to g1 to/from g2
@@ -1170,7 +1170,7 @@ int mjc_SDF(const mjModel* m, mjData* d, mjPreContact* con, int g1, int g2, mjtN
 
     // SHOULD NOT OCCUR
     if (cnt > mjMAXCONPAIR) {
-      mjERROR("too many contact points");
+      mjERROR_OOM("too many contact points");
     }
   }
 

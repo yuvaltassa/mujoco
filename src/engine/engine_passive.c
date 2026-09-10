@@ -290,7 +290,7 @@ static void mj_flexPassiveBendInterp(const mjModel* m, mjData* d, int f,
   // check cached node indices are in bounds
   for (int i = 0; i < nfaces * npe; i++) {
     if (face_gidx[i] < 0 || face_gidx[i] >= nodenum) {
-      mjERROR("cached node index out of range: face_gidx[%d]=%d, nodenum=%d",
+      mjERROR_INTERNAL("cached node index out of range: face_gidx[%d]=%d, nodenum=%d",
               i, face_gidx[i], nodenum);
     }
   }
@@ -1142,11 +1142,11 @@ void mj_passive(const mjModel* m, mjData* d) {
       const int slot = m->plugin[i];
       const mjpPlugin* plugin = mjp_getPluginAtSlotUnsafe(slot, nslot);
       if (!plugin) {
-        mjERROR("invalid plugin slot: %d", slot);
+        mjERROR_INTERNAL("invalid plugin slot: %d", slot);
       }
       if (plugin->capabilityflags & mjPLUGIN_PASSIVE) {
         if (!plugin->compute) {
-          mjERROR("`compute` is a null function pointer for plugin at slot %d", slot);
+          mjERROR_INPUT("`compute` is a null function pointer for plugin at slot %d", slot);
         }
         mjCALLBACK(plugin->compute(m, d, i, mjPLUGIN_PASSIVE));
       }
@@ -1445,7 +1445,7 @@ void readFluidGeomInteraction(const mjtNum* geom_fluid_coefs,
   virtual_inertia[1]   = geom_fluid_coefs[i++];
   virtual_inertia[2]   = geom_fluid_coefs[i++];
   if (i != mjNFLUID) {
-    mjERROR("wrong number of entries.");
+    mjERROR_INTERNAL("wrong number of entries.");
   }
 }
 
@@ -1474,6 +1474,6 @@ void writeFluidGeomInteraction (mjtNum* geom_fluid_coefs,
   geom_fluid_coefs[i++] = virtual_inertia[1];
   geom_fluid_coefs[i++] = virtual_inertia[2];
   if (i != mjNFLUID) {
-    mjERROR("wrong number of entries.");
+    mjERROR_INTERNAL("wrong number of entries.");
   }
 }

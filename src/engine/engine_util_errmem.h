@@ -137,9 +137,7 @@ MJAPI int _mjPRIVATE__interrupted(void);
 // was the last pipeline call on the calling thread interrupted; clears the flag
 MJAPI int _mjPRIVATE__takeInterrupt(void);
 
-// record the kind (mjtStatus) of the error about to be raised on the calling thread; the kind
-// of the error being recovered, or 0, clearing it
-void mju_setErrorKind(int kind);
+// kind (mjtStatus) of the error being recovered, or 0; clears it
 int mju_takeErrorKind(void);
 
 // is an interrupt pending on the calling thread; clear it
@@ -207,16 +205,32 @@ static inline const char* BaseName(const char* path) {
   return path;
 }
 
-// internal macro to emit a structured error with source location
-#define mjERROR(...)                                           \
+// internal macro to emit a structured error with source location and kind; the kind reaches
+// the log handler in the message and, inside a pipeline call, mjData.status after the recovery
+#define mjERROR_(status_, ...)                                 \
   {                                                            \
     mjLogMessage _msg = {.level = mjLOG_ERROR,                 \
+                         .status = (status_),                  \
                          .func = __func__,                     \
                          .file = __FILE__,                     \
                          .line = __LINE__};                    \
     snprintf(_msg.subject, sizeof(_msg.subject), __VA_ARGS__); \
     mju_message(&_msg);                                        \
   }
+
+// an error of unclassified kind; engine code uses one of the three classified macros below
+#define mjERROR(...) mjERROR_(mjSTATUS_ERROR, __VA_ARGS__)
+
+// out of memory: the stack, the arena, or a fixed-size buffer is exhausted; a larger memory
+// setting or a smaller model may succeed
+#define mjERROR_OOM(...) mjERROR_(mjSTATUS_OOM, __VA_ARGS__)
+
+// the call cannot succeed as posed: an argument, the model, or a combination of options is
+// invalid or unsupported; the same call will fail again
+#define mjERROR_INPUT(...) mjERROR_(mjSTATUS_INPUT, __VA_ARGS__)
+
+// an invariant of the engine is violated: a bug in MuJoCo, not something the caller can fix
+#define mjERROR_INTERNAL(...) mjERROR_(mjSTATUS_INTERNAL, __VA_ARGS__)
 
 // internal macro to emit a structured debug trace with fast producer-side topic filtering
 #ifndef MJ_DISABLE_DEBUG_TRACING

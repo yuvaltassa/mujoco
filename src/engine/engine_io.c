@@ -96,12 +96,12 @@ static int getnptr(void) {
 static void bufwrite(const void* src, int num, mjtSize szbuf, void* buf, mjtSize* ptrbuf) {
   // check pointers
   if (!src || !buf || !ptrbuf) {
-    mjERROR("NULL pointer passed to bufwrite");
+    mjERROR_INTERNAL("NULL pointer passed to bufwrite");
   }
 
   // check size
   if (*ptrbuf+num > szbuf) {
-    mjERROR("attempting to write outside model buffer");
+    mjERROR_INTERNAL("attempting to write outside model buffer");
   }
 
   // write, advance pointer
@@ -114,12 +114,12 @@ static void bufwrite(const void* src, int num, mjtSize szbuf, void* buf, mjtSize
 static void bufread(void* dest, int num, mjtSize szbuf, const void* buf, mjtSize* ptrbuf) {
   // check pointers
   if (!dest || !buf || !ptrbuf) {
-    mjERROR("NULL pointer passed to bufread");
+    mjERROR_INTERNAL("NULL pointer passed to bufread");
   }
 
   // check size
   if (*ptrbuf+num > szbuf) {
-    mjERROR("attempting to read outside model buffer");
+    mjERROR_INTERNAL("attempting to read outside model buffer");
   }
 
   // read, advance pointer
@@ -157,7 +157,7 @@ static void mj_setPtrModel(mjModel* m) {
   // check size
   ptrdiff_t sz = ptr - (char*)m->buffer;
   if (m->nbuffer != sz) {
-    mjERROR(
+    mjERROR_INTERNAL(
         "mjModel buffer size mismatch, "
         "expected size: %" PRIu64 ",  actual size: %td",
         m->nbuffer, sz);
@@ -291,7 +291,7 @@ void mj_makeModel(mjModel** dest,
   }
 
   if (!m) {
-    mjERROR("could not allocate mjModel");
+    mjERROR_OOM("could not allocate mjModel");
   }
   memset(m, 0, sizeof(mjModel));
 
@@ -406,7 +406,7 @@ void mj_makeModel(mjModel** dest,
   m->buffer = mju_malloc(m->nbuffer);
   if (!m->buffer) {
     if (allocate) mju_free(m);
-    mjERROR("could not allocate mjModel buffer");
+    mjERROR_OOM("could not allocate mjModel buffer");
   }
 
   // clear, set pointers in buffer
@@ -451,13 +451,13 @@ mjModel* mj_copyModel(mjModel* dest, const mjModel* src) {
         src->nuser_tendon, src->nuser_actuator, src->nuser_sensor, src->nnames, src->npaths);
   }
   if (!dest) {
-    mjERROR("failed to make mjModel. Invalid sizes.");
+    mjERROR_INPUT("failed to make mjModel. Invalid sizes.");
   }
 
   // check sizes
   if (dest->nbuffer != src->nbuffer) {
     mj_deleteModel(dest);
-    mjERROR("dest and src models have different buffer size");
+    mjERROR_INPUT("dest and src models have different buffer size");
   }
 
   // save buffer ptr, copy struct, restore buffer and other pointers
@@ -483,7 +483,7 @@ mjModel* mj_copyModel(mjModel* dest, const mjModel* src) {
 void mjv_copyModel(mjModel* dest, const mjModel* src) {
   // check sizes
   if (dest->nbuffer != src->nbuffer) {
-    mjERROR("dest and src models have different buffer size");
+    mjERROR_INPUT("dest and src models have different buffer size");
   }
 
   // save buffer ptr, copy struct, restore buffer and other pointers
@@ -782,14 +782,14 @@ void mj_makeDofDofSparse(int nv, int nC, int nD, int nM,
   // check for remaining; SHOULD NOT OCCUR
   for (int i = 0; i < nv; i++) {
     if (remaining[i] != 0) {
-      mjERROR("unexpected remaining");
+      mjERROR_INTERNAL("unexpected remaining");
     }
   }
 
   // check total nnz; SHOULD NOT OCCUR
   int expected_nnz = upper ? nD : (reduced ? nC : nM);
   if (rowadr[nv - 1] + rownnz[nv - 1] != expected_nnz) {
-    mjERROR("sum of rownnz different from expected");
+    mjERROR_INTERNAL("sum of rownnz different from expected");
   }
 
   // find diagonal indices
@@ -801,7 +801,7 @@ void mj_makeDofDofSparse(int nv, int nC, int nD, int nM,
         j++;
       }
       if (colind[adr + j] != i) {
-        mjERROR("diagonal index not found");
+        mjERROR_INTERNAL("diagonal index not found");
       }
       diag[i] = j;
     }
@@ -822,7 +822,7 @@ void mj_makeBSparse(int nv, int nbody, int nB,
 
   // check if rownnz[0] != nv; SHOULD NOT OCCUR
   if (B_rownnz[0] != nv) {
-    mjERROR("rownnz[0] different from nv");
+    mjERROR_INTERNAL("rownnz[0] different from nv");
   }
 
   // add dofs in ancestors bodies
@@ -842,7 +842,7 @@ void mj_makeBSparse(int nv, int nbody, int nB,
 
   // check if total nnz != nB; SHOULD NOT OCCUR
   if (nB != B_rowadr[nbody - 1] + B_rownnz[nbody - 1]) {
-    mjERROR("sum of rownnz different from nB");
+    mjERROR_INTERNAL("sum of rownnz different from nB");
   }
 
   // clear incremental row counts
@@ -883,7 +883,7 @@ void mj_makeBSparse(int nv, int nbody, int nB,
   for (int i = 0; i < nbody; i++) {
     // make sure cnt = rownnz; SHOULD NOT OCCUR
     if (B_rownnz[i] != count[i]) {
-      mjERROR("cnt different from rownnz");
+      mjERROR_INTERNAL("cnt different from rownnz");
     }
 
     // sort colind in each row
@@ -903,11 +903,11 @@ static void checkDBSparse(const mjModel* m) {
 
     // D[row j] and B[row i] should be identical
     if (m->D_rownnz[j] != m->B_rownnz[i]) {
-      mjERROR("rows have different nnz");
+      mjERROR_INTERNAL("rows have different nnz");
     }
     for (int k = 0; k < m->D_rownnz[j]; k++) {
       if (m->D_colind[m->D_rowadr[j] + k] != m->B_colind[m->B_rowadr[i] + k]) {
-        mjERROR("rows have different colind");
+        mjERROR_INTERNAL("rows have different colind");
       }
     }
   }
@@ -952,7 +952,7 @@ static void copyM2Sparse(int nv,
   // check that none remaining
   for (int i=0; i < nv; i++) {
     if (remaining[i]) {
-      mjERROR("unassigned index");
+      mjERROR_INTERNAL("unassigned index");
     }
   }
 }
@@ -980,7 +980,7 @@ void mj_makeDofDofMaps(int nv, int nM, int nC, int nD,
   // check that all indices are filled in
   for (int i=0; i < nC; i++) {
     if (mapM2M[i] < 0) {
-      mjERROR("unassigned index in mapM2M");
+      mjERROR_INTERNAL("unassigned index in mapM2M");
     }
   }
 }
@@ -1004,7 +1004,7 @@ static void mj_setPtrData(const mjModel* m, mjData* d) {
   // check size
   ptrdiff_t sz = ptr - (char*)d->buffer;
   if (d->nbuffer != sz) {
-    mjERROR(
+    mjERROR_INTERNAL(
         "mjData buffer size mismatch, "
         "expected size: %" PRIu64 ",  actual size: %td",
         d->nbuffer, sz);
@@ -1029,7 +1029,7 @@ void mj_initPlugin(const mjModel* m, mjData* d) {
       mju_free(d->buffer);
       mju_free(d->arena);
       mju_free(d);
-      mjERROR("plugin->init failed for plugin id %d", i);
+      mjERROR_INPUT("plugin->init failed for plugin id %d", i);
     }
   }
 }
@@ -1069,7 +1069,7 @@ void mj_makeRawData(mjData** dest, const mjModel* m) {
   }
 
   if (!d) {
-    mjERROR("could not allocate mjData");
+    mjERROR_OOM("could not allocate mjData");
   }
 
   // prevent spurious timing print from mj_resetData before _resetData zeroes the struct
@@ -1098,7 +1098,7 @@ void mj_makeRawData(mjData** dest, const mjModel* m) {
   d->buffer = mju_malloc(d->nbuffer);
   if (!d->buffer) {
     if (allocate) mju_free(d);
-    mjERROR("could not allocate mjData buffer");
+    mjERROR_OOM("could not allocate mjData buffer");
   }
 
   // allocate arena
@@ -1106,7 +1106,7 @@ void mj_makeRawData(mjData** dest, const mjModel* m) {
   if (!d->arena) {
     mju_free(d->buffer);
     if (allocate) mju_free(d);
-    mjERROR("could not allocate mjData arena");
+    mjERROR_OOM("could not allocate mjData arena");
   }
 
   // set pointers into buffer
@@ -1157,15 +1157,15 @@ mjData* mj_copyDataVisual(mjData* dest, const mjModel* m, const mjData* src, int
 
   // check sizes
   if (dest->nbuffer != src->nbuffer) {
-    mjERROR("dest and src data buffers have different size");
+    mjERROR_INPUT("dest and src data buffers have different size");
   }
   if (dest->narena != src->narena) {
-    mjERROR("dest and src stacks have different size");
+    mjERROR_INPUT("dest and src stacks have different size");
   }
 
   // stack is in use
   if (src->pstack) {
-    mjERROR("attempting to copy mjData while stack is in use");
+    mjERROR_INPUT("attempting to copy mjData while stack is in use");
   }
 
   // save pointers, copy everything, restore pointers
@@ -1184,7 +1184,7 @@ mjData* mj_copyDataVisual(mjData* dest, const mjModel* m, const mjData* src, int
   if (plugin_data_size) {
     save_plugin_data = (uintptr_t*)mju_malloc(plugin_data_size);
     if (!save_plugin_data) {
-      mjERROR("failed to allocate temporary memory for plugin_data");
+      mjERROR_OOM("failed to allocate temporary memory for plugin_data");
     }
     memcpy(save_plugin_data, dest->plugin_data, plugin_data_size);
   }
@@ -1294,7 +1294,7 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
   // error early if history buffers cannot be initialized
   mjtNum dt = m->opt.timestep;
   if (m->nhistory && dt <= 0) {
-    mjERROR("history buffers require positive timestep, got %g", dt);
+    mjERROR_INPUT("history buffers require positive timestep, got %g", dt);
   }
 
   //------------------------------ save plugin state and data
@@ -1520,7 +1520,7 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
         // raise error and abort
         const char* hasname = mj_id2name(m, mjOBJ_BODY, root);
         const char* name = hasname ? hasname : "";
-        mjERROR("%d trees were marked as sleep='init' but only %d could be slept.\n"
+        mjERROR_INPUT("%d trees were marked as sleep='init' but only %d could be slept.\n"
                 "Body '%s' (id=%d) is the root of the first tree that could not be slept.",
                 num_asleep_init, nslept, name, root);
       }
@@ -2104,7 +2104,7 @@ const char* mj_validateReferences(const mjModel* m) {
 
     default:
       // might occur in case of the now-removed distance equality constraint
-      mjERROR("unknown equality constraint type.");
+      mjERROR_INPUT("unknown equality constraint type.");
     }
   }
   for (int i=0; i < m->nwrap; i++) {
@@ -2189,7 +2189,7 @@ const char* mj_validateReferences(const mjModel* m) {
     if (sensor_type == mjSENS_PLUGIN) {
       const mjpPlugin* plugin = mjp_getPluginAtSlot(m->plugin[m->sensor_plugin[i]]);
       if (!plugin->nsensordata) {
-        mjERROR("`nsensordata` is a null function pointer for plugin at slot %d",
+        mjERROR_INPUT("`nsensordata` is a null function pointer for plugin at slot %d",
                 m->plugin[m->sensor_plugin[i]]);
       }
       sensor_size = plugin->nsensordata(m, m->sensor_plugin[i], i);

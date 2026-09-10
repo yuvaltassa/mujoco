@@ -49,6 +49,7 @@ class RecoveryTest : public MujocoTest {
  protected:
   void SetUp() override {
     last_error_.clear();
+    last_kind_ = 0;
     prev_handler_ = mju_setLogHandler(RecordErrors);
   }
   void TearDown() override { mju_setLogHandler(prev_handler_); }
@@ -57,16 +58,19 @@ class RecoveryTest : public MujocoTest {
     if (msg->level == mjLOG_ERROR) {
       last_error_ =
           std::string(msg->func ? msg->func : "") + ": " + msg->subject;
+      last_kind_ = msg->status;
       return;
     }
     prev_handler_(msg);
   }
 
   static std::string last_error_;
+  static int last_kind_;
   static mjfLogHandler prev_handler_;
 };
 
 std::string RecoveryTest::last_error_;
+int RecoveryTest::last_kind_ = 0;
 mjfLogHandler RecoveryTest::prev_handler_ = nullptr;
 
 // an error in the top-level function: the call is abandoned, the data reports
@@ -79,7 +83,7 @@ TEST_F(RecoveryTest, ErrorIsRecoveredAtTheBoundary) {
 
   model->opt.integrator = 99;
   mj_step(model.get(), data.get());
-  EXPECT_EQ(data->status, mjSTATUS_ERROR);
+  EXPECT_EQ(data->status, mjSTATUS_INPUT);
   EXPECT_THAT(last_error_, HasSubstr("invalid integrator"));
   EXPECT_EQ(data->time, 0);
   EXPECT_EQ(data->nested, 0);
@@ -95,7 +99,7 @@ TEST_F(RecoveryTest, PendingErrorRefusesUntilReset) {
 
   model->opt.integrator = 99;
   mj_step(model.get(), data.get());
-  ASSERT_EQ(data->status, mjSTATUS_ERROR);
+  ASSERT_EQ(data->status, mjSTATUS_INPUT);
 
   // fixing the input is not enough: the data is refused, with an error naming
   // the cause
@@ -103,7 +107,7 @@ TEST_F(RecoveryTest, PendingErrorRefusesUntilReset) {
   last_error_.clear();
   mj_step(model.get(), data.get());
   EXPECT_THAT(last_error_, HasSubstr("pending error"));
-  EXPECT_EQ(data->status, mjSTATUS_ERROR);
+  EXPECT_EQ(data->status, mjSTATUS_INPUT);
   EXPECT_EQ(data->time, 0);
   last_error_.clear();
   mj_forward(model.get(), data.get());
@@ -589,7 +593,7 @@ TEST_F(RecoveryTest, CallbacksReenterTheirOwnData) {
     EXPECT_EQ(g_probe.reentries, g_probe.control_calls) << category.name;
     EXPECT_TRUE(g_probe.nested_recovered) << category.name;
     EXPECT_TRUE(g_probe.armed_after) << category.name;
-    EXPECT_EQ(data->status, mjSTATUS_ERROR) << category.name;
+    EXPECT_EQ(data->status, mjSTATUS_INPUT) << category.name;
     EXPECT_THAT(last_error_, HasSubstr("integrator must be implicit"))
         << category.name;
     EXPECT_EQ(data->nested, 0) << category.name;
@@ -674,10 +678,50 @@ TEST_F(RecoveryTest, StackOverflowIsOutOfMemory) {
 
   mj_step(model.get(), data.get());
   EXPECT_EQ(data->status, mjSTATUS_OOM);
+  EXPECT_EQ(last_kind_, mjSTATUS_OOM);
   EXPECT_THAT(last_error_, HasSubstr("stack overflow"));
   EXPECT_EQ(data->pstack, 0);
   EXPECT_EQ(data->pbase, 0);
   EXPECT_EQ(data->nested, 0);
+}
+
+// an error raised by code that does not classify it is generic in the status
+TEST_F(RecoveryTest, UnclassifiedErrorIsGeneric) {
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(kModelXml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+
+  struct Guard {
+    Guard() {
+      g_prev_control = mjcb_control;
+      mjcb_control = +[](const mjModel* m, mjData* d) {
+        mju_error("failure in user code");
+      };
+    }
+    ~Guard() { mjcb_control = g_prev_control; }
+  } guard;
+
+  mj_step(model.get(), data.get());
+  EXPECT_EQ(data->status, mjSTATUS_ERROR);
+  EXPECT_EQ(last_kind_, mjSTATUS_ERROR);
+  EXPECT_THAT(last_error_, HasSubstr("failure in user code"));
+}
+
+// an engine invariant that breaks is a bug in MuJoCo, not the caller's to fix
+TEST_F(RecoveryTest, BrokenInvariantIsInternal) {
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(kModelXml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjDataPtr data = MakeData(model);
+
+  // the transmission type is validated by the compiler, so the dispatch never
+  // defaults unless something upstream of it is wrong
+  model->actuator_trntype[0] = 99;
+  mj_step(model.get(), data.get());
+  EXPECT_EQ(data->status, mjSTATUS_INTERNAL);
+  EXPECT_EQ(last_kind_, mjSTATUS_INTERNAL);
+  EXPECT_THAT(last_error_, HasSubstr("unknown transmission type"));
 }
 
 // an error in a worker thread is raised on the calling thread after the batch

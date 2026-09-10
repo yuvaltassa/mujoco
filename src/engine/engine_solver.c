@@ -158,7 +158,7 @@ static void extractBlock(const mjModel* m, const mjData* d, mjtNum* Ac,
 
     // SHOULD NOT OCCUR
     if (k >= rownnz[start]) {
-      mjERROR("internal error");
+      mjERROR_INTERNAL("internal error");
     }
 
     // copy rows
@@ -2185,7 +2185,7 @@ static void MakeMetricLower(mjData* d, mjPrimalContext* ctx) {
       if (lr < 0 || lr >= nv) {
         // island discovery unions metric couplings and the sleep policy keeps coupled
         // trees awake together, so a rank-1 term cannot straddle islands or sleep
-        mjERROR("metric rank-1 term spans islands on dof %d", r);  // SHOULD NOT OCCUR
+        mjERROR_INTERNAL("metric rank-1 term spans islands on dof %d", r);  // SHOULD NOT OCCUR
       }
       trownnz[lr] += e.nnz;
     }
@@ -2484,7 +2484,7 @@ static void FactorizeHessian(mjData* d, mjPrimalContext* ctx, int flg_recompute)
 
     // rank-deficient; SHOULD NOT OCCUR
     if (rank != nv) {
-      mjERROR("rank-deficient sparse Hessian");
+      mjERROR_INPUT("rank-deficient sparse Hessian");
     }
   }
 
@@ -2585,7 +2585,7 @@ static void HessianConeFolded(mjData* d, mjPrimalContext* ctx) {
                             ctx->LT_rownnz, ctx->LT_rowadr, ctx->LT_colind, ctx->LT_map,
                             Hcone, ctx->H_rownnz, ctx->H_rowadr, ctx->H_colind,
                             ctx->cholscratch) != nv) {
-    mjERROR("rank-deficient cone Hessian");
+    mjERROR_INPUT("rank-deficient cone Hessian");
   }
 }
 

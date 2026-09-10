@@ -37,7 +37,7 @@ void mjv_room2model(mjtNum* modelpos, mjtNum* modelquat, const mjtNum* roompos,
 
   // check scale
   if (scn->scale < mjMINVAL) {
-    mjERROR("mjvScene scale too small");
+    mjERROR_INPUT("mjvScene scale too small");
   }
 
   // enabled: transform
@@ -71,7 +71,7 @@ void mjv_model2room(mjtNum* roompos, mjtNum* roomquat, const mjtNum* modelpos,
 
   // check scale
   if (scn->scale < mjMINVAL) {
-    mjERROR("mjvScene scale too small");
+    mjERROR_INPUT("mjvScene scale too small");
   }
 
   // enabled: transform
@@ -102,7 +102,7 @@ void mjv_cameraInModel(mjtNum* headpos, mjtNum* forward, mjtNum* up, const mjvSc
 
   // check znear
   if (scn->camera[0].frustum_near < mjMINVAL || scn->camera[1].frustum_near < mjMINVAL) {
-    mjERROR("mjvScene frustum_near too small");
+    mjERROR_INPUT("mjvScene frustum_near too small");
   }
 
   // clear results
@@ -174,7 +174,7 @@ void mjv_cameraInRoom(mjtNum* headpos, mjtNum* forward, mjtNum* up, const mjvSce
 
   // check znear
   if (scn->camera[0].frustum_near < mjMINVAL || scn->camera[1].frustum_near < mjMINVAL) {
-    mjERROR("mjvScene frustum_near too small");
+    mjERROR_INPUT("mjvScene frustum_near too small");
   }
 
   // clear results
@@ -223,7 +223,7 @@ mjtNum mjv_frustumHeight(const mjvScene* scn) {
   const mjvGLCamera* cam2 = scn->camera + 1;
 
   if (cam1->orthographic != cam2->orthographic) {
-    mjERROR("cannot average frustums of perspective and orthographic cameras");
+    mjERROR_INPUT("cannot average frustums of perspective and orthographic cameras");
   }
 
   // get height
@@ -231,7 +231,7 @@ mjtNum mjv_frustumHeight(const mjvScene* scn) {
   if (!cam1->orthographic) {
     // check znear
     if (cam1->frustum_near < mjMINVAL || cam2->frustum_near < mjMINVAL) {
-      mjERROR("mjvScene frustum_near too small");
+      mjERROR_INPUT("mjvScene frustum_near too small");
     }
 
     // add normalized height for left and right cameras
@@ -255,7 +255,7 @@ static mjtNum cameraFrustumHeight(const mjModel* m, const mjvCamera* cam) {
     return (zver[1] + zver[0]);
   } else {
     if (zclip[0] < mjMINVAL) {
-      mjERROR("mjvScene frustum_near too small");
+      mjERROR_INPUT("mjvScene frustum_near too small");
     }
     return (zver[1] + zver[0]) / zclip[0];
   }
@@ -317,7 +317,7 @@ static void convert2D(mjtNum* res, int action, mjtNum dx, mjtNum dy, const mjtNu
     break;
 
   default:
-    mjERROR("unexpected mouse action %d in convert2D", action);
+    mjERROR_INPUT("unexpected mouse action %d in convert2D", action);
   }
 
   // call 3D converter
@@ -409,7 +409,7 @@ void mjv_moveCamera(const mjModel* m, int action, mjtNum reldx, mjtNum reldy, mj
     break;
 
   default:
-    mjERROR("unexpected action %d", action);
+    mjERROR_INPUT("unexpected action %d", action);
   }
 
   // clamp camera parameters
@@ -519,7 +519,7 @@ void mjv_movePerturb(const mjModel* m, const mjData* d, int action, mjtNum reldx
     break;
 
   default:
-    mjERROR("unexpected mouse action %d", action);
+    mjERROR_INPUT("unexpected mouse action %d", action);
   }
 }
 
@@ -596,7 +596,7 @@ void mjv_moveModel(const mjModel* m, int action, mjtNum reldx, mjtNum reldy,
     break;
 
   default:
-    mjERROR("unexpected action %d", action);
+    mjERROR_INPUT("unexpected action %d", action);
   }
 }
 
@@ -824,7 +824,7 @@ mjvGLCamera mjv_averageCamera(const mjvGLCamera* cam1, const mjvGLCamera* cam2) 
   cam.frustum_far    = 0.5f * (cam1->frustum_far + cam2->frustum_far);
 
   if (cam1->orthographic != cam2->orthographic) {
-    mjERROR("cannot average perspective and orthographic cameras");
+    mjERROR_INPUT("cannot average perspective and orthographic cameras");
   } else {
     cam.orthographic = cam1->orthographic;
   }

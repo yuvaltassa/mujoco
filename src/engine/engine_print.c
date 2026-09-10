@@ -1211,7 +1211,7 @@ void mj_printFormattedData(const mjModel* m, const mjData* d, const char* filena
                            const char* float_format) {
   // stack in use, SHOULD NOT OCCUR
   if (d->pstack) {
-    mjERROR("attempting to print mjData when stack is in use");
+    mjERROR_INPUT("attempting to print mjData when stack is in use");
   }
 
   // check format string

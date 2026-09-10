@@ -325,7 +325,7 @@ static mjTHREADLOCAL char last_error[2048] = "";
 // an interrupt is unwinding the pipeline call in progress on this thread
 static mjTHREADLOCAL bool interrupted = false;
 
-// kind of the error being raised on this thread, recorded by the raise site (mjtStatus, or 0)
+// kind of the error being raised on this thread, taken from the message (mjtStatus, or 0)
 static mjTHREADLOCAL int error_kind = 0;
 
 // recursion guard for log handler
@@ -356,6 +356,7 @@ void mju_message(const mjLogMessage* msg) {
     } else {
       snprintf(last_error, sizeof(last_error), "%s", msg->subject);
     }
+    error_kind = msg->status;
     mjfLogHandler handler = mju_activeHandler();
     delivering_chain = mju_boundaryHead;
     mju_boundaryHead = NULL;
@@ -367,7 +368,7 @@ void mju_message(const mjLogMessage* msg) {
 }
 
 void mju_error_v(const char* msg, va_list args) {
-  mjLogMessage m = {.level = mjLOG_ERROR};
+  mjLogMessage m = {.level = mjLOG_ERROR, .status = mjSTATUS_ERROR};
   vsnprintf(m.subject, sizeof(m.subject), msg, args);
   mju_message(&m);
 }
@@ -456,12 +457,6 @@ void _mjPRIVATE__interrupt(void) {
 // is an interrupt pending on the calling thread
 int _mjPRIVATE__interrupted(void) {
   return interrupted;
-}
-
-
-// record the kind of the error about to be raised on the calling thread
-void mju_setErrorKind(int kind) {
-  error_kind = kind;
 }
 
 

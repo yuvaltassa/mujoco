@@ -103,7 +103,7 @@ int mj_dsuRoot(int* parent, int tree) {
 // activate and union two incident trees; -1 denotes a static endpoint
 void mj_dsuMerge(int* parent, int tree1, int tree2) {
   if (tree1 == -1 && tree2 == -1) {
-    mjERROR("self-incidence of the static tree");  // SHOULD NOT OCCUR
+    mjERROR_INTERNAL("self-incidence of the static tree");  // SHOULD NOT OCCUR
     return;
   }
 
@@ -308,7 +308,7 @@ static void treeIterInit(const mjModel* m, const mjData* d, int i, mjTreeIter* i
       iter->trees[0] = m->body_treeid[m->geom_bodyid[g1]];
       iter->trees[1] = m->body_treeid[m->geom_bodyid[g2]];
       if (iter->trees[0] < 0 && iter->trees[1] < 0) {
-        mjERROR("contact %d is between two static bodies", efc_id);  // SHOULD NOT OCCUR
+        mjERROR_INTERNAL("contact %d is between two static bodies", efc_id);  // SHOULD NOT OCCUR
       }
     }
 
@@ -335,7 +335,7 @@ static void treeIterInit(const mjModel* m, const mjData* d, int i, mjTreeIter* i
     iter->trees[0] = m->body_treeid[b1];
     iter->trees[1] = m->body_treeid[b2];
     if (iter->trees[0] < 0 && iter->trees[1] < 0) {
-      mjERROR("equality %d is between two static bodies", efc_id);  // SHOULD NOT OCCUR
+      mjERROR_INTERNAL("equality %d is between two static bodies", efc_id);  // SHOULD NOT OCCUR
     }
   }
 
@@ -544,7 +544,7 @@ void mj_island(const mjModel* m, mjData* d) {
   const char* err_msg = unionConstraintTrees(m, d, parent, efc_tree, &err_i);
   if (err_msg) {
     mj_freeStack(d);
-    mjERROR(err_msg, err_i);
+    mjERROR_INTERNAL(err_msg, err_i);
   }
   int* tree_island = mjSTACKALLOC(d, ntree, int);
   int nidof;
@@ -605,8 +605,12 @@ void mj_island(const mjModel* m, mjData* d) {
   }
 
   // SHOULD NOT OCCUR
-  if (!mju_compare(island_ntree2, d->island_ntree, nisland)) mjERROR("island_ntree miscount");
-  if (last_tree + island_ntree2[nisland] != ntree) mjERROR("miscount of unconstrained trees");
+  if (!mju_compare(island_ntree2, d->island_ntree, nisland)) {
+    mjERROR_INTERNAL("island_ntree miscount");
+  }
+  if (last_tree + island_ntree2[nisland] != ntree) {
+    mjERROR_INTERNAL("miscount of unconstrained trees");
+  }
 
 
   // ------------------------------------- degrees of freedom --------------------------------------
@@ -649,8 +653,8 @@ void mj_island(const mjModel* m, mjData* d) {
   }
 
   // SHOULD NOT OCCUR
-  if (!mju_compare(island_nv2, d->island_nv, nisland)) mjERROR("island_nv miscount");
-  if (nidof + island_nv2[nisland] != nv) mjERROR("miscount of unconstrained dofs");
+  if (!mju_compare(island_nv2, d->island_nv, nisland)) mjERROR_INTERNAL("island_nv miscount");
+  if (nidof + island_nv2[nisland] != nv) mjERROR_INTERNAL("miscount of unconstrained dofs");
 
   // compute island_dofadr (used for visualization)
   for (int i=0; i < nisland; i++) {
@@ -703,7 +707,7 @@ void mj_island(const mjModel* m, mjData* d) {
   }
 
   // SHOULD NOT OCCUR
-  if (!mju_compare(island_nefc2, d->island_nefc, nisland)) mjERROR("island_nefc miscount");
+  if (!mju_compare(island_nefc2, d->island_nefc, nisland)) mjERROR_INTERNAL("island_nefc miscount");
 
   mj_freeStack(d);
   mjLEAVE(d);

@@ -527,7 +527,7 @@ static void pushPairArena(mjData* d, mjcPair* pair) {
   // allocate geom pair on the arena
   mjcPair* new_pair = (mjcPair*) mj_arenaAllocByte(d, sizeof(mjcPair), _Alignof(mjcPair));
   if (!new_pair) {
-    mjERROR("arena too small to allocate geom pair");
+    mjERROR_OOM("arena too small to allocate geom pair");
   }
   *new_pair = *pair;
 }
@@ -1097,7 +1097,7 @@ static void mj_collideTree(const mjModel* m, mjData* d, int bf1, int bf2,
 
     // SHOULD NOT OCCUR
     if ((isleaf1 && nodeid1 < 0) || (isleaf2 && nodeid2 < 0)) {
-      mju_error("BVH leaf has invalid node id");
+      mjERROR_INTERNAL("BVH leaf has invalid node id");
     }
 
     // self-collision: avoid repeated pairs
@@ -1189,7 +1189,7 @@ static void mj_collideTree(const mjModel* m, mjData* d, int bf1, int bf2,
 
     // flex : body  SHOULD NOT OCCUR
     else if (!isbody1 && isbody2) {
-      mjERROR("BVH flex : body collision should not occur");
+      mjERROR_INTERNAL("BVH flex : body collision should not occur");
     }
 
     // flex : flex
@@ -1222,7 +1222,7 @@ static void mj_collideTree(const mjModel* m, mjData* d, int bf1, int bf2,
       for (int i=0; i < 2; i++) {
         if (child1[2*node1+i] != -1) {
           if (nstack >= max_stack) {
-            mjERROR("BVH stack depth exceeded.");  // SHOULD NOT OCCUR
+            mjERROR_OOM("BVH stack depth exceeded.");  // SHOULD NOT OCCUR
           }
           stack[nstack].node1 = child1[2*node1+i];
           stack[nstack].node2 = node2;
@@ -1233,7 +1233,7 @@ static void mj_collideTree(const mjModel* m, mjData* d, int bf1, int bf2,
       for (int i=0; i < 2; i++) {
         if (child2[2*node2+i] != -1) {
           if (nstack >= max_stack) {
-            mjERROR("BVH stack depth exceeded.");  // SHOULD NOT OCCUR
+            mjERROR_OOM("BVH stack depth exceeded.");  // SHOULD NOT OCCUR
           }
           stack[nstack].node1 = node1;
           stack[nstack].node2 = child2[2*node2+i];
@@ -1256,7 +1256,7 @@ static void mj_collideTree(const mjModel* m, mjData* d, int bf1, int bf2,
         for (int i = 0; i < 2; i++) {
           if (child1[2 * node1 + i] != -1) {
             if (nstack >= max_stack) {
-              mjERROR("BVH stack depth exceeded.");  // SHOULD NOT OCCUR
+              mjERROR_OOM("BVH stack depth exceeded.");  // SHOULD NOT OCCUR
             }
             stack[nstack].node1 = child1[2 * node1 + i];
             stack[nstack].node2 = node2;
@@ -1267,7 +1267,7 @@ static void mj_collideTree(const mjModel* m, mjData* d, int bf1, int bf2,
         for (int i = 0; i < 2; i++) {
           if (child2[2 * node2 + i] != -1) {
             if (nstack >= max_stack) {
-              mjERROR("BVH stack depth exceeded.");  // SHOULD NOT OCCUR
+              mjERROR_OOM("BVH stack depth exceeded.");  // SHOULD NOT OCCUR
             }
             stack[nstack].node1 = node1;
             stack[nstack].node2 = child2[2*node2+i];
@@ -1436,7 +1436,7 @@ static void add_pair(const mjModel* m, int bf1, int bf2,
     pair[n].hi = (bf1 < bf2) ? bf1 : bf2;
     pair[n].lo = (bf1 < bf2) ? bf2 : bf1;
   } else {
-    mjERROR("broadphase buffer full");
+    mjERROR_OOM("broadphase buffer full");
   }
 }
 
@@ -1718,7 +1718,7 @@ static int mj_broadphase(const mjModel* m, mjData* d, mjPacked32* bfpair, int ma
     mjPacked32* sappair = mjSTACKALLOC(d, maxsappair, mjPacked32);
     int nsappair = mj_SAP(d, aamm, ncollide, 0, sappair, maxsappair);
     if (nsappair < 0) {
-      mjERROR("SAP failed");
+      mjERROR_INTERNAL("SAP failed");
     }
 
     // filter SAP pairs, convert to bodyflex pairs
@@ -1864,7 +1864,7 @@ static void mj_contactParam(const mjModel* m, int* condim,
 
   // SHOULD NOT OCCUR
   if (*condim > 6 || *condim < 1) {
-    mjERROR("Invalid condim value: %d", *condim);
+    mjERROR_INTERNAL("Invalid condim value: %d", *condim);
   }
 }
 
@@ -1986,7 +1986,7 @@ static void collisionTask(const mjModel* m, mjData* d, void* arg, int thread_id,
     // SHOULD NOT OCCUR
     int expected_max = (globalidx + i + 1 < npair ? pair[i+1].conpos : conargs->maxcon) - conpos;
     if (ncon[i] > expected_max) {
-      mjERROR("collision function returned %d contacts for geom pair (%d, %d), "
+      mjERROR_INTERNAL("collision function returned %d contacts for geom pair (%d, %d), "
               "expected at most %d from mj_maxContact", ncon[i], g1, g2, expected_max);
     }
   }
@@ -2397,7 +2397,7 @@ void mj_collideFlexSAP(const mjModel* m, mjData* d, int f) {
   mjPacked32* sappair = mjSTACKALLOC(d, maxsappair, mjPacked32);
   int nsappair = mj_SAP(d, aamm, nactive, axis, sappair, maxsappair);
   if (nsappair < 0) {
-    mjERROR("SAP failed");
+    mjERROR_INTERNAL("SAP failed");
   }
 
   // send SAP pairs to nearphase
