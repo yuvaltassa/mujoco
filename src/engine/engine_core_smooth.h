@@ -42,16 +42,16 @@ MJAPI void mj_comPos(const mjModel* m, mjData* d);
 MJAPI void mj_camlight(const mjModel* m, mjData* d);
 
 // compute flex-related quantities
-MJAPI void mj_flex(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_flex(const mjModel* m, mjData* d);
 
 // compute tendon lengths, velocities and moment arms
-MJAPI void mj_tendon(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_tendon(const mjModel* m, mjData* d);
 
 // return dot product of tendon Jacobian time derivative with vector
 MJAPI mjtNum mj_tendonDot(const mjModel* m, mjData* d, int id, const mjtNum* vec);
 
 // compute actuator transmission lengths and moments
-MJAPI void mj_transmission(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_transmission(const mjModel* m, mjData* d);
 
 
 //-------------------------- inertia ---------------------------------------------------------------
@@ -97,13 +97,13 @@ void mj_solveM2_impl(mjtNum* x, const mjtNum* y, const mjtNum* sqrtInvD, const m
 MJAPI void mj_comVel(const mjModel* m, mjData* d);
 
 // subtree linear velocity and angular momentum
-MJAPI void mj_subtreeVel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_subtreeVel(const mjModel* m, mjData* d);
 
 
 //-------------------------- RNE -------------------------------------------------------------------
 
 // RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=0 removes inertial term
-MJAPI void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result);
+MJAPI mjtStatus mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result);
 
 // RNE with complete data: compute cacc, cfrc_ext, cfrc_int
 MJAPI void mj_rnePostConstraint(const mjModel* m, mjData* d);
@@ -112,7 +112,7 @@ MJAPI void mj_rnePostConstraint(const mjModel* m, mjData* d);
 //-------------------------- tendon bias -----------------------------------------------------------
 
 // add bias force due to tendon armature
-MJAPI void mj_tendonBias(const mjModel* m, mjData* d, mjtNum* qfrc);
+MJAPI mjNODISCARD mjtStatus mj_tendonBias(const mjModel* m, mjData* d, mjtNum* qfrc);
 
 #ifdef __cplusplus
 }

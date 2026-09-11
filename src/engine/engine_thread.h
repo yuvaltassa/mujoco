@@ -33,7 +33,7 @@ MJAPI void mju_threadpool(mjData* d, int nthread);
 MJAPI int mju_numThread(const mjData* d);
 
 // dispatch ntask tasks to the thread pool; passes arg into func along with thread_id and task_id
-MJAPI void mju_dispatch(const mjModel* m, mjData* d, mjTaskFunc func, void* arg, int ntask);
+MJAPI mjtStatus mju_dispatch(const mjModel* m, mjData* d, mjTaskFunc func, void* arg, int ntask);
 
 #ifdef __cplusplus
 }

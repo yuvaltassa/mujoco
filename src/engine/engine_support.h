@@ -76,12 +76,12 @@ MJAPI void mj_addM(const mjModel* m, mjData* d, mjtNum* dst,
 //-------------------------- perturbations ---------------------------------------------------------
 
 // apply Cartesian force and torque
-MJAPI void mj_applyFT(const mjModel* m, mjData* d,
+MJAPI mjtStatus mj_applyFT(const mjModel* m, mjData* d,
                       const mjtNum force[3], const mjtNum torque[3],
                       const mjtNum point[3], int body, mjtNum* qfrc_target);
 
 // accumulate xfrc_applied in qfrc
-void mj_xfrcAccumulate(const mjModel* m, mjData* d, mjtNum* qfrc);
+mjtStatus mj_xfrcAccumulate(const mjModel* m, mjData* d, mjtNum* qfrc);
 
 
 //-------------------------- miscellaneous ---------------------------------------------------------

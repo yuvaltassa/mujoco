@@ -26,7 +26,7 @@ extern "C" {
 //------------------------- passive forces ---------------------------------------------------------
 
 // all passive forces
-MJAPI void mj_passive(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_passive(const mjModel* m, mjData* d);
 
 // adhesion forces: constant attraction along the normals of adhesive contacts
 int mj_adhesion(const mjModel* m, mjData* d);
@@ -37,10 +37,10 @@ int mj_adhesion(const mjModel* m, mjData* d);
 //------------------------- fluid models -----------------------------------------------------------
 
 // fluid forces based on inertia-box approximation
-void mj_inertiaBoxFluidModel(const mjModel* m, mjData* d, int i);
+mjtStatus mj_inertiaBoxFluidModel(const mjModel* m, mjData* d, int i);
 
 // fluid forces based on ellipsoid approximation
-void mj_ellipsoidFluidModel(const mjModel* m, mjData* d, int bodyid);
+mjtStatus mj_ellipsoidFluidModel(const mjModel* m, mjData* d, int bodyid);
 
 // compute forces due to added mass (potential flow)
 void mj_addedMassForces(

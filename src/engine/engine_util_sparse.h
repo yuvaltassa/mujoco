@@ -152,7 +152,7 @@ MJAPI int mju_sqrMatTDSparseSymbolic(
 
 // numeric phase for mju_sqrMatTDSparse: compute values given pre-computed sparsity
 //   res_colind, res_rownnz, res_rowadr must be pre-computed by mju_sqrMatTDSparseSymbolic
-MJAPI void mju_sqrMatTDSparseNumeric(
+MJAPI mjtStatus mju_sqrMatTDSparseNumeric(
     mjtNum* res, int nc,
     const int* res_rownnz, const int* res_rowadr, const int* res_colind, const int* res_diagind,
     const mjtNum* mat, const int* rownnz, const int* rowadr, const int* colind,

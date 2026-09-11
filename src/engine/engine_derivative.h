@@ -33,13 +33,13 @@ MJAPI void mjd_quatIntegrate(const mjtNum vel[3], mjtNum scale,
 
 // analytical derivative of smooth forces w.r.t velocities:
 //   d->qDeriv = d (qfrc_actuator + qfrc_passive - [qfrc_bias]) / d qvel
-MJAPI void mjd_smooth_vel(const mjModel* m, mjData* d, int flg_bias);
+MJAPI mjtStatus mjd_smooth_vel(const mjModel* m, mjData* d, int flg_bias);
 
 // add (d qfrc_actuator / d qvel) to qDeriv
 MJAPI void mjd_actuator_vel(const mjModel* m, mjData* d);
 
 // add (d qfrc_passive / d qvel) to qDeriv
-MJAPI void mjd_passive_vel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mjd_passive_vel(const mjModel* m, mjData* d);
 
 // subtract (d qfrc_bias / d qvel) from qDeriv (dense version)
 MJAPI void mjd_rne_vel_dense(const mjModel* m, mjData* d);
@@ -61,11 +61,11 @@ int mjd_freeGyroPossible(const mjModel* m, const mjData* d, int jnt);
 
 // compute res += (s1 + s2*damping) * J'*K*J * vec, for all interpolated flexes
 //   K_rot_cache: if non-NULL, use pre-cached K_rot (same layout as m->flex_stiffness)
-MJAPI void mjd_flexInterp_mul(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec,
+MJAPI mjtStatus mjd_flexInterp_mul(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec,
                               mjtNum s1, mjtNum s2, const mjtNum* K_rot_cache);
 
 // precompute unscaled K_rot for all elements into cache (same layout as m->flex_stiffness)
-MJAPI void mjd_flexInterp_cacheKrot(const mjModel* m, mjData* d, mjtNum* K_rot_out);
+MJAPI mjtStatus mjd_flexInterp_cacheKrot(const mjModel* m, mjData* d, mjtNum* K_rot_out);
 
 // compute res += scale * K_bend * vec for standard (non-interp) flex bending
 //   scale = s1 + s2 * flex_damping[f]  per flex
@@ -126,15 +126,15 @@ void mjd_effMulAddIsland(const mjModel* m, const mjData* d, mjtNum* res,
 
 // implicit effective metric Mtilde = M + (h^2+h*d)*K: per-step arena object (see mjdata.h efm_*)
 // build (or deactivate, active==0); the gate decision belongs to the caller
-MJAPI void mjd_effBuild(const mjModel* m, mjData* d, int active, int flg_factor);
+MJAPI mjtStatus mjd_effBuild(const mjModel* m, mjData* d, int active, int flg_factor);
 
 // refresh the metric's smooth-force shift c = h*K*qvel (values only, velocity stage)
-MJAPI void mjd_effShift(const mjModel* m, mjData* d);
+MJAPI mjtStatus mjd_effShift(const mjModel* m, mjData* d);
 
 // res += B*vec (the stiffness part of the metric; caller supplies the M part).
 // flg_contact selects the passive-contact class, for callers that account for contact
 // energy separately
-MJAPI void mjd_effMulAdd(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec,
+MJAPI mjtStatus mjd_effMulAdd(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec,
                          int flg_contact);
 
 // solve (M + B) x = b by PCG preconditioned with mjd_effPrec, to opt.tolerance on the relative
@@ -144,7 +144,7 @@ MJAPI mjNODISCARD mjtStatus mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x,
 
 // apply the metric preconditioner: x ~= (M + B)^-1 b, a cheap fixed linear operator, NOT a solve.
 // Exact only when the metric is inactive (x = M^-1 b); otherwise approximate by construction.
-MJAPI void mjd_effPrec(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b);
+MJAPI mjtStatus mjd_effPrec(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b);
 
 
 #ifdef __cplusplus

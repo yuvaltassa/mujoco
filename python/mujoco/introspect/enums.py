@@ -607,6 +607,7 @@ ENUMS: Mapping[str, EnumDecl] = dict([
          name='mjtStatus',
          declname='enum mjtStatus',
          values=dict([
+             ('mjSTATUS_OOM', -1),
              ('mjSTATUS_OK', 0),
              ('mjSTATUS_INERTIA', 1),
              ('mjSTATUS_CONTACTFULL', 2),

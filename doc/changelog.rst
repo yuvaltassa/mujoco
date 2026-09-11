@@ -20,6 +20,9 @@ Engine
   same value is recorded in the new ``mjData.status``, and the new macro :ref:`mjOK` tests it.
 - Python: these functions return the status, and ``data.status`` records it; ``mj_step(m, d, nstep)`` returns the
   first warning of the ``nstep`` steps.
+- Running out of ``mjData`` memory in a pipeline function is no longer an error: the function returns the negative
+  status ``mjSTATUS_OOM``, stops at the stage that ran out, and leaves the data for inspection or a reset. See
+  :ref:`out of memory<siOutOfMemory>`.
 
 .. admonition:: Breaking API changes
    :class: attention

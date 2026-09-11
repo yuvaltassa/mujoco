@@ -278,14 +278,16 @@ void mj_jacSite(const mjModel* m, const mjData* d, mjtNum* jacp, mjtNum* jacr, i
 
 
 // compute translation Jacobian of point, and rotation Jacobian of axis
-void mj_jacPointAxis(const mjModel* m, mjData* d, mjtNum* jacPoint, mjtNum* jacAxis,
+mjtStatus mj_jacPointAxis(const mjModel* m, mjData* d, mjtNum* jacPoint, mjtNum* jacAxis,
                      const mjtNum point[3], const mjtNum axis[3], int body) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv;
 
   // get full Jacobian of point
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* jacp = (jacPoint ? jacPoint : mjSTACKALLOC(d, 3*nv, mjtNum));
   mjtNum* jacr = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjSTACKCHECK(d);
   mj_jac(m, d, jacp, jacr, point, body);
 
   // jacAxis_col = cross(jacr_col, axis)
@@ -298,6 +300,7 @@ void mj_jacPointAxis(const mjModel* m, mjData* d, mjtNum* jacPoint, mjtNum* jacA
   }
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 
 
@@ -521,8 +524,9 @@ int mj_jacSum(const mjModel* m, mjData* d, int* chain,
               const mjtNum point[3], mjtNum* jacp, mjtNum* jacr, int flg_rot) {
   int nv = m->nv, NV;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* jtmp = mjSTACKALLOC(d, flg_rot ? 6*nv : 3*nv, mjtNum);
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
 
   // sparse
   if (mj_isSparse(m)) {
@@ -531,6 +535,7 @@ int mj_jacSum(const mjModel* m, mjData* d, int* chain,
     mjtNum* buf = mjSTACKALLOC(d, flg_rot ? 6*nv : 3*nv, mjtNum);
     int* buf_ind = mjSTACKALLOC(d, nv, int);
     int* bodychain = mjSTACKALLOC(d, nv, int);
+    mjSTACKCHECK_(d, mj_freeStack(d), -1);
 
     // set first (rotational rows packed right after the translational rows, at offset 3*NV)
     NV = mj_bodyChain(m, body[0], chain);

@@ -26,16 +26,16 @@ extern "C" {
 //-------------------------------- sensors ---------------------------------------------------------
 
 // compute value for one sensor, write to sensordata, apply cutoff
-void mj_computeSensor(const mjModel* m, mjData* d, int i, mjtNum* sensordata);
+mjtStatus mj_computeSensor(const mjModel* m, mjData* d, int i, mjtNum* sensordata);
 
 // position-dependent sensors
-MJAPI void mj_sensorPos(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_sensorPos(const mjModel* m, mjData* d);
 
 // velocity-dependent sensors
-MJAPI void mj_sensorVel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_sensorVel(const mjModel* m, mjData* d);
 
 // acceleration/force-dependent sensors
-MJAPI void mj_sensorAcc(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_sensorAcc(const mjModel* m, mjData* d);
 
 
 //-------------------------------- energy ----------------------------------------------------------
@@ -44,7 +44,7 @@ MJAPI void mj_sensorAcc(const mjModel* m, mjData* d);
 MJAPI void mj_energyPos(const mjModel* m, mjData* d);
 
 // velocity-dependent energy (kinetic)
-MJAPI void mj_energyVel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_energyVel(const mjModel* m, mjData* d);
 
 #ifdef __cplusplus
 }

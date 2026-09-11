@@ -59,11 +59,12 @@ static void inline GradSquaredLengths(mjtNum gradient[6][2][3],
 
 
 // passive forces for interpolated flex (stretch + bending)
-static void mj_flexPassiveInterp(const mjModel* m, mjData* d, int f,
+static mjtStatus mj_flexPassiveInterp(const mjModel* m, mjData* d, int f,
                                  int enbl_spring, int enbl_damper) {
+  mjtStatus status = mjSTATUS_OK;
   int stiffnessadr = m->flex_stiffnessadr[f];
   if (stiffnessadr < 0) {
-    return;
+    return status;
   }
 
   mjtNum* k = m->flex_stiffness + stiffnessadr;
@@ -91,16 +92,17 @@ static void mj_flexPassiveInterp(const mjModel* m, mjData* d, int f,
   // check if we have any work to do
   int has_stretch = k[0] != 0 && m->flex_edgeequality[f] != 3;
   if (!has_stretch) {
-    return;
+    return status;
   }
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // allocate global arrays
   mjtNum* xpos_g = mjSTACKALLOC(d, 3*nodenum, mjtNum);
   mjtNum* vel_g = mjSTACKALLOC(d, 3*nodenum, mjtNum);
   mjtNum* frc_g = mjSTACKALLOC(d, 3*nodenum, mjtNum);
   mjtNum* dmp_g = mjSTACKALLOC(d, 3*nodenum, mjtNum);
+  mjSTACKCHECK(d);
   mjtNum* xpos0 = m->flex_node0 + 3*m->flex_nodeadr[f];
   int* bodyid = m->flex_nodebodyid + m->flex_nodeadr[f];
 
@@ -119,6 +121,7 @@ static void mj_flexPassiveInterp(const mjModel* m, mjData* d, int f,
   mjtNum* frc_e = mjSTACKALLOC(d, 3*npe, mjtNum);
   mjtNum* dmp_e = mjSTACKALLOC(d, 3*npe, mjtNum);
   int* gindices = mjSTACKALLOC(d, npe, int);
+  mjSTACKCHECK(d);
 
   // -------------------- stretch forces --------------------
   if (has_stretch) {
@@ -204,12 +207,17 @@ static void mj_flexPassiveInterp(const mjModel* m, mjData* d, int f,
         mji_addTo3(d->qfrc_damper + m->body_dofadr[bid], qdmp_loc);
       }
     } else {
-      if (enbl_spring) mj_applyFT(m, d, frc_g+3*i, 0, xpos_g+3*i, bid, d->qfrc_spring);
-      if (enbl_damper) mj_applyFT(m, d, dmp_g+3*i, 0, xpos_g+3*i, bid, d->qfrc_damper);
+      if (enbl_spring) {
+        mjSTAGE_(mj_applyFT(m, d, frc_g+3*i, 0, xpos_g+3*i, bid, d->qfrc_spring), mj_freeStack(d));
+      }
+      if (enbl_damper) {
+        mjSTAGE_(mj_applyFT(m, d, dmp_g+3*i, 0, xpos_g+3*i, bid, d->qfrc_damper), mj_freeStack(d));
+      }
     }
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
@@ -240,21 +248,22 @@ static inline mjtNum mju_dphi2D(mjtNum s0, int l0, mjtNum s1, int l1,
 // vector into the corotated frame, multiply by K_bend, and rotate back. This
 // would give implicit derivatives for free (K_bend is constant) and better
 // accuracy for elements with varying curvature.
-static void mj_flexPassiveBendInterp(const mjModel* m, mjData* d, int f,
+static mjtStatus mj_flexPassiveBendInterp(const mjModel* m, mjData* d, int f,
                                       int enbl_spring, int enbl_damper) {
+  mjtStatus status = mjSTATUS_OK;
   if (m->flex_interp[f] >= 0) {
-    return;
+    return status;
   }
 
   int bendingadr = m->flex_bendingadr[f];
   if (bendingadr < 0) {
-    return;
+    return status;
   }
 
   // read bending edge data
   const mjtNum* bdata = m->flex_bending + bendingadr;
   int nedge = (int)bdata[0];
-  if (nedge == 0) return;
+  if (nedge == 0) return status;
 
   int order = -m->flex_interp[f];  // shell_mode: interp < 0
   int cx = m->flex_cellnum[3*f+0];
@@ -263,13 +272,14 @@ static void mj_flexPassiveBendInterp(const mjModel* m, mjData* d, int f,
   int npe = (order+1)*(order+1);
   int nodenum = m->flex_nodenum[f];
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // gather global state
   mjtNum* xpos_g = mjSTACKALLOC(d, 3*nodenum, mjtNum);
   mjtNum* vel_g = mjSTACKALLOC(d, 3*nodenum, mjtNum);
   mjtNum* frc_g = mjSTACKALLOC(d, 3*nodenum, mjtNum);
   mjtNum* dmp_g = mjSTACKALLOC(d, 3*nodenum, mjtNum);
+  mjSTACKCHECK(d);
   mju_flexGatherState(m, d, f, xpos_g, vel_g);
   mju_zero(frc_g, 3*nodenum);
   mju_zero(dmp_g, 3*nodenum);
@@ -280,6 +290,7 @@ static void mj_flexPassiveBendInterp(const mjModel* m, mjData* d, int f,
   mjtNum* face_xpos = mjSTACKALLOC(d, nfaces * 3*npe, mjtNum);
   int* face_gidx = mjSTACKALLOC(d, nfaces * npe, int);
   mjtNum* face_quat = mjSTACKALLOC(d, nfaces * 4, mjtNum);
+  mjSTACKCHECK(d);
   for (int fi = 0; fi < nfaces; fi++) {
     mju_flexGatherFaceState(order, cx, cy, cz, fi, xpos_g,
                             NULL, NULL,
@@ -300,6 +311,7 @@ static void mj_flexPassiveBendInterp(const mjModel* m, mjData* d, int f,
   mjtNum* xpos_B = mjSTACKALLOC(d, 3*npe, mjtNum);
   int* gidx_A = mjSTACKALLOC(d, npe, int);
   int* gidx_B = mjSTACKALLOC(d, npe, int);
+  mjSTACKCHECK(d);
 
   mjtNum kD = m->opt.timestep > 0 ? m->flex_damping[f] / m->opt.timestep : 0;
   if (enbl_damper && kD > 0) {
@@ -446,12 +458,17 @@ static void mj_flexPassiveBendInterp(const mjModel* m, mjData* d, int f,
         mji_addTo3(d->qfrc_damper + m->body_dofadr[bid], qdmp_loc);
       }
     } else {
-      if (enbl_spring) mj_applyFT(m, d, frc_g+3*i, 0, xpos_g+3*i, bid, d->qfrc_spring);
-      if (enbl_damper) mj_applyFT(m, d, dmp_g+3*i, 0, xpos_g+3*i, bid, d->qfrc_damper);
+      if (enbl_spring) {
+        mjSTAGE_(mj_applyFT(m, d, frc_g+3*i, 0, xpos_g+3*i, bid, d->qfrc_spring), mj_freeStack(d));
+      }
+      if (enbl_damper) {
+        mjSTAGE_(mj_applyFT(m, d, dmp_g+3*i, 0, xpos_g+3*i, bid, d->qfrc_damper), mj_freeStack(d));
+      }
     }
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
@@ -548,15 +565,16 @@ static void mj_flexPassiveBend(const mjModel* m, mjData* d, int f,
 
 
 // passive forces for flex stretch
-static void mj_flexPassiveStretch(const mjModel* m, mjData* d, int f,
+static mjtStatus mj_flexPassiveStretch(const mjModel* m, mjData* d, int f,
                                   int enbl_spring, int enbl_damper) {
+  mjtStatus status = mjSTATUS_OK;
   int stiffnessadr = m->flex_stiffnessadr[f];
   if (stiffnessadr < 0) {
-    return;
+    return status;
   }
   mjtNum* k = m->flex_stiffness + stiffnessadr;
   if (k[0] == 0) {
-    return;
+    return status;
   }
 
   int dim = m->flex_dim[f];
@@ -571,8 +589,9 @@ static void mj_flexPassiveStretch(const mjModel* m, mjData* d, int f,
   int* bodyid = m->flex_vertbodyid + m->flex_vertadr[f];
   mjtNum kD = m->opt.timestep > 0 ? m->flex_damping[f] / m->opt.timestep : 0;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* qfrc = mjSTACKALLOC(d, 3*m->flex_vertnum[f], mjtNum);
+  mjSTACKCHECK(d);
   mju_zero(qfrc, 3*m->flex_vertnum[f]);
 
   // compute force element-by-element
@@ -635,7 +654,7 @@ static void mj_flexPassiveStretch(const mjModel* m, mjData* d, int f,
     int bid = bodyid[v];
     if (m->body_simple[bid] != 2) {
       // this should only occur for pinned flex vertices
-      mj_applyFT(m, d, qfrc + 3*v, 0, xpos + 3*v, bid, d->qfrc_spring);
+      mjSTAGE_(mj_applyFT(m, d, qfrc + 3*v, 0, xpos + 3*v, bid, d->qfrc_spring), mj_freeStack(d));
     } else {
       int body_dofnum = m->body_dofnum[bid];
       int body_dofadr = m->body_dofadr[bid];
@@ -648,11 +667,13 @@ static void mj_flexPassiveStretch(const mjModel* m, mjData* d, int f,
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
 // spring and damper forces
-static void mj_springdamper(const mjModel* m, mjData* d) {
+static mjtStatus mj_springdamper(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, ntendon = m->ntendon;
   int enbl_spring = !mjDISABLED(mjDSBL_SPRING);
   int enbl_damper = !mjDISABLED(mjDSBL_DAMPER);
@@ -744,16 +765,16 @@ static void mj_springdamper(const mjModel* m, mjData* d) {
 
     if (m->flex_interp[f]) {
       // interpolated flex: stretch forces
-      mj_flexPassiveInterp(m, d, f, enbl_spring, enbl_damper);
+      mjSTAGE(mj_flexPassiveInterp(m, d, f, enbl_spring, enbl_damper));
 
       // interpolated shell bending forces
-      mj_flexPassiveBendInterp(m, d, f, enbl_spring, enbl_damper);
+      mjSTAGE(mj_flexPassiveBendInterp(m, d, f, enbl_spring, enbl_damper));
     } else {
       // add bending forces
       mj_flexPassiveBend(m, d, f, enbl_spring, enbl_damper);
 
       // stretch forces
-      mj_flexPassiveStretch(m, d, f, enbl_spring, enbl_damper);
+      mjSTAGE(mj_flexPassiveStretch(m, d, f, enbl_spring, enbl_damper));
     }
   }
 
@@ -839,6 +860,7 @@ static void mj_springdamper(const mjModel* m, mjData* d) {
       }
     }
   }
+  return status;
 }
 
 
@@ -859,7 +881,9 @@ static int mj_gravcomp(const mjModel* m, mjData* d) {
     if (m->body_gravcomp[i]) {
       has_gravcomp = 1;
       mji_scl3(force, m->opt.gravity, -(m->body_mass[i]*m->body_gravcomp[i]));
-      mj_applyFT(m, d, force, torque, d->xipos+3*i, i, d->qfrc_gravcomp);
+      if (mj_applyFT(m, d, force, torque, d->xipos+3*i, i, d->qfrc_gravcomp) < 0) {
+        return -1;
+      }
     }
   }
 
@@ -893,9 +917,13 @@ static int mj_fluid(const mjModel* m, mjData* d) {
     }
 
     if (use_ellipsoid_model) {
-      mj_ellipsoidFluidModel(m, d, i);
+      if (mj_ellipsoidFluidModel(m, d, i) < 0) {
+        return -1;
+      }
     } else {
-      mj_inertiaBoxFluidModel(m, d, i);
+      if (mj_inertiaBoxFluidModel(m, d, i) < 0) {
+        return -1;
+      }
     }
   }
 
@@ -928,7 +956,7 @@ int mj_contactPassive(const mjModel* m, mjData* d) {
   }
 
   // allocate Jacobian
-  mj_markStack(d);
+  mj_markStackChecked(d);
   jac     = mjSTACKALLOC(d, 6*nv, mjtNum);
   jacdifp = mjSTACKALLOC(d, 3*nv, mjtNum);
   jac1p   = mjSTACKALLOC(d, 3*nv, mjtNum);
@@ -937,6 +965,7 @@ int mj_contactPassive(const mjModel* m, mjData* d) {
   if (issparse) {
     chain = mjSTACKALLOC(d, nv, int);
   }
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
 
   // find contacts to be included
   for (int i=0; i < ncon; i++) {
@@ -950,6 +979,10 @@ int mj_contactPassive(const mjModel* m, mjData* d) {
     con->efc_address = -1;
     NV = mj_contactJacobian(m, d, con, dim, jacdifp, NULL,
                             jac1p, jac2p, NULL, NULL, chain);
+    if (NV < 0) {
+      mj_freeStack(d);
+      return -1;
+    }
 
     // skip contact if no DOFs affected
     if (NV == 0) {
@@ -1002,7 +1035,7 @@ int mj_adhesion(const mjModel* m, mjData* d) {
   }
 
   // allocate Jacobian; contacts are normal-only (dim 1): no rotational buffers
-  mj_markStack(d);
+  mj_markStackChecked(d);
   jac    = mjSTACKALLOC(d, nv, mjtNum);
   jacdif = mjSTACKALLOC(d, 3*nv, mjtNum);
   jac1p  = mjSTACKALLOC(d, 3*nv, mjtNum);
@@ -1011,6 +1044,7 @@ int mj_adhesion(const mjModel* m, mjData* d) {
   if (issparse) {
     chain = mjSTACKALLOC(d, nv, int);
   }
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
 
   // pull adhesive contacts together along the contact normal
   for (int i=0; i < ncon; i++) {
@@ -1022,6 +1056,10 @@ int mj_adhesion(const mjModel* m, mjData* d) {
     // normal Jacobian
     NV = mj_contactJacobian(m, d, con, 1, jacdif, NULL,
                             jac1p, jac2p, NULL, NULL, chain);
+    if (NV < 0) {
+      mj_freeStack(d);
+      return -1;
+    }
     if (NV == 0) {
       continue;
     }
@@ -1044,7 +1082,8 @@ int mj_adhesion(const mjModel* m, mjData* d) {
 
 
 // all passive forces
-void mj_passive(const mjModel* m, mjData* d) {
+mjtStatus mj_passive(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
   int nv = sleep_filter ? d->nv_awake : m->nv;
   const int* dof_awake_ind = sleep_filter ? d->dof_awake_ind : NULL;
@@ -1068,11 +1107,11 @@ void mj_passive(const mjModel* m, mjData* d) {
 
   // both spring and damping disabled: skip all passive forces
   if (mjDISABLED(mjDSBL_SPRING) && mjDISABLED(mjDSBL_DAMPER)) {
-    return;
+    return mji_report(d, status);
   }
 
   // springs and dampers
-  mj_springdamper(m, d);
+  mjSTAGE(mj_springdamper(m, d));
 
   // gravity compensation
   int has_gravcomp = mj_gravcomp(m, d);
@@ -1081,10 +1120,15 @@ void mj_passive(const mjModel* m, mjData* d) {
   int has_fluid = mj_fluid(m, d);
 
   // contact forces
-  mj_contactPassive(m, d);
+  int has_contact = mj_contactPassive(m, d);
 
   // adhesion forces
   int has_adhesion = mj_adhesion(m, d);
+
+  // out of memory in any of them
+  if (has_gravcomp < 0 || has_fluid < 0 || has_contact < 0 || has_adhesion < 0) {
+    return mji_report(d, mjSTATUS_OOM);
+  }
 
   // add passive forces into qfrc_passive
   if (sleep_filter) {
@@ -1145,13 +1189,15 @@ void mj_passive(const mjModel* m, mjData* d) {
       }
     }
   }
+  return mji_report(d, status);
 }
 
 
 //---------------------------------- fluid models --------------------------------------------------
 
 // fluid forces based on inertia-box approximation
-void mj_inertiaBoxFluidModel(const mjModel* m, mjData* d, int i) {
+mjtStatus mj_inertiaBoxFluidModel(const mjModel* m, mjData* d, int i) {
+  mjtStatus status = mjSTATUS_OK;
   mjtNum lvel[6], wind[6], lwind[6], lfrc[6], bfrc[6], box[3], diam, *inertia;
   inertia = m->body_inertia + 3*i;
   box[0] = mju_sqrt(mju_max(mjMINVAL,
@@ -1206,12 +1252,14 @@ void mj_inertiaBoxFluidModel(const mjModel* m, mjData* d, int i) {
   mji_mulMatVec3(bfrc+3, d->ximat+9*i, lfrc+3);
 
   // apply force and torque to body com
-  mj_applyFT(m, d, bfrc+3, bfrc, d->xipos+3*i, i, d->qfrc_fluid);
+  mjSTAGE(mj_applyFT(m, d, bfrc+3, bfrc, d->xipos+3*i, i, d->qfrc_fluid));
+  return status;
 }
 
 
 // fluid forces based on ellipsoid approximation
-void mj_ellipsoidFluidModel(const mjModel* m, mjData* d, int bodyid) {
+mjtStatus mj_ellipsoidFluidModel(const mjModel* m, mjData* d, int bodyid) {
+  mjtStatus status = mjSTATUS_OK;
   mjtNum lvel[6], wind[6], lwind[6], lfrc[6], bfrc[6];
   mjtNum geom_interaction_coef, magnus_lift_coef, kutta_lift_coef;
   mjtNum semiaxes[3], virtual_mass[3], virtual_inertia[3];
@@ -1269,6 +1317,7 @@ void mj_ellipsoidFluidModel(const mjModel* m, mjData* d, int bodyid) {
                d->geom_xpos + 3*geomid,  // point where FT is generated
                bodyid, d->qfrc_fluid);
   }
+  return status;
 }
 
 

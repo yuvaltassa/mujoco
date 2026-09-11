@@ -548,10 +548,11 @@ the length of the array ``mjData.warning``.
 mjtStatus
 ~~~~~~~~~
 
-Status of a pipeline call (:ref:`mj_step` and related), stored in ``mjData.status``. The value 0 (``mjSTATUS_OK``)
-means the call completed without :ref:`simulation warnings<siSimWarning>`; a positive value names the first warning
-raised during the call, in the order of :ref:`mjtWarning` (``mjSTATUS_INERTIA`` is ``mjWARN_INERTIA + 1``). The
-macro :ref:`mjOK` tests the status; per-warning statistics remain in ``mjData.warning``.
+Status of a pipeline call (:ref:`mj_step` and related), stored in ``mjData.status``. The value 0 (``mjSTATUS_OK``) means
+the call completed without :ref:`simulation warnings<siSimWarning>`; a positive value names the first warning raised
+during the call, in the order of :ref:`mjtWarning` (``mjSTATUS_INERTIA`` is ``mjWARN_INERTIA + 1``); the negative value
+``mjSTATUS_OOM`` means the call ran :ref:`out of memory<siOutOfMemory>` and stopped. The macro :ref:`mjOK` tests the
+status; per-warning statistics remain in ``mjData.warning``.
 
 .. mujoco-include:: mjtStatus
 

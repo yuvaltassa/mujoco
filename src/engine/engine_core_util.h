@@ -72,7 +72,7 @@ MJAPI void mj_jacSite(const mjModel* m, const mjData* d,
                       mjtNum* jacp, mjtNum* jacr, int site);
 
 // compute translation Jacobian of point, and rotation Jacobian of axis
-MJAPI void mj_jacPointAxis(const mjModel* m, mjData* d,
+MJAPI mjtStatus mj_jacPointAxis(const mjModel* m, mjData* d,
                            mjtNum* jacPoint, mjtNum* jacAxis,
                            const mjtNum point[3], const mjtNum axis[3], int body);
 
@@ -162,9 +162,13 @@ MJAPI mjtNum mj_actuatorArmature(const mjModel* m, mjtObj type, int id);
 // status of the warning, for the caller to compose into its own
 MJAPI mjNODISCARD mjtStatus mj_warning(mjData* d, int warning, int info);
 
-// compose a status with the one a call reported: a call keeps the first warning it ran into
+// compose a status with the one a call reported: a call keeps the first warning it ran into,
+// and an error (negative) over any warning
 static inline mjtStatus mji_join(mjtStatus status, mjtStatus reported) {
-  return status ? status : reported;
+  if (status < 0) {
+    return status;
+  }
+  return reported < 0 || !status ? reported : status;
 }
 
 // record the status of a pipeline call in the data it ran on, and return it. The mirror serves
@@ -187,9 +191,9 @@ static inline mjtStatus mji_report(mjData* d, mjtStatus status) {
   }
 #define mjSTAGE(call) mjSTAGE_(call, (void)0)
 
-// nonzero status under the stop policy: the pipeline call should unwind
+// the pipeline call should unwind: an error, or a warning under the stop policy
 static inline int mji_stop(const mjModel* m, mjtStatus status) {
-  return status && m->opt.onwarn == mjONWARN_STOP;
+  return status < 0 || (status && m->opt.onwarn == mjONWARN_STOP);
 }
 
 

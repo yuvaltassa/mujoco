@@ -749,7 +749,7 @@ int mju_sqrMatTDSparseSymbolic(
     int* restrict res_colind, int* restrict res_diagind, int nr, int nc,
     const int* rownnz, const int* rowadr, const int* colind,
     const int* rownnzT, const int* rowadrT, const int* colindT, const int* rowsuperT, mjData* d) {
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // reinterpret M^T as CSC
   const int* colnnz = rownnzT;
@@ -764,13 +764,16 @@ int mju_sqrMatTDSparseSymbolic(
 
   // marker[j] = 1 if row j has been visited in current column batch
   int* marker = mjSTACKALLOC(d, nc, int);
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
   mju_zeroInt(marker, nc);
 
   // buffer_idx: list of row indices with nonzeros in current column batch
   int* buffer_idx = mjSTACKALLOC(d, nc, int);
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
 
   // rowstart[r]: first index in row r of M where column > current result column
   int* rowstart = mjSTACKALLOC(d, nr, int);
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
   mju_zeroInt(rowstart, nr);
 
   // clear res_rownnz (used for both counting and filling)
@@ -879,6 +882,7 @@ int mju_sqrMatTDSparseSymbolic(
   if (res_colind && res_diagind) {
     // save current counts (lower + diagonal)
     int* lower_nnz = mjSTACKALLOC(d, nc, int);
+    mjSTACKCHECK_(d, mj_freeStack(d), -1);
     mju_copyInt(lower_nnz, res_rownnz, nc);
 
     // save diagonal indices
@@ -907,16 +911,18 @@ int mju_sqrMatTDSparseSymbolic(
 
 // numeric phase for sparse matrix squaring: compute values given pre-computed sparsity
 //   diagind can be NULL, otherwise fills upper triangle and saves diagonal indices
-void mju_sqrMatTDSparseNumeric(
+mjtStatus mju_sqrMatTDSparseNumeric(
     mjtNum* restrict res, int nc,
     const int* res_rownnz, const int* res_rowadr, const int* res_colind, const int* res_diagind,
     const mjtNum* mat, const int* rownnz, const int* rowadr, const int* colind,
     const mjtNum* matT, const int* rownnzT, const int* rowadrT, const int* colindT,
     const int* rowsuperT, const mjtNum* diag, mjData* d) {
-  mj_markStack(d);
+  mjtStatus status = mjSTATUS_OK;
+  mj_markStackChecked(d);
 
   // dense accumulator for current result row (or batch of rows)
   mjtNum* restrict buffer = mjSTACKALLOC(d, nc * mjMAXSUPER, mjtNum);
+  mjSTACKCHECK(d);
   mju_zero(buffer, nc * mjMAXSUPER);
 
   // process result rows
@@ -1027,6 +1033,7 @@ void mju_sqrMatTDSparseNumeric(
   if (res_diagind) {
     // initialize write positions after diagonal
     int* upper_pos = mjSTACKALLOC(d, nc, int);
+    mjSTACKCHECK(d);
     for (int r = 0; r < nc; r++) {
       upper_pos[r] = res_diagind[r] + 1;
     }
@@ -1045,6 +1052,7 @@ void mju_sqrMatTDSparseNumeric(
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 

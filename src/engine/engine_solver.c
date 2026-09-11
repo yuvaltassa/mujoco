@@ -457,14 +457,16 @@ mjTHREADLOCAL int mj_nesterov_momentum = 1;
 //   island: island index for stats (use -1 for monolithic, mapped to 0)
 //   ne, nf, nefc: constraint type counts
 //   efclist: maps list position c to monolithic efc index (NULL for sequential)
-static void solPGS(const mjModel* m, mjData* d, int island,
+static mjtStatus solPGS(const mjModel* m, mjData* d, int island,
                    int ne, int nf, int nefc,
                    const int* efclist, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
   const mjtNum *floss = d->efc_frictionloss;
   mjtNum *force = d->efc_force;
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* ARinv = mjSTACKALLOC(d, nefc, mjtNum);
   int* oldstate = mjSTACKALLOC(d, 2*nefc, int);
+  mjSTACKCHECK(d);
   int* blockstart = oldstate + nefc;
 
   // Nesterov momentum
@@ -474,6 +476,7 @@ static void solPGS(const mjModel* m, mjData* d, int island,
   if (nesterov) {
     force_prev = mjSTACKALLOC(d, nefc, mjtNum);
     force_momentum = mjSTACKALLOC(d, nefc, mjtNum);
+    mjSTACKCHECK(d);
     mju_gather(force_prev, force, efclist, nefc);
   }
 
@@ -741,23 +744,28 @@ static void solPGS(const mjModel* m, mjData* d, int island,
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
 // PGS entry point (monolithic, no dualFinish — caller handles it)
-void mj_solPGS(const mjModel* m, mjData* d, int maxiter) {
-  solPGS(m, d, /*island=*/-1, d->ne, d->nf, d->nefc, /*efclist=*/NULL, maxiter);
+mjtStatus mj_solPGS(const mjModel* m, mjData* d, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
+  mjSTAGE(solPGS(m, d, /*island=*/-1, d->ne, d->nf, d->nefc, /*efclist=*/NULL, maxiter));
+  return status;
 }
 
 
 // PGS entry point (one island)
-void mj_solPGS_island(const mjModel* m, mjData* d, int island, int maxiter) {
+mjtStatus mj_solPGS_island(const mjModel* m, mjData* d, int island, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
   int ne = d->island_ne[island];
   int nf = d->island_nf[island];
   int nefc = d->island_nefc[island];
   int iefcadr = d->island_iefcadr[island];
 
-  solPGS(m, d, island, ne, nf, nefc, d->map_iefc2efc + iefcadr, maxiter);
+  mjSTAGE(solPGS(m, d, island, ne, nf, nefc, d->map_iefc2efc + iefcadr, maxiter));
+  return status;
 }
 
 
@@ -767,18 +775,20 @@ void mj_solPGS_island(const mjModel* m, mjData* d, int island, int maxiter) {
 //   island: island index for stats (use -1 for monolithic, mapped to 0)
 //   ne, nf, nefc: constraint type counts
 //   efclist: maps list position c to monolithic efc index (NULL for sequential)
-static void solNoSlip(const mjModel* m, mjData* d, int island,
+static mjtStatus solNoSlip(const mjModel* m, mjData* d, int island,
                       int ne, int nf, int nefc,
                       const int* efclist, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
   int dim, iter = 0;
   const mjtNum *floss = d->efc_frictionloss;
   mjtNum *force = d->efc_force;
   mjtNum *mu, improvement;
   mjtNum Ac[25], bc[5], res[5], oldforce[5], delta[5], mid, y, K0, K1;
   mjContact* con;
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* ARinv = mjSTACKALLOC(d, nefc, mjtNum);
   int* oldstate = mjSTACKALLOC(d, nefc, int);
+  mjSTACKCHECK(d);
 
   int island_stat = mjMAX(0, island);
   mjtNum scale = 1 / (m->stat.meaninertia * mjMAX(1, m->nv));
@@ -956,23 +966,28 @@ static void solNoSlip(const mjModel* m, mjData* d, int island,
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
 // NoSlip entry point (monolithic, no dualFinish — caller handles it)
-void mj_solNoSlip(const mjModel* m, mjData* d, int maxiter) {
-  solNoSlip(m, d, /*island=*/-1, d->ne, d->nf, d->nefc, /*efclist=*/NULL, maxiter);
+mjtStatus mj_solNoSlip(const mjModel* m, mjData* d, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
+  mjSTAGE(solNoSlip(m, d, /*island=*/-1, d->ne, d->nf, d->nefc, /*efclist=*/NULL, maxiter));
+  return status;
 }
 
 
 // NoSlip entry point (one island)
-void mj_solNoSlip_island(const mjModel* m, mjData* d, int island, int maxiter) {
+mjtStatus mj_solNoSlip_island(const mjModel* m, mjData* d, int island, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
   int ne = d->island_ne[island];
   int nf = d->island_nf[island];
   int nefc = d->island_nefc[island];
   int iefcadr = d->island_iefcadr[island];
 
-  solNoSlip(m, d, island, ne, nf, nefc, d->map_iefc2efc + iefcadr, maxiter);
+  mjSTAGE(solNoSlip(m, d, island, ne, nf, nefc, d->map_iefc2efc + iefcadr, maxiter));
+  return status;
 }
 
 
@@ -1204,7 +1219,8 @@ static void PrimalPointers(const mjModel* m, const mjData* d, mjPrimalContext* c
 
 // allocate fixed-size arrays in mjPrimalContext
 //  mj_{mark/free}Stack in calling function!
-static void PrimalAllocate(const mjModel* m, mjData* d, mjPrimalContext* ctx, int flg_Newton) {
+static mjtStatus PrimalAllocate(const mjModel* m, mjData* d, mjPrimalContext* ctx, int flg_Newton) {
+  mjtStatus status = mjSTATUS_OK;
   // local sizes and flags
   int nv = ctx->nv;
   int nefc = ctx->nefc;
@@ -1286,6 +1302,7 @@ static void PrimalAllocate(const mjModel* m, mjData* d, mjPrimalContext* ctx, in
     if (pass) {
       numblock = mjSTACKALLOC(d, nNum, mjtNum);
       intblock = mjSTACKALLOC(d, nInt, int);
+      mjSTACKCHECK_(d, (void)0, mjSTATUS_OOM);
     }
 
     // island matrices
@@ -1450,6 +1467,7 @@ static void PrimalAllocate(const mjModel* m, mjData* d, mjPrimalContext* ctx, in
     }
     ctx->qfrc_smooth = qfrc_eff;
   }
+  return status;
 }
 
 
@@ -1500,7 +1518,10 @@ static void PrimalUpdateGrad(mjPrimalContext* ctx) {
 
 
 // update Mgrad;  Newton: Mgrad = H \ grad,  CG: Mgrad = M \ grad
-static void PrimalUpdateMgrad(mjPrimalContext* ctx, int flg_Newton) {
+static mjtStatus PrimalUpdateMgrad(mjPrimalContext* ctx, int flg_Newton) {
+  mjtStatus status = mjSTATUS_OK;
+  const mjModel* m = ctx->fm;
+  mjData* d = ctx->fd;
   int nv = ctx->nv;
 
   // Newton: Mgrad = H \ grad
@@ -1515,7 +1536,7 @@ static void PrimalUpdateMgrad(mjPrimalContext* ctx, int flg_Newton) {
 
   // CG monolithic: Mgrad = Mtilde \ grad (approximate metric preconditioner)
   else if (ctx->flg_metric && ctx->island < 0) {
-    mjd_effPrec(ctx->fm, ctx->fd, ctx->Mgrad, ctx->grad);
+    mjSTAGE(mjd_effPrec(ctx->fm, ctx->fd, ctx->Mgrad, ctx->grad));
   }
 
   // CG: Mgrad = M \ grad. For metric island contexts the gathered factor already holds
@@ -1525,13 +1546,18 @@ static void PrimalUpdateMgrad(mjPrimalContext* ctx, int flg_Newton) {
     mj_solveLD(ctx->Mgrad, ctx->qLD, ctx->qLDiagInv, nv, 1,
                ctx->M_rownnz, ctx->M_rowadr, ctx->M_colind, NULL);
   }
+  return status;
 }
 
 
 // update grad, Mgrad
-static void PrimalUpdateGradient(mjPrimalContext* ctx, int flg_Newton) {
+static mjtStatus PrimalUpdateGradient(mjPrimalContext* ctx, int flg_Newton) {
+  mjtStatus status = mjSTATUS_OK;
+  const mjModel* m = ctx->fm;
+  mjData* d = ctx->fd;
   PrimalUpdateGrad(ctx);
-  PrimalUpdateMgrad(ctx, flg_Newton);
+  mjSTAGE(PrimalUpdateMgrad(ctx, flg_Newton));
+  return status;
 }
 
 
@@ -1942,7 +1968,7 @@ static int updateBracket(mjPrimalContext* ctx,
 
 // line search
 static mjtNum PrimalSearch(mjPrimalContext* ctx, mjtNum tolerance, mjtNum ls_iterations,
-                           mjtNum* improvement) {
+                           mjtNum* improvement, mjtStatus* status) {
   int nv = ctx->nv, nefc = ctx->nefc;
   mjPrimalPnt p0, p1, p2, pmid, p1next, p2next;
 
@@ -1968,7 +1994,11 @@ static mjtNum PrimalSearch(mjPrimalContext* ctx, mjtNum tolerance, mjtNum ls_ite
                       ctx->M_rownnz, ctx->M_rowadr, ctx->M_colind);
   if (ctx->flg_metric) {
     if (ctx->island < 0) {
-      mjd_effMulAdd(ctx->fm, ctx->fd, ctx->Mv, ctx->search, /*flg_contact=*/1);
+      *status = mji_join(*status, mjd_effMulAdd(ctx->fm, ctx->fd, ctx->Mv, ctx->search,
+                                                /*flg_contact=*/1));
+      if (mji_stop(ctx->fm, *status)) {
+        return 0;
+      }
     } else {
       mjd_effMulAddIsland(ctx->fm, ctx->fd, ctx->Mv, ctx->search, ctx->island);
     }
@@ -2151,7 +2181,8 @@ static mjtNum PrimalSearch(mjPrimalContext* ctx, mjtNum tolerance, mjtNum ls_ite
 // entry, and produces sorted unique columns per row. For island contexts rows and columns
 // are island-local (the maps are monotone, so mapped columns stay sorted); the flex CSR
 // never appears there (flex with metric terms forces a monolithic solve)
-static void MakeMetricLower(mjData* d, mjPrimalContext* ctx) {
+static mjtStatus MakeMetricLower(mjData* d, mjPrimalContext* ctx) {
+  mjtStatus status = mjSTATUS_OK;
   const mjModel* m = ctx->fm;
   int nv = ctx->nv, island = ctx->island;
   int idofadr = island >= 0 ? d->island_idofadr[island] : 0;
@@ -2161,14 +2192,16 @@ static void MakeMetricLower(mjData* d, mjPrimalContext* ctx) {
   // and lives for the whole solve: FactorizeHessian re-merges it on active-set recomputes.
   // Scratch below is freed before returning
   int tcap = ctx->S_tcap;
+  mjSTACKCHECK_(d, (void)0, mjSTATUS_OOM);
   mjEffRank1Iter it = {0};
   mjEffRank1 e;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // bucket the rank-1 entries by (local) row: count, carve, fill
   int* tint = mjSTACKALLOC(d, 2*nv + (tcap > 0 ? tcap : 1), int);
   mjtNum* tval = mjSTACKALLOC(d, tcap > 0 ? tcap : 1, mjtNum);
+  mjSTACKCHECK(d);
   int* trownnz = tint;
   int* trowadr = tint + nv;
   int* tcol = tint + 2*nv;
@@ -2304,12 +2337,15 @@ static void MakeMetricLower(mjData* d, mjPrimalContext* ctx) {
   ctx->nS = adr;
 
   mj_freeStack(d);
+  return status;
 }
 
 
 // allocate and compute Hessian given efc_state
 //  mj_{mark/free}Stack in caller function!
-static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
+static mjtStatus MakeHessian(mjData* d, mjPrimalContext* ctx) {
+  mjtStatus status = mjSTATUS_OK;
+  const mjModel* m = ctx->fm;
   int nv = ctx->nv, nefc = ctx->nefc;
 
   // compute constraint inertia
@@ -2320,7 +2356,7 @@ static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
   // discrete metric: build the lower-triangle view of S for merging into H
   ctx->nS = 0;
   if (ctx->flg_metric) {
-    MakeMetricLower(d, ctx);
+    mjSTAGE(MakeMetricLower(d, ctx));
   }
 
   // sparse
@@ -2330,6 +2366,9 @@ static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
         ctx->H_rownnz, ctx->H_rowadr, NULL, NULL,
         nefc, nv, ctx->J_rownnz, ctx->J_rowadr, ctx->J_colind,
         ctx->JT_rownnz, ctx->JT_rowadr, ctx->JT_colind, ctx->JT_rowsuper, d);
+    if (ctx->nH < 0) {
+      return mjSTATUS_OOM;
+    }
 
     // add M nonzeros to Hessian total (unavoidable overcounting since H_colind is still unknown)
     ctx->nH += ctx->M_rowadr[nv - 1] + ctx->M_rownnz[nv - 1];
@@ -2340,6 +2379,7 @@ static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
     // nH is known: allocate H, H_colind, HT_colind
     ctx->H          = mjSTACKALLOC(d, ctx->nH, mjtNum);
     int* H_intblock = mjSTACKALLOC(d, 2*ctx->nH, int);
+    mjSTACKCHECK_(d, (void)0, mjSTATUS_OOM);
     ctx->H_colind   = H_intblock;
     ctx->HT_colind  = H_intblock + ctx->nH;
 
@@ -2351,10 +2391,12 @@ static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
     }
 
     // compute H = J'*D*J: symbolic phase
-    mju_sqrMatTDSparseSymbolic(
+    if (mju_sqrMatTDSparseSymbolic(
         ctx->H_rownnz, ctx->H_rowadr, ctx->H_colind, NULL,
         nefc, nv, ctx->J_rownnz, ctx->J_rowadr, ctx->J_colind,
-        ctx->JT_rownnz, ctx->JT_rowadr, ctx->JT_colind, ctx->JT_rowsuper, d);
+        ctx->JT_rownnz, ctx->JT_rowadr, ctx->JT_colind, ctx->JT_rowsuper, d) < 0) {
+      return mjSTATUS_OOM;
+    }
 
     // compute H = J'*D*J: numeric phase
     mju_sqrMatTDSparseNumeric(
@@ -2382,12 +2424,16 @@ static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
                                      ctx->LT_rownnz, ctx->LT_rowadr, NULL,
                                      ctx->HT_rownnz, ctx->HT_rowadr, ctx->HT_colind,
                                      nv, d);
+    if (ctx->nL < 0) {
+      return mjSTATUS_OOM;
+    }
 
     // nL is known: allocate blocks and carve L_colind, LT_colind, LT_map, L, Lcone
     size_t nL_int = 3*ctx->nL + (ctx->is_elliptic ? nv : 0);  // L_colind + LT_colind + LT_map + pathcost
     size_t nL_num = ctx->is_elliptic ? 2*ctx->nL : ctx->nL;   // L + Lcone
     int* L_intblock    = mjSTACKALLOC(d, nL_int, int);
     mjtNum* L_numblock = mjSTACKALLOC(d, nL_num, mjtNum);
+    mjSTACKCHECK_(d, (void)0, mjSTATUS_OOM);
     ctx->L_colind      = L_intblock;
     ctx->LT_colind     = L_intblock + ctx->nL;
     ctx->LT_map        = L_intblock + 2*ctx->nL;
@@ -2396,10 +2442,12 @@ static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
     ctx->Lcone         = ctx->is_elliptic ? L_numblock + ctx->nL : NULL;
 
     // symbolic Cholesky: populate L_colind and LT structures
-    mju_cholFactorSymbolic(ctx->L_colind, ctx->L_rownnz, ctx->L_rowadr,
+    if (mju_cholFactorSymbolic(ctx->L_colind, ctx->L_rownnz, ctx->L_rowadr,
                            ctx->LT_colind, ctx->LT_rownnz, ctx->LT_rowadr, ctx->LT_map,
                            ctx->HT_rownnz, ctx->HT_rowadr, ctx->HT_colind,
-                           nv, d);
+                           nv, d) < 0) {
+      return mjSTATUS_OOM;
+    }
 
     // cone fold gate inputs, fixed for the solve since the L pattern is fixed:
     // pathcost[r] totals the L row nonzeros along the reverse-etree path from
@@ -2431,14 +2479,17 @@ static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
                          /*flg_upper=*/ 0);
     }
   }
+  return status;
 }
 
 
 // forward declaration of HessianCone (for readability)
-static void HessianCone(mjData* d, mjPrimalContext* ctx);
+static mjtStatus HessianCone(mjData* d, mjPrimalContext* ctx);
 
 // factorize Hessian: L = chol(H), maybe (re)compute H given efc_state
-static void FactorizeHessian(mjData* d, mjPrimalContext* ctx, int flg_recompute) {
+static mjtStatus FactorizeHessian(mjData* d, mjPrimalContext* ctx, int flg_recompute) {
+  mjtStatus status = mjSTATUS_OK;
+  const mjModel* m = ctx->fm;
   int nv = ctx->nv, nefc = ctx->nefc;
 
   // maybe compute constraint inertia
@@ -2453,10 +2504,12 @@ static void FactorizeHessian(mjData* d, mjPrimalContext* ctx, int flg_recompute)
     // maybe compute H = M + J'*D*J
     if (flg_recompute) {
       // compute H = J'*D*J: symbolic phase
-      mju_sqrMatTDSparseSymbolic(
+      if (mju_sqrMatTDSparseSymbolic(
           ctx->H_rownnz, ctx->H_rowadr, ctx->H_colind, NULL,
           nefc, nv, ctx->J_rownnz, ctx->J_rowadr, ctx->J_colind,
-          ctx->JT_rownnz, ctx->JT_rowadr, ctx->JT_colind, ctx->JT_rowsuper, d);
+          ctx->JT_rownnz, ctx->JT_rowadr, ctx->JT_colind, ctx->JT_rowsuper, d) < 0) {
+        return mjSTATUS_OOM;
+      }
 
       // compute H = J'*D*J: numeric phase
       mju_sqrMatTDSparseNumeric(
@@ -2511,16 +2564,18 @@ static void FactorizeHessian(mjData* d, mjPrimalContext* ctx, int flg_recompute)
   // add cones to factor if present
   if (ctx->ncone) {
     ctx->cone_fold = -1;
-    HessianCone(d, ctx);
+    mjSTAGE(HessianCone(d, ctx));
   }
 
   // mark full update
   ctx->nupdate = nefc;
+  return status;
 }
 
 
 // elliptic sparse case with many cones: rebuild Lcone with one factorization.
-static void HessianConeFolded(mjData* d, mjPrimalContext* ctx) {
+static mjtStatus HessianConeFolded(mjData* d, mjPrimalContext* ctx) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = ctx->nv, nefc = ctx->nefc;
   mjtNum local[36];
 
@@ -2533,6 +2588,7 @@ static void HessianConeFolded(mjData* d, mjPrimalContext* ctx) {
     ctx->JTmod_rownnz = mjSTACKALLOC(d, nv, int);
     ctx->JTmod_rowadr = mjSTACKALLOC(d, nv, int);
     ctx->JTmod_colind = mjSTACKALLOC(d, ctx->nJ, int);
+    mjSTACKCHECK_(d, (void)0, mjSTATUS_OOM);
   }
   mjtNum* Jmod   = ctx->Jmod;
   mjtNum* JTmod  = ctx->JTmod;
@@ -2588,6 +2644,7 @@ static void HessianConeFolded(mjData* d, mjPrimalContext* ctx) {
                             ctx->cholscratch) != nv) {
     mjERROR("rank-deficient cone Hessian");
   }
+  return status;
 }
 
 
@@ -2685,7 +2742,9 @@ static int HessianConeFoldFaster(const mjPrimalContext* ctx) {
 
 
 // elliptic case: Hcone = H + cone_contributions
-static void HessianCone(mjData* d, mjPrimalContext* ctx) {
+static mjtStatus HessianCone(mjData* d, mjPrimalContext* ctx) {
+  mjtStatus status = mjSTATUS_OK;
+  const mjModel* m = ctx->fm;
   // sparse mode with many sliding contacts: one refactorization can beat
   // sum(dim) rank-1 updates per cone contact. The decision depends only on
   // sparsity patterns and efc_state, so it is cached until a state change.
@@ -2694,17 +2753,21 @@ static void HessianCone(mjData* d, mjPrimalContext* ctx) {
       ctx->cone_fold = HessianConeFoldFaster(ctx);
     }
     if (ctx->cone_fold) {
-      HessianConeFolded(d, ctx);
-      return;
+      mjSTAGE(HessianConeFolded(d, ctx));
+      mjSTACKCHECK_(d, (void)0, mjSTATUS_OOM);
+      return status;
     }
   }
 
   HessianConeUpdate(d, ctx);
+  return status;
 }
 
 
 // incremental update to Hessian factor due to changes in efc_state
-static void HessianIncremental(mjData* d, mjPrimalContext* ctx, const int* oldstate) {
+static mjtStatus HessianIncremental(mjData* d, mjPrimalContext* ctx, const int* oldstate) {
+  mjtStatus status = mjSTATUS_OK;
+  const mjModel* m = ctx->fm;
   int rank, nv = ctx->nv, nefc = ctx->nefc;
   mjtNum* cholupd = ctx->cholupd;
 
@@ -2752,31 +2815,34 @@ static void HessianIncremental(mjData* d, mjPrimalContext* ctx, const int* oldst
 
       // recompute H directly if accuracy lost
       if (rank < nv) {
-        FactorizeHessian(d, ctx, /*flg_recompute=*/1);
+        mjSTAGE(FactorizeHessian(d, ctx, /*flg_recompute=*/1));
 
         // nothing else to do
-        return;
+        return status;
       }
     }
   }
 
   // add cones if present
   if (ctx->ncone) {
-    HessianCone(d, ctx);
+    mjSTAGE(HessianCone(d, ctx));
   }
+  return status;
 }
 
 
 // driver
-static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, int flg_Newton) {
+static mjtStatus mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, int flg_Newton) {
+  mjtStatus status = mjSTATUS_OK;
   int iter = 0;
   mjtNum alpha, beta;
   mjPrimalContext ctx;
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // make context
   PrimalPointers(m, d, &ctx, island);
-  PrimalAllocate(m, d, &ctx, flg_Newton);
+  mjSTAGE_(PrimalAllocate(m, d, &ctx, flg_Newton), mj_freeStack(d));
+  mjSTACKCHECK(d);
 
   // local copies
   int nv   = ctx.nv;
@@ -2788,7 +2854,7 @@ static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, i
                       ctx.M_rownnz, ctx.M_rowadr, ctx.M_colind);
   if (ctx.flg_metric) {
     if (ctx.island < 0) {
-      mjd_effMulAdd(m, d, ctx.Ma, ctx.qacc, /*flg_contact=*/1);
+      mjSTAGE_(mjd_effMulAdd(m, d, ctx.Ma, ctx.qacc, /*flg_contact=*/1), mj_freeStack(d));
     } else {
       mjd_effMulAddIsland(m, d, ctx.Ma, ctx.qacc, ctx.island);
     }
@@ -2823,7 +2889,7 @@ static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, i
   ctx.scale = scale;
 
   // Mgrad = M \ grad: the CG preconditioned gradient, also the convergence certificate
-  PrimalUpdateMgrad(&ctx, /*flg_Newton=*/0);
+  mjSTAGE_(PrimalUpdateMgrad(&ctx, /*flg_Newton=*/0), mj_freeStack(d));
 
   // convergence certificate: the cost is strongly convex in the M-norm, bounding the
   // suboptimality by the duality gap at the current constraint forces:
@@ -2841,9 +2907,10 @@ static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, i
 
   // Newton: compute and factorize Hessian, Mgrad = H \ grad
   if (!flg_done && flg_Newton) {
-    MakeHessian(d, &ctx);
-    FactorizeHessian(d, &ctx, /*flg_recompute=*/0);
-    PrimalUpdateMgrad(&ctx, /*flg_Newton=*/1);
+    mjSTAGE_(MakeHessian(d, &ctx), mj_freeStack(d));
+    mjSTACKCHECK(d);
+    mjSTAGE_(FactorizeHessian(d, &ctx, /*flg_recompute=*/0), mj_freeStack(d));
+    mjSTAGE_(PrimalUpdateMgrad(&ctx, /*flg_Newton=*/1), mj_freeStack(d));
 
     // Newton decrement already below tolerance: converged, skip the first line search
     // (gradient-gated like the certificate: H^-1 suppresses stiff-direction force errors)
@@ -2861,7 +2928,11 @@ static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, i
     // perform linesearch
     mjtNum ls_improvement;
     alpha = PrimalSearch(&ctx, m->opt.tolerance * m->opt.ls_tolerance, m->opt.ls_iterations,
-                         &ls_improvement);
+                         &ls_improvement, &status);
+    if (mji_stop(m, status)) {
+      mj_freeStack(d);
+      return status;
+    }
 
     // no improvement: done
     if (alpha == 0) {
@@ -2883,9 +2954,9 @@ static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, i
     // update
     PrimalUpdateConstraint(&ctx, flg_Newton & (m->opt.cone == mjCONE_ELLIPTIC));
     if (flg_Newton) {
-      HessianIncremental(d, &ctx, oldstate);
+      mjSTAGE_(HessianIncremental(d, &ctx, oldstate), mj_freeStack(d));
     }
-    PrimalUpdateGradient(&ctx, flg_Newton);
+    mjSTAGE_(PrimalUpdateGradient(&ctx, flg_Newton), mj_freeStack(d));
 
     // count state changes
     int nchange = 0;
@@ -2991,28 +3062,37 @@ static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, i
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
 // CG entry point
-void mj_solCG(const mjModel* m, mjData* d, int maxiter) {
-  mj_solPrimal(m, d, /*island=*/-1, maxiter, /*flg_Newton=*/0);
+mjtStatus mj_solCG(const mjModel* m, mjData* d, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
+  mjSTAGE(mj_solPrimal(m, d, /*island=*/-1, maxiter, /*flg_Newton=*/0));
+  return status;
 }
 
 
 // CG entry point (one island)
-void mj_solCG_island(const mjModel* m, mjData* d, int island, int maxiter) {
-  mj_solPrimal(m, d, island, maxiter, /*flg_Newton=*/0);
+mjtStatus mj_solCG_island(const mjModel* m, mjData* d, int island, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
+  mjSTAGE(mj_solPrimal(m, d, island, maxiter, /*flg_Newton=*/0));
+  return status;
 }
 
 
 // Newton entry point
-void mj_solNewton(const mjModel* m, mjData* d, int maxiter) {
-  mj_solPrimal(m, d, /*island=*/-1, maxiter, /*flg_Newton=*/1);
+mjtStatus mj_solNewton(const mjModel* m, mjData* d, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
+  mjSTAGE(mj_solPrimal(m, d, /*island=*/-1, maxiter, /*flg_Newton=*/1));
+  return status;
 }
 
 
 // Newton entry point (one island)
-void mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter) {
-  mj_solPrimal(m, d, island, maxiter, /*flg_Newton=*/1);
+mjtStatus mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter) {
+  mjtStatus status = mjSTATUS_OK;
+  mjSTAGE(mj_solPrimal(m, d, island, maxiter, /*flg_Newton=*/1));
+  return status;
 }

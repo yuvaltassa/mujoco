@@ -358,13 +358,13 @@ MJAPI void mj_printFormattedScene(const mjvScene* s, const char* filename,
 //---------------------------------- Components ----------------------------------------------------
 
 // Run all kinematics-like computations (kinematics, comPos, camlight, flex, tendon).
-MJAPI void mj_fwdKinematics(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdKinematics(const mjModel* m, mjData* d);
 
 // Run position-dependent computations.
 MJAPI mjtStatus mj_fwdPosition(const mjModel* m, mjData* d);
 
 // Run velocity-dependent computations.
-MJAPI void mj_fwdVelocity(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdVelocity(const mjModel* m, mjData* d);
 
 // Compute actuator force qfrc_actuator.
 MJAPI mjtStatus mj_fwdActuation(const mjModel* m, mjData* d);
@@ -388,10 +388,10 @@ MJAPI mjtStatus mj_implicit(const mjModel* m, mjData* d);
 MJAPI mjtStatus mj_invPosition(const mjModel* m, mjData* d);
 
 // Run velocity-dependent computations in inverse dynamics.
-MJAPI void mj_invVelocity(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_invVelocity(const mjModel* m, mjData* d);
 
 // Apply the analytical formula for inverse constraint dynamics.
-MJAPI void mj_invConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_invConstraint(const mjModel* m, mjData* d);
 
 // Compare forward and inverse dynamics, save results in fwdinv.
 MJAPI mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d);
@@ -400,19 +400,19 @@ MJAPI mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d);
 //---------------------------------- Sub components ------------------------------------------------
 
 // Evaluate position-dependent sensors.
-MJAPI void mj_sensorPos(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_sensorPos(const mjModel* m, mjData* d);
 
 // Evaluate velocity-dependent sensors.
-MJAPI void mj_sensorVel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_sensorVel(const mjModel* m, mjData* d);
 
 // Evaluate acceleration and force-dependent sensors.
-MJAPI void mj_sensorAcc(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_sensorAcc(const mjModel* m, mjData* d);
 
 // Evaluate position-dependent energy (potential).
 MJAPI void mj_energyPos(const mjModel* m, mjData* d);
 
 // Evaluate velocity-dependent energy (kinetic).
-MJAPI void mj_energyVel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_energyVel(const mjModel* m, mjData* d);
 
 // Check qpos, reset if any element is too big or nan.
 MJAPI mjtStatus mj_checkPos(const mjModel* m, mjData* d);
@@ -433,13 +433,13 @@ MJAPI void mj_comPos(const mjModel* m, mjData* d);
 MJAPI void mj_camlight(const mjModel* m, mjData* d);
 
 // Compute flex-related quantities.
-MJAPI void mj_flex(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_flex(const mjModel* m, mjData* d);
 
 // Compute tendon lengths, velocities and moment arms.
-MJAPI void mj_tendon(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_tendon(const mjModel* m, mjData* d);
 
 // Compute actuator transmission lengths and moments.
-MJAPI void mj_transmission(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_transmission(const mjModel* m, mjData* d);
 
 // Run composite rigid body inertia algorithm (CRB).
 MJAPI void mj_crb(const mjModel* m, mjData* d);
@@ -461,13 +461,13 @@ MJAPI void mj_solveM2(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y,
 MJAPI void mj_comVel(const mjModel* m, mjData* d);
 
 // Compute qfrc_passive from spring-dampers, gravity compensation and fluid forces.
-MJAPI void mj_passive(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_passive(const mjModel* m, mjData* d);
 
 // Sub-tree linear velocity and angular momentum: compute subtree_linvel, subtree_angmom.
-MJAPI void mj_subtreeVel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_subtreeVel(const mjModel* m, mjData* d);
 
 // RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=0 removes inertial term.
-MJAPI void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result);
+MJAPI mjtStatus mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result);
 
 // RNE with complete data: compute cacc, cfrc_ext, cfrc_int.
 MJAPI void mj_rnePostConstraint(const mjModel* m, mjData* d);
@@ -490,7 +490,7 @@ MJAPI mjtStatus mj_island(const mjModel* m, mjData* d);
 MJAPI mjtStatus mj_projectConstraint(const mjModel* m, mjData* d);
 
 // Compute efc_vel, efc_aref.
-MJAPI void mj_referenceConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_referenceConstraint(const mjModel* m, mjData* d);
 
 // Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
 // If cost is not NULL, set *cost = s(jar) where jar = Jac*qacc-aref.
@@ -587,7 +587,7 @@ MJAPI void mj_jacSite(const mjModel* m, const mjData* d, mjtNum* jacp, mjtNum* j
 
 // Compute translation end-effector Jacobian of point, and rotation Jacobian of axis.
 // Nullable: jacPoint, jacAxis
-MJAPI void mj_jacPointAxis(const mjModel* m, mjData* d, mjtNum* jacPoint, mjtNum* jacAxis,
+MJAPI mjtStatus mj_jacPointAxis(const mjModel* m, mjData* d, mjtNum* jacPoint, mjtNum* jacAxis,
                            const mjtNum point[3], const mjtNum axis[3], int body);
 
 // Compute 3/6-by-nv Jacobian time derivative of global point attached to given body.
@@ -624,7 +624,7 @@ MJAPI void mj_addM(const mjModel* m, mjData* d, mjtNum* dst, int* rownnz, int* r
 
 // Apply Cartesian force and torque (outside xfrc_applied mechanism).
 // Nullable: force, torque
-MJAPI void mj_applyFT(const mjModel* m, mjData* d, const mjtNum force[3], const mjtNum torque[3],
+MJAPI mjtStatus mj_applyFT(const mjModel* m, mjData* d, const mjtNum force[3], const mjtNum torque[3],
                       const mjtNum point[3], int body, mjtNum* qfrc_target);
 
 // Compute object 6D velocity (rot:lin) in object-centered frame, world/local orientation.
@@ -699,7 +699,7 @@ MJAPI mjtNum mj_ray(const mjModel* m, const mjData* d, const mjtNum pnt[3], cons
 // Similar semantics to mj_ray, but vec, normal and dist are arrays.
 // Geoms further than cutoff are ignored.
 // Nullable: geomgroup, geomid, normal
-MJAPI void mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum* vec,
+MJAPI mjtStatus mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum* vec,
                        const mjtByte* geomgroup, mjtBool flg_static, int bodyexclude,
                        int* geomid, mjtNum* dist, mjtNum* normal, int nray, mjtNum cutoff);
 

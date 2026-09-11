@@ -52,6 +52,33 @@ MJAPI void mj__freeStack(mjData* d) __attribute__((noinline));
 // allocate bytes on the stack
 MJAPI void* mj_stackAllocByte(mjData* d, size_t bytes, size_t alignment);
 
+// mark a checked frame: an engine allocation on it that overflows returns NULL and marks the frame
+// failed instead of raising an error, so its owner checks mj_stackFailed after allocating and
+// reports mjSTATUS_OOM; the public allocators raise an error on any frame
+#ifndef mjUSEASAN
+MJAPI void mj_markStackChecked(mjData* d);
+#else
+MJAPI void mj__markStackChecked(mjData* d) __attribute__((noinline));
+__attribute__((always_inline))
+static inline void mj_markStackChecked(mjData* d) {
+  __asm__ volatile("" ::: "memory");
+  mj__markStackChecked(d);
+  __asm__ volatile("" ::: "memory");
+}
+#endif
+
+// nonzero if an allocation on the current frame failed
+MJAPI int mj_stackFailed(const mjData* d);
+
+// after allocating on a checked frame: if an allocation failed, run cleanup and return retval;
+// the status form frees the frame and records the status in the data, as a public call does
+#define mjSTACKCHECK_(d, cleanup, retval)                                         \
+  if (mj_stackFailed(d)) {                                                        \
+    cleanup;                                                                      \
+    return retval;                                                                \
+  }
+#define mjSTACKCHECK(d) mjSTACKCHECK_(d, mj_freeStack(d), (mjtStatus)((d)->status = mjSTATUS_OOM))
+
 // allocate bytes on the stack, with added caller information
 MJAPI void* mj_stackAllocInfo(mjData* d, size_t bytes, size_t alignment,
                               const char* caller, int line);

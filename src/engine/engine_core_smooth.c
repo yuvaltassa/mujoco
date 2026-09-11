@@ -491,9 +491,11 @@ void mj_camlight(const mjModel* m, mjData* d) {
 
 
 // update dynamic BVH; leaf aabbs must be updated before call
-void mj_updateDynamicBVH(const mjModel* m, mjData* d, int bvhadr, int bvhnum) {
-  mj_markStack(d);
+mjtStatus mj_updateDynamicBVH(const mjModel* m, mjData* d, int bvhadr, int bvhnum) {
+  mjtStatus status = mjSTATUS_OK;
+  mj_markStackChecked(d);
   int* modified = mjSTACKALLOC(d, bvhnum, int);
+  mjSTACKCHECK(d);
   mju_zeroInt(modified, bvhnum);
 
   // mark leafs as modified
@@ -534,6 +536,7 @@ void mj_updateDynamicBVH(const mjModel* m, mjData* d, int bvhadr, int bvhnum) {
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
@@ -549,14 +552,15 @@ static inline void mju_mulMatMat322(mjtNum* C, const mjtNum* A, const mjtNum* B)
 
 
 // compute flex-related quantities
-void mj_flex(const mjModel* m, mjData* d) {
+mjtStatus mj_flex(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv;
   int* rowadr = m->flexedge_J_rowadr;
   int* vrowadr = m->flexvert_J_rowadr, *vrownnz = m->flexvert_J_rownnz;
 
   // skip if no flexes
   if (!m->nflex) {
-    return;
+    return mji_report(d, status);
   }
 
   // compute Cartesian positions of flex vertices
@@ -584,8 +588,9 @@ void mj_flex(const mjModel* m, mjData* d) {
     // trilinear/quadratic interpolation
     else {
       int nodenum = nend - nstart;
-      mj_markStack(d);
+      mj_markStackChecked(d);
       mjtNum* nodexpos = mjSTACKALLOC(d, 3*nodenum, mjtNum);
+      mjSTACKCHECK(d);
       for (int i=nstart; i < nend; i++) {
         int j = i - nstart;
         if (m->flex_centered[f] ||
@@ -678,17 +683,18 @@ void mj_flex(const mjModel* m, mjData* d) {
         }
 
         // update dynamic BVH
-        mj_updateDynamicBVH(m, d, m->flex_bvhadr[f], m->flex_bvhnum[f]);
+        mjSTAGE(mj_updateDynamicBVH(m, d, m->flex_bvhadr[f], m->flex_bvhnum[f]));
       }
     }
   }
 
   // allocate space
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* jac1 = mjSTACKALLOC(d, 3*nv, mjtNum);
   mjtNum* jac2 = mjSTACKALLOC(d, 3*nv, mjtNum);
   mjtNum* jacdif = mjSTACKALLOC(d, 3*nv, mjtNum);
   int* chain = mjSTACKALLOC(d, nv, int);
+  mjSTACKCHECK(d);
 
   // clear Jacobian
   mju_zero(d->flexvert_J, 2*m->nJfv);
@@ -753,18 +759,28 @@ void mj_flex(const mjModel* m, mjData* d) {
       int* v_edge_adr = m->flex_vertedgeadr + vbase;
       int* adj_edges = m->flex_vertedge;
 
-      mj_markStack(d);
+      mj_markStackChecked(d);
 
       // clear Jacobian and assemble vertex by vertex
       int* chain1 = mjSTACKALLOC(d, nv, int);
       int* chain2 = mjSTACKALLOC(d, nv, int);
       mjtNum* J0_dense = mjSTACKALLOC(d, nv, mjtNum);
       mjtNum* J1_dense = mjSTACKALLOC(d, nv, mjtNum);
+      if (mj_stackFailed(d)) {
+        mj_freeStack(d);  // this frame, and the one it is nested in
+        mj_freeStack(d);
+        return mji_report(d, mjSTATUS_OOM);
+      }
       mju_zero(J0_dense, nv);
       mju_zero(J1_dense, nv);
 
       // temporary buffer for Jacobian accumulation
       mjtNum* J_local = mjSTACKALLOC(d, nv, mjtNum);
+      if (mj_stackFailed(d)) {
+        mj_freeStack(d);  // this frame, and the one it is nested in
+        mj_freeStack(d);
+        return mji_report(d, mjSTATUS_OOM);
+      }
 
       for (int v = 0; v < nvert; v++) {
         mjtNum A[6] = {0};
@@ -924,28 +940,31 @@ void mj_flex(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 
 
 // compute tendon lengths and moments
-void mj_tendon(const mjModel* m, mjData* d) {
+mjtStatus mj_tendon(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nten = m->ntendon;
   const int *rownnz = m->ten_J_rownnz, *rowadr = m->ten_J_rowadr, *colind = m->ten_J_colind;
   mjtNum *L = d->ten_length, *J = d->ten_J;
 
   if (!nten) {
-    return;
+    return mji_report(d, status);
   }
 
   // allocate stack arrays
   int *chain;
   mjtNum *jac1, *jac2, *jacdif, *tmp;
-  mj_markStack(d);
+  mj_markStackChecked(d);
   jac1 = mjSTACKALLOC(d, 3*nv, mjtNum);
   jac2 = mjSTACKALLOC(d, 3*nv, mjtNum);
   jacdif = mjSTACKALLOC(d, 3*nv, mjtNum);
   tmp = mjSTACKALLOC(d, nv, mjtNum);
   chain = mjSTACKALLOC(d, nv, int);
+  mjSTACKCHECK(d);
 
   // clear results
   mju_zero(L, nten);
@@ -1112,33 +1131,17 @@ void mj_tendon(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 
 
-// return dot product of tendon Jacobian time derivative with vector
-mjtNum mj_tendonDot(const mjModel* m, mjData* d, int id, const mjtNum* vec) {
+// dot product of tendon Jacobian time derivative with vector, with scratch from the caller
+static mjtNum tendonDot(const mjModel* m, mjData* d, int id, const mjtNum* vec, int* chain,
+                        mjtNum* jac1, mjtNum* jac2, mjtNum* jacdif, mjtNum* tmp) {
   int nv = m->nv;
   mjtNum res = 0;
-
-  // tendon id is invalid: return
-  if (id < 0 || id >= m->ntendon) {
-    return 0;
-  }
-
-  // fixed tendon has zero Jdot: return
   int adr = m->tendon_adr[id];
-  if (m->wrap_type[adr] == mjWRAP_JOINT) {
-    return 0;
-  }
-
-  // allocate stack arrays
-  mj_markStack(d);
   int issparse = mj_isSparse(m);
-  int* chain = issparse ? mjSTACKALLOC(d, nv, int) : NULL;
-  mjtNum* jac1 = mjSTACKALLOC(d, 3*nv, mjtNum);
-  mjtNum* jac2 = mjSTACKALLOC(d, 3*nv, mjtNum);
-  mjtNum* jacdif = mjSTACKALLOC(d, 3*nv, mjtNum);
-  mjtNum* tmp = mjSTACKALLOC(d, nv, mjtNum);
 
   // process spatial tendon
   mjtNum divisor = 1;
@@ -1260,18 +1263,46 @@ mjtNum mj_tendonDot(const mjModel* m, mjData* d, int id, const mjtNum* vec) {
     j += (wraptype != mjWRAP_NONE ? 2 : 1);
   }
 
+  return res;
+}
+
+
+// return dot product of tendon Jacobian time derivative with vector
+mjtNum mj_tendonDot(const mjModel* m, mjData* d, int id, const mjtNum* vec) {
+  int nv = m->nv;
+
+  // tendon id is invalid: return
+  if (id < 0 || id >= m->ntendon) {
+    return 0;
+  }
+
+  // fixed tendon has zero Jdot: return
+  int adr = m->tendon_adr[id];
+  if (m->wrap_type[adr] == mjWRAP_JOINT) {
+    return 0;
+  }
+
+  // allocate stack arrays: a public utility, an overflow is an error
+  mj_markStack(d);
+  int* chain = mjSTACKALLOC(d, nv, int);
+  mjtNum* jac1 = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjtNum* jac2 = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjtNum* jacdif = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjtNum* tmp = mjSTACKALLOC(d, nv, mjtNum);
+  mjtNum res = tendonDot(m, d, id, vec, chain, jac1, jac2, jacdif, tmp);
   mj_freeStack(d);
   return res;
 }
 
 
 // compute actuator/transmission lengths and moments
-void mj_transmission(const mjModel* m, mjData* d) {
+mjtStatus mj_transmission(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nactuator = m->nactuator;
 
   // nothing to do
   if (!nactuator) {
-    return;
+    return mji_report(d, status);
   }
 
   // outputs
@@ -1282,10 +1313,11 @@ void mj_transmission(const mjModel* m, mjData* d) {
   int *colind = d->moment_colind;
 
   // allocate Jacbians
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* jac  = mjSTACKALLOC(d, 3*nv, mjtNum);
   mjtNum* jacA = mjSTACKALLOC(d, 3*nv, mjtNum);
   mjtNum* jacS = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjSTACKCHECK(d);
 
   // define stack variables required for body transmission, don't allocate
   int issparse = mj_isSparse(m);
@@ -1442,6 +1474,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
         mju_subFrom(jac, jacS, 3*nv);
 
         moment_row = mjSTACKALLOC(d, nv, mjtNum);
+        mjSTACKCHECK(d);
 
         // clear moment
         mju_zero(moment_row, nv);
@@ -1505,6 +1538,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
         int refid = m->actuator_trnid[2*i+1];
         if (!jacref) jacref = mjSTACKALLOC(d, 3*nv, mjtNum);
         if (!moment_row) moment_row = mjSTACKALLOC(d, nv, mjtNum);
+        mjSTACKCHECK(d);
 
         // relative rotation as expmap in the refsite frame
         mjtNum quat[4], refquat[4], vec[3];
@@ -1582,6 +1616,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
       length[out] = 0;
 
       if (!moment_row) moment_row = mjSTACKALLOC(d, nv, mjtNum);
+      mjSTACKCHECK(d);
 
       // reference site undefined
       if (m->actuator_trnid[2*i+1] == -1) {
@@ -1600,6 +1635,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
       else {
         int refid = m->actuator_trnid[2*i+1];
         if (!jacref) jacref = mjSTACKALLOC(d, 3*nv, mjtNum);
+        mjSTACKCHECK(d);
 
         // initialize last dof address for each body
         int b0 = m->body_weldid[m->site_bodyid[id]];
@@ -1726,6 +1762,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
 
       // clear moment
       if (!moment_row) moment_row = mjSTACKALLOC(d, nv, mjtNum);
+      mjSTACKCHECK(d);
       mju_zero(moment_row, nv);
 
       // moment is average of all contact normal Jacobians
@@ -1738,6 +1775,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
           jac1p = mjSTACKALLOC(d, 3*nv, mjtNum);
           jac2p = mjSTACKALLOC(d, 3*nv, mjtNum);
           chain = issparse ? mjSTACKALLOC(d, nv, int) : NULL;
+          mjSTACKCHECK(d);
         }
 
         // clear efc_force and moment_exclude
@@ -1840,6 +1878,7 @@ void mj_transmission(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 
 
@@ -2275,12 +2314,14 @@ void mj_comVel(const mjModel* m, mjData* d) {
 
 
 // subtree linear velocity and angular momentum
-void mj_subtreeVel(const mjModel* m, mjData* d) {
+mjtStatus mj_subtreeVel(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nbody_awake < m->nbody;
   int nbody = sleep_filter ? d->nbody_awake : m->nbody;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* body_vel = mjSTACKALLOC(d, 6*m->nbody, mjtNum);
+  mjSTACKCHECK(d);
 
   // bodywise quantities
   for (int b=0; b < nbody; b++) {
@@ -2348,21 +2389,24 @@ void mj_subtreeVel(const mjModel* m, mjData* d) {
 
   // mark as computed
   d->flg_subtreevel = 1;
+  return mji_report(d, status);
 }
 
 
 //---------------------------------- RNE -----------------------------------------------------------
 
 // RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=0 removes inertial term
-void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result) {
+mjtStatus mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result) {
+  mjtStatus status = mjSTATUS_OK;
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nbody_awake < m->nbody;
   int nbody = sleep_filter ? d->nbody_awake : m->nbody;
   int nparent = sleep_filter ? d->nparent_awake : m->nbody;
   int nv = sleep_filter ? d->nv_awake : m->nv;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* loc_cacc = mjSTACKALLOC(d, m->nbody*6, mjtNum);
   mjtNum* loc_cfrc_body = mjSTACKALLOC(d, m->nbody*6, mjtNum);
+  mjSTACKCHECK(d);
 
   // set world acceleration to -gravity
   mju_zero(loc_cacc, 6);
@@ -2416,6 +2460,7 @@ void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result) {
   }
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 
 
@@ -2632,9 +2677,18 @@ void mj_rnePostConstraint(const mjModel* m, mjData* d) {
 
 
 // add bias force due to tendon armature
-void mj_tendonBias(const mjModel* m, mjData* d, mjtNum* qfrc) {
+mjtStatus mj_tendonBias(const mjModel* m, mjData* d, mjtNum* qfrc) {
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->ntree_awake < m->ntree;
-  int ntendon = m->ntendon;
+  int ntendon = m->ntendon, nv = m->nv;
+
+  // scratch for the tendon Jacobian derivatives, shared by the tendons
+  mj_markStackChecked(d);
+  int* chain = mjSTACKALLOC(d, nv, int);
+  mjtNum* jac1 = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjtNum* jac2 = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjtNum* jacdif = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjtNum* tmp = mjSTACKALLOC(d, nv, mjtNum);
+  mjSTACKCHECK(d);
 
   // add bias term due to tendon armature
   for (int i=0; i < ntendon; i++) {
@@ -2651,7 +2705,7 @@ void mj_tendonBias(const mjModel* m, mjData* d, mjtNum* qfrc) {
     }
 
     // get d/dt(tendon Jacobian) dotted with qvel for tendon i
-    mjtNum dot = mj_tendonDot(m, d, i, d->qvel);
+    mjtNum dot = tendonDot(m, d, i, d->qvel, chain, jac1, jac2, jacdif, tmp);
 
     // add bias term:  qfrc += ten_J * armature * dot(ten_Jdot, qvel)
     mjtNum coef = armature * dot;
@@ -2667,4 +2721,7 @@ void mj_tendonBias(const mjModel* m, mjData* d, mjtNum* qfrc) {
       }
     }
   }
+
+  mj_freeStack(d);
+  return mjSTATUS_OK;
 }

@@ -31,7 +31,7 @@ MJAPI void mju_multiRayPrepare(const mjModel* m, const mjData* d,
 
 // intersect multiple rays emanating from a single source, compute normals if given
 //  similar semantics to mj_ray, but vec, normal and dist are arrays
-MJAPI void mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum* vec,
+MJAPI mjtStatus mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum* vec,
                        const mjtByte* geomgroup, mjtBool flg_static, int bodyexclude,
                        int* geomid, mjtNum* dist, mjtNum* normal, int nray, mjtNum cutoff);
 

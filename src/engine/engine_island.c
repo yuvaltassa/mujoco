@@ -534,11 +534,12 @@ mjtStatus mj_island(const mjModel* m, mjData* d) {
     return mji_report(d, status);
   }
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // union direct tree incidence and assign deterministic components
   int* efc_tree = mjSTACKALLOC(d, nefc, int);
   int* parent = mjSTACKALLOC(d, ntree, int);
+  mjSTACKCHECK(d);
   mju_fillInt(parent, -1, ntree);
   int err_i = -1;
   const char* err_msg = unionConstraintTrees(m, d, parent, efc_tree, &err_i);
@@ -547,6 +548,7 @@ mjtStatus mj_island(const mjModel* m, mjData* d) {
     mjERROR(err_msg, err_i);
   }
   int* tree_island = mjSTACKALLOC(d, ntree, int);
+  mjSTACKCHECK(d);
   int nidof;
   d->nisland = mj_dsuAssign(tree_island, parent, m->tree_dofnum, ntree, &nidof);
 
@@ -593,6 +595,7 @@ mjtStatus mj_island(const mjModel* m, mjData* d) {
 
   // compute map_itree2tree
   int* island_ntree2 = mjSTACKALLOC(d, nisland + 1, int);  // last elem counts unconstrained trees
+  mjSTACKCHECK(d);
   mju_zeroInt(island_ntree2, nisland + 1);
   for (int i=0; i < ntree; i++) {
     int island = tree_island[i];
@@ -631,6 +634,7 @@ mjtStatus mj_island(const mjModel* m, mjData* d) {
 
   // compute dof <-> idof maps
   int* island_nv2 = mjSTACKALLOC(d, nisland + 1, int);  // last element counts unconstrained DOFs
+  mjSTACKCHECK(d);
   mju_zeroInt(island_nv2, nisland + 1);
   for (int dof=0; dof < nv; dof++) {
     int island = d->dof_island[dof];

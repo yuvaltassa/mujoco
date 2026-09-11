@@ -129,22 +129,22 @@ mjtStatus mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor
   // use selected integrator
   switch ((mjtIntegrator) m->opt.integrator) {
   case mjINT_EULER:
-    status = mji_join(status, mj_EulerSkip(m, d, skipstage >= mjSTAGE_POS));
+    mjSTAGE(mj_EulerSkip(m, d, skipstage >= mjSTAGE_POS));
     break;
 
   case mjINT_RK4:
     // ignore skipstage
-    status = mji_join(status, mj_RungeKutta(m, d, 4));
+    mjSTAGE(mj_RungeKutta(m, d, 4));
     break;
 
   case mjINT_IMPLICIT:
   case mjINT_IMPLICITFAST:
-    status = mji_join(status, mj_implicitSkip(m, d, skipstage >= mjSTAGE_VEL));
+    mjSTAGE(mj_implicitSkip(m, d, skipstage >= mjSTAGE_VEL));
     break;
 
   case mjINT_DISCRETE:
     // the solve already performed the velocity update: no skip-dependent work
-    status = mji_join(status, mj_discrete(m, d));
+    mjSTAGE(mj_discrete(m, d));
     break;
 
   default:
@@ -174,10 +174,10 @@ static mjNODISCARD mjtStatus inverseSkip(const mjModel* m, mjData* d, mjtStatus 
   if (mji_stop(m, status)) {
     return status;
   }
-  status = mji_join(status, mj_inverseSkip(m, d, stage, skipsensor));
+  mjSTAGE(mj_inverseSkip(m, d, stage, skipsensor));
   mju_copy(force, d->qfrc_inverse, m->nv);
   if (flg_actuation && !mji_stop(m, status)) {
-    status = mji_join(status, mj_fwdActuation(m, d));
+    mjSTAGE(mj_fwdActuation(m, d));
     mju_subFrom(force, d->qfrc_actuator, m->nv);
   }
   return status;
@@ -326,7 +326,7 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
 
   int nq = m->nq, nv = m->nv, na = m->na, nu = m->nu, ns = m->nsensordata;
   int ndx = 2*nv+na;  // row length of Dy Jacobians
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // state to restore after finite differencing
   unsigned int restore_spec = mjSTATE_FULLPHYSICS | mjSTATE_CTRL;
@@ -340,12 +340,15 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
 
   // sensors
   int skipsensor = !DsDq && !DsDv && !DsDa && !DsDu;
+  mjSTACKCHECK(d);
   mjtNum *sensor       = skipsensor ? NULL : mjSTACKALLOC(d, ns, mjtNum);  // sensor values
   mjtNum *sensor_plus  = skipsensor ? NULL : mjSTACKALLOC(d, ns, mjtNum);  // forward-nudged
   mjtNum *sensor_minus = skipsensor ? NULL : mjSTACKALLOC(d, ns, mjtNum);  // backward-nudged
 
   // controls
   mjtNum *ctrl = mjSTACKALLOC(d, nu, mjtNum);
+  mjSTACKCHECK(d);
+  mjSTACKCHECK(d);
 
   // save current inputs
   mj_getState(m, d, fullstate, restore_spec);
@@ -520,6 +523,7 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
   if (DyDq || DsDq) {
     mjtNum *dpos  = mjSTACKALLOC(d, nv, mjtNum);  // allocate position perturbation
     for (int i=0; i < nv; i++) {
+    mjSTACKCHECK(d);
       // nudge forward
       mju_zero(dpos, nv);
       dpos[i] = 1;
@@ -602,7 +606,7 @@ mjtStatus mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_
   mjtNum *DyDq, *DyDv, *DyDa, *DsDq, *DsDv, *DsDa;
   DyDq = DyDv = DyDa = DsDq = DsDv = DsDa = NULL;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // allocate transposed matrices
   mjtNum *AT = A ? mjSTACKALLOC(d, ndx*ndx, mjtNum) : NULL;  // state-transition     (transposed)
@@ -612,6 +616,7 @@ mjtStatus mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_
 
   // set offset pointers
   if (A) {
+  mjSTACKCHECK(d);
     DyDq = AT;
     DyDv = AT+ndx*nv;
     DyDa = AT+ndx*2*nv;
@@ -675,7 +680,7 @@ mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_act
   int skipsensor = !DsDq && !DsDv && !DsDa;
 
   // local vectors
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum *pos        = mjSTACKALLOC(d, nq, mjtNum);                      // position
   mjtNum *force      = mjSTACKALLOC(d, nv, mjtNum);                      // force
   mjtNum *force_plus = mjSTACKALLOC(d, nv, mjtNum);                      // nudged force
@@ -684,6 +689,7 @@ mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_act
 
   // save current positions
   mju_copy(pos, d->qpos, nq);
+  mjSTACKCHECK(d);
 
   // center point outputs
   status = inverseSkip(m, d, status, mjSTAGE_NONE, skipsensor, flg_actuation, force);
@@ -746,6 +752,7 @@ mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_act
   if (DfDq || DsDq || DmDq) {
     mjtNum *dpos  = mjSTACKALLOC(d, nv, mjtNum);  // allocate position perturbation
     for (int i=0; i < nv; i++) {
+    mjSTACKCHECK(d);
       // nudge
       mju_zero(dpos, nv);
       dpos[i] = 1.0;

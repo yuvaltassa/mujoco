@@ -973,16 +973,30 @@ outputs of the call, including the derivatives computed by :ref:`mjd_transitionF
 valid.
 
 Simulation warnings are reported in three ways. First, the pipeline functions that can raise one return an
-:ref:`mjtStatus`: ``mjSTATUS_OK`` (0) means that no simulation warning was recorded, and a positive value names the
-first warning raised during the call. The same value is recorded in ``mjData.status`` as the call returns, for code that
-sees only the data, such as a callback or a trajectory recorder; it describes the most recent call to return, not a call
-still in progress. The macro :ref:`mjOK` tests the field. Second, the array ``mjData.warning`` accumulates per-type
-:ref:`statistics<siDiagnostics>`. Third, when a warning of a given type is first triggered, a warning-level :ref:`log
-message<siLogMessages>` is emitted. All this is done by the function :ref:`mj_warning`, which the engine calls when it
-detects one. It is not an interface for user code, and is deprecated as one: called from outside the engine it counts
-and prints the warning but does not reach the call in progress. To report a condition from a callback, emit a :ref:`log
-message<siLogMessages>` with :ref:`mju_warning`. To treat a warning as an error, check the result: ``if (mj_step(m, d))
-mju_error(...);``.
+:ref:`mjtStatus`: ``mjSTATUS_OK`` (0) means that no simulation warning was recorded, a positive value names the first
+warning raised during the call, and a negative value means the call ran :ref:`out of memory<siOutOfMemory>`. The same
+value is recorded in ``mjData.status`` as the call returns, for code that sees only the data, such as a callback or a
+trajectory recorder; it describes the most recent call to return, not a call still in progress. The macro :ref:`mjOK`
+tests the field. Second, the array ``mjData.warning`` accumulates per-type :ref:`statistics<siDiagnostics>`. Third, when
+a warning of a given type is first triggered, a warning-level :ref:`log message<siLogMessages>` is emitted. All this is
+done by the function :ref:`mj_warning`, which the engine calls when it detects one. It is not an interface for user
+code, and is deprecated as one: called from outside the engine it counts and prints the warning but does not reach the
+call in progress. To report a condition from a callback, emit a :ref:`log message<siLogMessages>` with
+:ref:`mju_warning`. To treat a warning as an error, check the result: ``if (mj_step(m, d)) mju_error(...);``.
+
+.. _siOutOfMemory:
+
+Out of memory
+^^^^^^^^^^^^^
+
+The pipeline computes in the arena of ``mjData``, sized by the :ref:`memory<size-memory>` attribute. Contacts and
+constraints that do not fit are dropped with a simulation warning, but the scratch space of a computation either fits or
+the computation cannot proceed. When it does not, the call returns the negative status ``mjSTATUS_OOM``, records it in
+``mjData.status``, and stops at the stage that ran out, whatever the :ref:`onwarn<option-onwarn>` setting; a
+warning-level log message names the allocation. Nothing is rolled back: ``mjData`` is left partially updated for
+inspection, and its outputs are not valid. Reset the data before using it again, or make a new one from a model with a
+larger arena. The scratch of a call is the same at every step of the same state, so a call that ran out of memory runs
+out again until the arena grows.
 
 .. _siLogMessages:
 

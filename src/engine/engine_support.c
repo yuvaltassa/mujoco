@@ -434,16 +434,18 @@ void mj_addM(const mjModel* m, mjData* d, mjtNum* dst,
 //-------------------------- perturbations ---------------------------------------------------------
 
 // add Cartesian force and torque to qfrc_target
-void mj_applyFT(const mjModel* m, mjData* d,
+mjtStatus mj_applyFT(const mjModel* m, mjData* d,
                 const mjtNum force[3], const mjtNum torque[3],
                 const mjtNum point[3], int body, mjtNum* qfrc_target) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv;
 
   // allocate local variables
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* jacp = force ? mjSTACKALLOC(d, 3*nv, mjtNum) : NULL;
   mjtNum* jacr = torque ? mjSTACKALLOC(d, 3*nv, mjtNum) : NULL;
   mjtNum* qforce = mjSTACKALLOC(d, nv, mjtNum);
+  mjSTACKCHECK(d);
 
   // make sure body is in range
   if (body < 0 || body >= m->nbody) {
@@ -454,6 +456,7 @@ void mj_applyFT(const mjModel* m, mjData* d,
   if (mj_isSparse(m)) {
     // construct chain and sparse Jacobians
     int* chain = mjSTACKALLOC(d, nv, int);
+    mjSTACKCHECK(d);
     int NV = mj_bodyChain(m, body, chain);
     mj_jacSparse(m, d, jacp, jacr, point, body, NV, chain, /*flg_skipcommon=*/0);
 
@@ -489,25 +492,28 @@ void mj_applyFT(const mjModel* m, mjData* d,
   }
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 
 
 // accumulate xfrc_applied in qfrc
-void mj_xfrcAccumulate(const mjModel* m, mjData* d, mjtNum* qfrc) {
+mjtStatus mj_xfrcAccumulate(const mjModel* m, mjData* d, mjtNum* qfrc) {
+  mjtStatus status = mjSTATUS_OK;
   int nbody = m->nbody;
   const mjtNum *xfrc = d->xfrc_applied;
 
   // quick return if identically zero (efficient memcmp implementation)
   if (mju_isZeroByte((const unsigned char*)(xfrc+6), 6*(nbody-1)*sizeof(mjtNum))) {
-    return;
+    return status;
   }
 
   // some non-zero wrenches, apply them
   for (int i=1; i < nbody; i++) {
     if (!mju_isZero(xfrc+6*i, 6)) {
-      mj_applyFT(m, d, xfrc+6*i, xfrc+6*i+3, d->xipos+3*i, i, qfrc);
+      mjSTAGE(mj_applyFT(m, d, xfrc+6*i, xfrc+6*i+3, d->xipos+3*i, i, qfrc));
     }
   }
+  return status;
 }
 
 
@@ -517,7 +523,6 @@ void mj_xfrcAccumulate(const mjModel* m, mjData* d, mjtNum* qfrc) {
 // returns the smallest distance between two geoms (using nativeccd)
 static mjtNum mj_geomDistanceCCD(const mjModel* m, mjData* d, int g1, int g2,
                                  mjtNum distmax, mjtNum fromto[6]) {
-  mj_markStack(d);
   mjCCDConfig config;
   mjCCDStatus status;
 
@@ -528,14 +533,23 @@ static mjtNum mj_geomDistanceCCD(const mjModel* m, mjData* d, int g1, int g2,
   config.nmeshdegmax = 0;
   config.max_contacts = 1;        // want contacts
   config.dist_cutoff = distmax;   // want geom distances
-  config.buffer = mj_stackAllocByte(d, mjc_ccdSize(0, 0, config.max_iterations), sizeof(mjtNum));
+
+  // the buffer set by the caller, else a public utility's own: an overflow is an error
+  config.buffer = mjc_getCCDBuffer();
+  int own_buffer = !config.buffer;
+  if (own_buffer) {
+    mj_markStack(d);
+    config.buffer = mj_stackAllocByte(d, mjc_ccdSize(0, 0, config.max_iterations), sizeof(mjtNum));
+  }
 
   mjCCDObj obj1, obj2;
   mjc_initCCDObj(&obj1, m, d, g1, 0);
   mjc_initCCDObj(&obj2, m, d, g2, 0);
 
   mjtNum dist = mjc_ccd(&config, &status, &obj1, &obj2);
-  mj_freeStack(d);
+  if (own_buffer) {
+    mj_freeStack(d);
+  }
 
   // witness points are only computed if dist <= distmax
   if (fromto && status.nx > 0) {
@@ -576,8 +590,12 @@ mjtNum mj_geomDistance(const mjModel* m, mjData* d, int geom1, int geom2, mjtNum
     }
   }
 
-  // call collision function with distmax as margin
+  // call collision function with distmax as margin; without a buffer set by the caller this is a
+  // public utility, and an overflow of its scratch is an error
   int num = func(m, d, con, g1, g2, distmax);
+  if (num < 0) {
+    mjERROR("out of memory");
+  }
 
   // find smallest distance
   int smallest = -1;

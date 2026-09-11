@@ -351,6 +351,20 @@ TEST_F(OnWarnTest, ReportingFunctionsReturnTheirStatus) {
       {"mj_makeConstraint", mj_makeConstraint},
       {"mj_island", mj_island},
       {"mj_projectConstraint", mj_projectConstraint},
+      {"mj_fwdKinematics", mj_fwdKinematics},
+      {"mj_fwdVelocity", mj_fwdVelocity},
+      {"mj_invVelocity", mj_invVelocity},
+      {"mj_invConstraint", mj_invConstraint},
+      {"mj_flex", mj_flex},
+      {"mj_tendon", mj_tendon},
+      {"mj_transmission", mj_transmission},
+      {"mj_passive", mj_passive},
+      {"mj_subtreeVel", mj_subtreeVel},
+      {"mj_referenceConstraint", mj_referenceConstraint},
+      {"mj_sensorPos", mj_sensorPos},
+      {"mj_sensorVel", mj_sensorVel},
+      {"mj_sensorAcc", mj_sensorAcc},
+      {"mj_energyVel", mj_energyVel},
   };
 
   // healthy, and with a bad velocity under each policy (exercising the
@@ -697,12 +711,8 @@ TEST_F(OnWarnTest, NonReportingFunctionsLeaveTheStatusAlone) {
   ASSERT_EQ(data->status, mjSTATUS_CONTACTFULL);
 
   void (*const functions[])(const mjModel*, mjData*) = {
-      mj_fwdKinematics, mj_kinematics,     mj_comPos,        mj_camlight,
-      mj_flex,          mj_tendon,         mj_transmission,  mj_crb,
-      mj_makeM,         mj_fwdVelocity,    mj_comVel,        mj_passive,
-      mj_subtreeVel,    mj_rnePostConstraint, mj_referenceConstraint,
-      mj_invVelocity,   mj_invConstraint,  mj_sensorPos,     mj_sensorVel,
-      mj_sensorAcc,     mj_energyPos,      mj_energyVel,
+      mj_kinematics, mj_comPos, mj_camlight, mj_crb, mj_makeM, mj_comVel, mj_rnePostConstraint,
+      mj_energyPos,
   };
   for (auto function : functions) {
     function(model.get(), data.get());

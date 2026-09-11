@@ -75,13 +75,13 @@ void mj_checkDiscrete(const mjModel* m);
 //-------------------------------- solver components -----------------------------------------------
 
 // all kinematics-like computations
-MJAPI void mj_fwdKinematics(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdKinematics(const mjModel* m, mjData* d);
 
 // computations that depend only on qpos
 MJAPI mjNODISCARD mjtStatus mj_fwdPosition(const mjModel* m, mjData* d);
 
 // computations that depend only on qpos and qvel
-MJAPI void mj_fwdVelocity(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdVelocity(const mjModel* m, mjData* d);
 
 // compute actuator force
 MJAPI mjNODISCARD mjtStatus mj_fwdActuation(const mjModel* m, mjData* d);

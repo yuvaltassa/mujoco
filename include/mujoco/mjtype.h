@@ -566,6 +566,7 @@ typedef enum mjtWarning {           // warning types
 
 
 typedef enum mjtStatus {            // status of a pipeline call, stored in mjData.status
+  mjSTATUS_OOM         = -1,        // out of mjData memory: the call stopped, its outputs are not valid
   mjSTATUS_OK          = 0,         // nothing to report
 
   // simulation warnings, mjtWarning + 1

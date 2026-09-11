@@ -1684,7 +1684,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_fwdKinematics',
      FunctionDecl(
          name='mj_fwdKinematics',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1724,7 +1724,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_fwdVelocity',
      FunctionDecl(
          name='mj_fwdVelocity',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1888,7 +1888,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_invVelocity',
      FunctionDecl(
          name='mj_invVelocity',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1908,7 +1908,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_invConstraint',
      FunctionDecl(
          name='mj_invConstraint',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1948,7 +1948,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_sensorPos',
      FunctionDecl(
          name='mj_sensorPos',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1968,7 +1968,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_sensorVel',
      FunctionDecl(
          name='mj_sensorVel',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -1988,7 +1988,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_sensorAcc',
      FunctionDecl(
          name='mj_sensorAcc',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2028,7 +2028,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_energyVel',
      FunctionDecl(
          name='mj_energyVel',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2168,7 +2168,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_flex',
      FunctionDecl(
          name='mj_flex',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2188,7 +2188,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_tendon',
      FunctionDecl(
          name='mj_tendon',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2208,7 +2208,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_transmission',
      FunctionDecl(
          name='mj_transmission',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2386,7 +2386,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_passive',
      FunctionDecl(
          name='mj_passive',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2406,7 +2406,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_subtreeVel',
      FunctionDecl(
          name='mj_subtreeVel',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2426,7 +2426,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_rne',
      FunctionDecl(
          name='mj_rne',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -2582,7 +2582,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_referenceConstraint',
      FunctionDecl(
          name='mj_referenceConstraint',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -3315,7 +3315,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_jacPointAxis',
      FunctionDecl(
          name='mj_jacPointAxis',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -3651,7 +3651,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_applyFT',
      FunctionDecl(
          name='mj_applyFT',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',
@@ -4191,7 +4191,7 @@ FUNCTIONS: Mapping[str, FunctionDecl] = dict([
     ('mj_multiRay',
      FunctionDecl(
          name='mj_multiRay',
-         return_type=ValueType(name='void'),
+         return_type=ValueType(name='mjtStatus'),
          parameters=(
              FunctionParameterDecl(
                  name='m',

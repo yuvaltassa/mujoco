@@ -43,6 +43,11 @@ void mjc_setCCDBuffer(void* buffer) {
   ccd_buffer = buffer;
 }
 
+// get CCD internal buffer
+void* mjc_getCCDBuffer(void) {
+  return ccd_buffer;
+}
+
 // ccd prism first dir
 static void prism_firstdir(const void* o1, const void* o2, ccd_vec3_t *vec) {
   ccdVec3Set(vec, 0, 0, 1);
@@ -106,11 +111,13 @@ static int mjc_penetration(const mjModel* m, mjData* d, mjCCDObj* obj1, mjCCDObj
   if (buffer) {
     config.buffer = buffer;
   } else {
-    mj_markStack(d);
+    mj_markStackChecked(d);
     int npolygonmax = mjDISABLED(mjDSBL_MULTICCD) ? 0 : m->npolygonmax;
     int nmeshdegmax = mjDISABLED(mjDSBL_MULTICCD) ? 0 : m->nmeshdegmax;
-    config.buffer = mj_stackAllocByte(d, mjc_ccdSize(npolygonmax, nmeshdegmax,
-                                                     config.max_iterations), sizeof(mjtNum));
+    config.buffer = mj_stackAllocInfo(d, mjc_ccdSize(npolygonmax, nmeshdegmax,
+                                                     config.max_iterations), sizeof(mjtNum),
+                                      __func__, __LINE__);
+    mjSTACKCHECK_(d, mj_freeStack(d), -1);
   }
 
   int ncon = 0;
@@ -939,6 +946,9 @@ int mjc_Convex(const mjModel* m, mjData* d, mjPreContact* con, int g1, int g2, m
 
         // search for new contact
         int n = mjc_penetration(m, d, &obj1, &obj2, con + ncon, 1, margin);
+        if (n < 0) {
+          return -1;
+        }
         if (mjDISABLED(mjDSBL_NATIVECCD) && n && g1 >= 0 && g2 >= 0) {
           mjc_fixNormal(m, d, con + ncon, g1, g2);
         }
@@ -1295,7 +1305,11 @@ int mjc_ConvexHField(const mjModel* m, mjData* d, mjPreContact* con, int g1, int
         }
 
         // run penetration function, save contact
-        if (mjc_penetration(m, d, &obj1, &obj2, con + ncon, 1, 0.0)) {
+        int n = mjc_penetration(m, d, &obj1, &obj2, con + ncon, 1, 0.0);
+        if (n < 0) {
+          return -1;
+        }
+        if (n) {
           // transform to global coordinates
           mji_copy3(local_dir, con[ncon].normal);
           mji_copy3(local_pos, con[ncon].pos);
@@ -1723,7 +1737,11 @@ int mjc_HFieldElem(const mjModel* m, mjData* d, mjPreContact* con, int g, int f,
           }
 
           // run ccd, save contact
-          if (mjc_penetration(m, d, &obj1, &obj2, con + cnt, 1, 0.0)) {
+          int n = mjc_penetration(m, d, &obj1, &obj2, con + cnt, 1, 0.0);
+          if (n < 0) {
+            return -1;
+          }
+          if (n) {
             // transform to global coordinates
             mji_zero3(con[cnt].tangent);
             mju_mulMatVec3(con[cnt].normal, hmat, con[cnt].normal);

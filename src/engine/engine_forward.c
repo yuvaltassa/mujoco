@@ -120,7 +120,7 @@ mjtStatus mj_checkAcc(const mjModel* m, mjData* d) {
         d->warning[mjWARN_BADQACC].lastinfo = i;
 
         // recompute forward dynamics from the reset state
-        status = mji_join(status, mj_forward(m, d));
+        mjSTAGE(mj_forward(m, d));
       }
       return mji_report(d, status);
     }
@@ -132,15 +132,17 @@ mjtStatus mj_checkAcc(const mjModel* m, mjData* d) {
 //-------------------------- solver components -----------------------------------------------------
 
 // kinematics-related computations
-void mj_fwdKinematics(const mjModel* m, mjData* d) {
+mjtStatus mj_fwdKinematics(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   mj_kinematics(m, d);
   mj_comPos(m, d);
   mj_camlight(m, d);
-  mj_flex(m, d);
-  mj_tendon(m, d);
+  mjSTAGE(mj_flex(m, d));
+  mjSTAGE(mj_tendon(m, d));
   if (mj_wakeTendon(m, d)) {
     mj_updateSleep(m, d);
   }
+  return mji_report(d, status);
 }
 
 // position-dependent computations
@@ -152,7 +154,7 @@ mjtStatus mj_fwdPosition(const mjModel* m, mjData* d) {
   d->flg_energypos = 0;
 
   TM_START;
-  mj_fwdKinematics(m, d);
+  mjSTAGE(mj_fwdKinematics(m, d));
 
   TM_END(mjTIMER_POS_KINEMATICS);
 
@@ -182,13 +184,13 @@ mjtStatus mj_fwdPosition(const mjModel* m, mjData* d) {
   TM_END(mjTIMER_POS_PROJECT);
 
   TM_RESTART;
-  mj_transmission(m, d);
+  mjSTAGE(mj_transmission(m, d));
   TM_ADD(mjTIMER_POS_KINEMATICS);
 
   // implicit effective metric Mtilde = M + K: build (or deactivate) for this step. Arena
   // lifetime and skip semantics mirror the constraint data: built once per position stage,
   // value-refreshed in the velocity stage, consumed downstream.
-  mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/1);
+  mjSTAGE(mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/1));
 
   TM_END1(mjTIMER_POSITION);
   return mji_report(d, status);
@@ -196,7 +198,8 @@ mjtStatus mj_fwdPosition(const mjModel* m, mjData* d) {
 
 
 // velocity-dependent computations
-void mj_fwdVelocity(const mjModel* m, mjData* d) {
+mjtStatus mj_fwdVelocity(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   TM_START;
 
   // clear velocity-dependent flags for lazy evaluation
@@ -228,7 +231,7 @@ void mj_fwdVelocity(const mjModel* m, mjData* d) {
 
   // com-based velocities, passive forces, constraint references
   mj_comVel(m, d);
-  mj_passive(m, d);
+  mjSTAGE(mj_passive(m, d));
 
   // under discrete, constraint references are computed at the actuation stage where the
   // metric is final (regularization, then references, which consume R via adhesion);
@@ -236,19 +239,20 @@ void mj_fwdVelocity(const mjModel* m, mjData* d) {
   if (mj_isMetric(m)) {
     mj_velocityConstraint(m, d);
   } else {
-    mj_referenceConstraint(m, d);
+    mjSTAGE(mj_referenceConstraint(m, d));
   }
 
   // compute qfrc_bias with abbreviated RNE (without acceleration)
-  mj_rne(m, d, 0, d->qfrc_bias);
+  mjSTAGE(mj_rne(m, d, 0, d->qfrc_bias));
 
   // add bias force due to tendon armature
-  mj_tendonBias(m, d, d->qfrc_bias);
+  mjSTAGE(mj_tendonBias(m, d, d->qfrc_bias));
 
   // refresh the metric's velocity-stage values
-  mjd_effShift(m, d);
+  mjSTAGE(mjd_effShift(m, d));
 
   TM_END(mjTIMER_VELOCITY);
+  return mji_report(d, status);
 }
 
 
@@ -400,8 +404,9 @@ mjtStatus mj_fwdActuation(const mjModel* m, mjData* d) {
   int tendon_frclimited = 0;
 
   // local copy of ctrl
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum *ctrl = mjSTACKALLOC(d, nu, mjtNum);
+  mjSTACKCHECK(d);
 
   // read from ctrl or history buffer for delayed actuators
   for (int i = 0; i < nactuator; i++) {
@@ -921,6 +926,7 @@ mjtStatus mj_fwdActuation(const mjModel* m, mjData* d) {
   if (tendon_frclimited) {
     // compute total force for each tendon
     mjtNum* tendon_total_force = mjSTACKALLOC(d, ntendon, mjtNum);
+    mjSTACKCHECK(d);
     mju_zero(tendon_total_force, ntendon);
     for (int i=0; i < nactuator; i++) {
       if (m->actuator_trntype[i] == mjTRN_TENDON) {
@@ -1064,20 +1070,21 @@ mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d) {
   }
 
   // qfrc_smooth += project(xfrc_applied)
-  mj_xfrcAccumulate(m, d, d->qfrc_smooth);
+  mjSTAGE(mj_xfrcAccumulate(m, d, d->qfrc_smooth));
 
   // implicit effective metric (built in mj_fwdPosition): the smooth acceleration is that of
   // the linearly-implicit dynamics, (M + K)*qacc_smooth = qfrc_smooth + c, so the constraint
   // solver, the no-constraint shortcut and the warmstart all see one consistent metric.
   if (d->efm_active) {
-    mj_markStack(d);
+    mj_markStackChecked(d);
     mjtNum* qfrc_eff = mjSTACKALLOC(d, m->nv, mjtNum);
+    mjSTACKCHECK(d);
     if (!sleep_filter) {
       mju_add(qfrc_eff, d->qfrc_smooth, d->efm_c, nv);
       if (d->efm_ca) {
         mju_addTo(qfrc_eff, d->efm_ca, nv);
       }
-      status = mji_join(status, mjd_effSolve(m, d, d->qacc_smooth, qfrc_eff));
+      mjSTAGE_(mjd_effSolve(m, d, d->qacc_smooth, qfrc_eff), mj_freeStack(d));
     } else {
       // awake dofs only: sleep islands follow the metric couplings, so the metric has no
       // terms across the awake/asleep boundary and zeroed asleep entries remain exactly
@@ -1088,7 +1095,8 @@ mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d) {
         mju_addToInd(qfrc_eff, d->efm_ca, index, nv);
       }
       mjtNum* qacc_eff = mjSTACKALLOC(d, m->nv, mjtNum);
-      status = mji_join(status, mjd_effSolve(m, d, qacc_eff, qfrc_eff));
+      mjSTACKCHECK(d);
+      mjSTAGE_(mjd_effSolve(m, d, qacc_eff, qfrc_eff), mj_freeStack(d));
       mju_copyInd(d->qacc_smooth, qacc_eff, index, nv);
     }
     mj_freeStack(d);
@@ -1110,13 +1118,15 @@ mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d) {
 
 
 // warmstart/init solver
-static void warmstart(const mjModel* m, mjData* d) {
+static mjtStatus warmstart(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nefc = d->nefc;
 
   // warmstart with best of (qacc_warmstart, qacc_smooth)
   if (!mjDISABLED(mjDSBL_WARMSTART)) {
-    mj_markStack(d);
+    mj_markStackChecked(d);
     mjtNum* jar = mjSTACKALLOC(d, nefc, mjtNum);
+    mjSTACKCHECK(d);
 
     // start with qacc = qacc_warmstart
     mju_copy(d->qacc, d->qacc_warmstart, nv);
@@ -1134,6 +1144,7 @@ static void warmstart(const mjModel* m, mjData* d) {
       // cost(force_warmstart)
       mjtNum PGS_warmstart = mju_dot(d->efc_force, d->efc_b, nefc);
       mjtNum* ARf = mjSTACKALLOC(d, nefc, mjtNum);
+      mjSTACKCHECK(d);
       if (mj_isSparse(m))
         mju_mulMatVecSparse(ARf, d->efc_AR, d->efc_force, nefc,
                             d->efc_AR_rownnz, d->efc_AR_rowadr,
@@ -1155,10 +1166,11 @@ static void warmstart(const mjModel* m, mjData* d) {
       // add Gauss to cost(qacc_warmstart)
       mjtNum* da = mjSTACKALLOC(d, nv, mjtNum);
       mjtNum* Mda = mjSTACKALLOC(d, nv, mjtNum);
+      mjSTACKCHECK(d);
       mju_sub(da, d->qacc_warmstart, d->qacc_smooth, nv);
       mj_mulM(m, d, Mda, da);
       if (d->efm_active) {
-        mjd_effMulAdd(m, d, Mda, da, /*flg_contact=*/1);
+        mjSTAGE_(mjd_effMulAdd(m, d, Mda, da, /*flg_contact=*/1), mj_freeStack(d));
       }
       cost_warmstart += 0.5 * mju_dot(da, Mda, nv);
 
@@ -1189,18 +1201,31 @@ static void warmstart(const mjModel* m, mjData* d) {
     mju_copy(d->qacc, d->qacc_smooth, nv);
     mju_zero(d->efc_force, nefc);
   }
+  return status;
 }
 
 
 // mju_dispatch callback: solve one island
+// mju_dispatch callback: solve one island, report its status in arg
 static void solveIslandTask(const mjModel* m, mjData* d, void* arg, int thread_id, int island) {
+  mjtStatus* status = (mjtStatus*) arg;
   if (m->opt.solver == mjSOL_NEWTON) {
-    mj_solNewton_island(m, d, island, m->opt.iterations);
+    status[island] = mj_solNewton_island(m, d, island, m->opt.iterations);
   } else if (m->opt.solver == mjSOL_CG) {
-    mj_solCG_island(m, d, island, m->opt.iterations);
+    status[island] = mj_solCG_island(m, d, island, m->opt.iterations);
   } else {
-    mj_solPGS_island(m, d, island, m->opt.iterations);
+    status[island] = mj_solPGS_island(m, d, island, m->opt.iterations);
   }
+}
+
+
+// dispatch the island solves, compose the status of each: the frame owned by the caller
+static mjtStatus solveIslands(const mjModel* m, mjData* d, mjtStatus* island_status, int nisland) {
+  mjtStatus status = mju_dispatch(m, d, solveIslandTask, island_status, nisland);
+  for (int island=0; island < nisland; island++) {
+    status = mji_join(status, island_status[island]);
+  }
+  return mji_report(d, status);
 }
 
 
@@ -1278,7 +1303,7 @@ mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d) {
   }
 
   // warmstart solver
-  warmstart(m, d);
+  mjSTAGE(warmstart(m, d));
   mju_zeroInt(d->solver_niter, mjNISLAND);
 
   // check if islands are supported
@@ -1293,9 +1318,12 @@ mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d) {
 
   // run solver over constraint islands
   if (islands_supported) {
+    mj_markStackChecked(d);
+    mjtStatus* island_status = mjSTACKALLOC(d, nisland, mjtStatus);
+    mjSTACKCHECK(d);
     switch ((mjtSolver) m->opt.solver) {
     case mjSOL_PGS:
-      mju_dispatch(m, d, solveIslandTask, NULL, nisland);
+      mjSTAGE_(solveIslands(m, d, island_status, nisland), mj_freeStack(d));
       break;
 
     case mjSOL_CG:
@@ -1309,7 +1337,7 @@ mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d) {
       mju_gather(d->iefc_force,      d->efc_force,       d->map_iefc2efc, nefc);
       mju_gather(d->iefc_aref,       d->efc_aref,        d->map_iefc2efc, nefc);
 
-      mju_dispatch(m, d, solveIslandTask, NULL, nisland);
+      mjSTAGE_(solveIslands(m, d, island_status, nisland), mj_freeStack(d));
 
       // copy back solver outputs (scatter dofs since ni <= nv)
       mju_scatter(d->qacc,            d->iacc,            d->map_idof2dof, nidof);
@@ -1321,36 +1349,37 @@ mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d) {
     // run noslip solver per island if enabled
     if (m->opt.noslip_iterations > 0) {
       for (int island=0; island < nisland; island++) {
-        mj_solNoSlip_island(m, d, island, m->opt.noslip_iterations);
+        mjSTAGE_(mj_solNoSlip_island(m, d, island, m->opt.noslip_iterations), mj_freeStack(d));
       }
     }
+    mj_freeStack(d);
   }
 
   // run solver over all constraints (monolithic)
   else {
     switch ((mjtSolver) m->opt.solver) {
     case mjSOL_PGS:                     // PGS
-      mj_solPGS(m, d, m->opt.iterations);
+      mjSTAGE(mj_solPGS(m, d, m->opt.iterations));
       break;
 
     case mjSOL_CG:                      // CG
-      mj_solCG(m, d, m->opt.iterations);
+      mjSTAGE(mj_solCG(m, d, m->opt.iterations));
       break;
 
     case mjSOL_NEWTON:                  // Newton
-      mj_solNewton(m, d, m->opt.iterations);
+      mjSTAGE(mj_solNewton(m, d, m->opt.iterations));
       break;
     }
 
     // run noslip solver if enabled
     if (m->opt.noslip_iterations > 0) {
-      mj_solNoSlip(m, d, m->opt.noslip_iterations);
+      mjSTAGE(mj_solNoSlip(m, d, m->opt.noslip_iterations));
     }
   }
 
   // dual solvers: map efc_force to joint space (always monolithic)
   if (m->opt.solver == mjSOL_PGS || m->opt.noslip_iterations > 0) {
-    status = mji_join(status, mj_dualFinish(m, d));
+    mjSTAGE(mj_dualFinish(m, d));
   }
 
   mj_discreteGyro(m, d);
@@ -1401,7 +1430,7 @@ static mjNODISCARD mjtStatus mj_advance(const mjModel* m, mjData* d, const mjtNu
           mjtNum* slot = mju_historyInsert(buf, nsample, dim, d->time);
           if (delay > 0) {
             // have delay, compute sensor
-            mj_computeSensor(m, d, i, slot);
+            mjSTAGE(mj_computeSensor(m, d, i, slot));
           } else {
             // no delay, copy from sensordata (already computed)
             mju_copy(slot, d->sensordata + m->sensor_adr[i], dim);
@@ -1410,7 +1439,7 @@ static mjNODISCARD mjtStatus mj_advance(const mjModel* m, mjData* d, const mjtNu
       } else if (delay > 0) {
         // delay-only mode: always compute and insert
         mjtNum* slot = mju_historyInsert(buf, nsample, dim, d->time);
-        mj_computeSensor(m, d, i, slot);
+        mjSTAGE(mj_computeSensor(m, d, i, slot));
       } else {
         // history-only mode: copy from sensordata (already computed)
         mjtNum* slot = mju_historyInsert(buf, nsample, dim, d->time);
@@ -1507,9 +1536,10 @@ static mjNODISCARD mjtStatus mj_advance(const mjModel* m, mjData* d, const mjtNu
 mjtStatus mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
   mjtStatus status = mjSTATUS_OK;
   TM_START;
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* qfrc = mjSTACKALLOC(d, m->nv, mjtNum);
   mjtNum* qacc = mjSTACKALLOC(d, m->nv, mjtNum);
+  mjSTACKCHECK(d);
 
   // sleep filtering
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
@@ -1587,7 +1617,7 @@ mjtStatus mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
   }
 
   // advance state and time
-  status = mji_join(status, mj_advance(m, d, d->act_dot, qacc, NULL));
+  mjSTAGE_(mj_advance(m, d, d->act_dot, qacc, NULL), mj_freeStack(d));
 
   mj_freeStack(d);
 
@@ -1639,12 +1669,13 @@ mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N) {
   }
 
   // allocate space for intermediate solutions
-  mj_markStack(d);
+  mj_markStackChecked(d);
   dX = mjSTACKALLOC(d, 2*nv+na, mjtNum);
   for (int i=0; i < N; i++) {
     X[i] = mjSTACKALLOC(d, nq+nv+na, mjtNum);
     F[i] = mjSTACKALLOC(d, nv+na, mjtNum);
   }
+  mjSTACKCHECK(d);
 
   // precompute C and T;  C,T,A have size (N-1)
   for (int i=1; i < N; i++) {
@@ -1690,7 +1721,7 @@ mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N) {
     d->time = T[i-1];
 
     // evaluate F[i], 1: do not recompute sensors and energy
-    status = mji_join(status, mj_forwardSkip(m, d, mjSTAGE_NONE, 1));
+    mjSTAGE_(mj_forwardSkip(m, d, mjSTAGE_NONE, 1), mj_freeStack(d));
 
     // stop: restore state and time, return
     if (mji_stop(m, status)) {
@@ -1722,7 +1753,7 @@ mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N) {
   mju_copy(d->act, X[0]+nq+nv, na);
 
   // advance state and time
-  status = mji_join(status, mj_advance(m, d, dX+2*nv, dX+nv, dX));
+  mjSTAGE_(mj_advance(m, d, dX+2*nv, dX+nv, dX), mj_freeStack(d));
 
   mj_freeStack(d);
   return mji_report(d, status);
@@ -1787,9 +1818,10 @@ mjtStatus mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
   TM_START;
   int nD = m->nD, nC = m->nC, njnt = m->njnt;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* qfrc = mjSTACKALLOC(d, m->nv, mjtNum);
   mjtNum* qacc = mjSTACKALLOC(d, m->nv, mjtNum);
+  mjSTACKCHECK(d);
 
   // sleep filtering
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
@@ -1808,7 +1840,7 @@ mjtStatus mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
     // implicit
     if (m->opt.integrator == mjINT_IMPLICIT) {
       // compute analytical derivative qDeriv
-      mjd_smooth_vel(m, d, /* flg_bias = */ 1);
+      mjSTAGE_(mjd_smooth_vel(m, d, /* flg_bias = */ 1), mj_freeStack(d));
 
       // gather qLU <- M (lower to full)
       mju_gatherMasked(d->qLU, d->M, m->mapM2D, nD);
@@ -1820,7 +1852,7 @@ mjtStatus mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
     // implicitfast
     else if (m->opt.integrator == mjINT_IMPLICITFAST) {
       // compute analytical derivative qDeriv; skip rne derivative
-      mjd_smooth_vel(m, d, /* flg_bias = */ 0);
+      mjSTAGE_(mjd_smooth_vel(m, d, /* flg_bias = */ 0), mj_freeStack(d));
 
       // modified mass matrix: gather qH <- qDeriv (full to lower)
       mju_gather(d->qH, d->qDeriv, m->mapD2M, nC);
@@ -1847,6 +1879,7 @@ mjtStatus mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
     int clamped;
     if (m->opt.integrator == mjINT_IMPLICIT) {
       int* scratch = mjSTACKALLOC(d, nv, int);
+      mjSTACKCHECK(d);
       clamped = mju_factorLUSparse(d->qLU, nv, scratch,
                                    m->D_rownnz, m->D_rowadr, m->D_colind, dof_awake_ind);
     } else {
@@ -1902,7 +1935,7 @@ mjtStatus mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
   }
 
   // advance state and time
-  status = mji_join(status, mj_advance(m, d, d->act_dot, qacc, NULL));
+  mjSTAGE_(mj_advance(m, d, d->act_dot, qacc, NULL), mj_freeStack(d));
 
   mj_freeStack(d);
 
@@ -1932,7 +1965,7 @@ mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsen
     mjSTAGE(mj_fwdPosition(m, d));
 
     if (!skipsensor) {
-      mj_sensorPos(m, d);
+      mjSTAGE(mj_sensorPos(m, d));
     }
 
     if (!d->flg_energypos) {
@@ -1946,14 +1979,14 @@ mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsen
 
   // velocity-dependent
   if (skipstage < mjSTAGE_VEL) {
-    mj_fwdVelocity(m, d);
+    mjSTAGE(mj_fwdVelocity(m, d));
 
     if (!skipsensor) {
-      mj_sensorVel(m, d);
+      mjSTAGE(mj_sensorVel(m, d));
     }
 
     if (mjENABLED(mjENBL_ENERGY) && !d->flg_energyvel) {
-      mj_energyVel(m, d);
+      mjSTAGE(mj_energyVel(m, d));
     }
   }
 
@@ -1965,14 +1998,14 @@ mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsen
   mjSTAGE(mj_fwdActuation(m, d));
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
-    mj_regularizeConstraint(m, d, /*flg_AR=*/1);
-    mj_referenceConstraint(m, d);
+    mjSTAGE(mj_regularizeConstraint(m, d, /*flg_AR=*/1));
+    mjSTAGE(mj_referenceConstraint(m, d));
   }
   mjSTAGE(mj_fwdAcceleration(m, d));
   mjSTAGE(mj_fwdConstraint(m, d));
   if (!skipsensor) {
     d->flg_rnepost = 0;  // clear flag for lazy evaluation
-    mj_sensorAcc(m, d);
+    mjSTAGE(mj_sensorAcc(m, d));
   }
 
   TM_END(mjTIMER_FORWARD);
@@ -1983,7 +2016,7 @@ mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsen
 // forward dynamics
 mjtStatus mj_forward(const mjModel* m, mjData* d) {
   mjtStatus status = mjSTATUS_OK;
-  status = mji_join(status, mj_forwardSkip(m, d, mjSTAGE_NONE, 0));
+  mjSTAGE(mj_forwardSkip(m, d, mjSTAGE_NONE, 0));
   return mji_report(d, status);
 }
 
@@ -2007,20 +2040,20 @@ mjtStatus mj_step(const mjModel* m, mjData* d) {
   // use selected integrator
   switch ((mjtIntegrator) m->opt.integrator) {
   case mjINT_EULER:
-    status = mji_join(status, mj_Euler(m, d));
+    mjSTAGE(mj_Euler(m, d));
     break;
 
   case mjINT_RK4:
-    status = mji_join(status, mj_RungeKutta(m, d, 4));
+    mjSTAGE(mj_RungeKutta(m, d, 4));
     break;
 
   case mjINT_IMPLICIT:
   case mjINT_IMPLICITFAST:
-    status = mji_join(status, mj_implicit(m, d));
+    mjSTAGE(mj_implicit(m, d));
     break;
 
   case mjINT_DISCRETE:
-    status = mji_join(status, mj_discrete(m, d));
+    mjSTAGE(mj_discrete(m, d));
     break;
 
   default:
@@ -2041,7 +2074,7 @@ mjtStatus mj_step1(const mjModel* m, mjData* d) {
   mjSTAGE(mj_checkPos(m, d));
   mjSTAGE(mj_checkVel(m, d));
   mjSTAGE(mj_fwdPosition(m, d));
-  mj_sensorPos(m, d);
+  mjSTAGE(mj_sensorPos(m, d));
 
   if (!d->flg_energypos) {
     if (mjENABLED(mjENBL_ENERGY)) {
@@ -2051,10 +2084,10 @@ mjtStatus mj_step1(const mjModel* m, mjData* d) {
     }
   }
 
-  mj_fwdVelocity(m, d);
-  mj_sensorVel(m, d);
+  mjSTAGE(mj_fwdVelocity(m, d));
+  mjSTAGE(mj_sensorVel(m, d));
   if (mjENABLED(mjENBL_ENERGY) && !d->flg_energyvel) {
-    mj_energyVel(m, d);
+    mjSTAGE(mj_energyVel(m, d));
   }
 
   if (mjcb_control) {
@@ -2076,13 +2109,13 @@ mjtStatus mj_step2(const mjModel* m, mjData* d) {
   mjSTAGE(mj_fwdActuation(m, d));
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
-    mj_regularizeConstraint(m, d, /*flg_AR=*/1);
-    mj_referenceConstraint(m, d);
+    mjSTAGE(mj_regularizeConstraint(m, d, /*flg_AR=*/1));
+    mjSTAGE(mj_referenceConstraint(m, d));
   }
   mjSTAGE(mj_fwdAcceleration(m, d));
   mjSTAGE(mj_fwdConstraint(m, d));
   d->flg_rnepost = 0;  // clear flag for lazy evaluation
-  mj_sensorAcc(m, d);
+  mjSTAGE(mj_sensorAcc(m, d));
   mjSTAGE(mj_checkAcc(m, d));
 
   // compare forward and inverse solutions if enabled
@@ -2092,11 +2125,11 @@ mjtStatus mj_step2(const mjModel* m, mjData* d) {
 
   // integrate with Euler, implicit or discrete; RK4 defaults to Euler
   if (m->opt.integrator == mjINT_DISCRETE) {
-    status = mji_join(status, mj_discrete(m, d));
+    mjSTAGE(mj_discrete(m, d));
   } else if (m->opt.integrator == mjINT_IMPLICIT || m->opt.integrator == mjINT_IMPLICITFAST) {
-    status = mji_join(status, mj_implicit(m, d));
+    mjSTAGE(mj_implicit(m, d));
   } else {
-    status = mji_join(status, mj_Euler(m, d));
+    mjSTAGE(mj_Euler(m, d));
   }
 
   d->timer[mjTIMER_STEP].number--;

@@ -38,7 +38,7 @@ MJAPI void mj_mulJacVec(const mjModel* m, const mjData* d, mjtNum* res, const mj
 MJAPI void mj_mulJacTVec(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec);
 
 // subtract Jdot*v correction from result vector
-MJAPI void mj_Jdotv(const mjModel* m, mjData* d, mjtNum* result);
+MJAPI mjtStatus mj_Jdotv(const mjModel* m, mjData* d, mjtNum* result);
 
 
 //-------------------------- utility functions -----------------------------------------------------
@@ -61,10 +61,10 @@ MJAPI int mj_addContact(const mjModel* m, mjData* d, const mjContact* con);
 //-------------------------- constraint instantiation ----------------------------------------------
 
 // equality constraints
-void mj_instantiateEquality(const mjModel* m, mjData* d);
+mjtStatus mj_instantiateEquality(const mjModel* m, mjData* d);
 
 // frictionless and frictional contacts
-void mj_instantiateContact(const mjModel* m, mjData* d);
+mjtStatus mj_instantiateContact(const mjModel* m, mjData* d);
 
 // compute Jacobian for contact, return number of DOFs affected
 //
@@ -110,10 +110,10 @@ MJAPI mjNODISCARD mjtStatus mj_projectConstraint(const mjModel* m, mjData* d);
 void mj_velocityConstraint(const mjModel* m, mjData* d);
 
 // compute efc_vel, efc_aref
-MJAPI void mj_referenceConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_referenceConstraint(const mjModel* m, mjData* d);
 
 // compute efc_diagA (approximate or exact), efc_R, efc_D, efc_KBIP in the solve metric
-void mj_regularizeConstraint(const mjModel* m, mjData* d, int flg_AR);
+mjtStatus mj_regularizeConstraint(const mjModel* m, mjData* d, int flg_AR);
 
 // compute efc_state, efc_force
 //  optional: cost(qacc) = s_hat(jar); cone Hessians

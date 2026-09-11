@@ -128,6 +128,9 @@ void mjc_fixNormal(const mjModel* m, const mjData* d, mjPreContact* con, int g1,
 // set CCD internal buffer
 void mjc_setCCDBuffer(void* buffer);
 
+// get CCD internal buffer
+void* mjc_getCCDBuffer(void);
+
 #ifdef __cplusplus
 }
 #endif

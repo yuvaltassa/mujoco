@@ -400,9 +400,12 @@ class DocTest(googletest.TestCase):
         name: set(re.findall(r'\b(\w+)\s*\(', body)) & set(bodies)
         for name, body in bodies.items()
     }
+    # a function reports if it raises a warning, or checks a scratch allocation and reports
+    # mjSTATUS_OOM when it failed
     reaches = {
         name for name, body in bodies.items()
-        if re.search(r'\bmj_warning\s*\(|\bmj_addContact\s*\(', body)
+        if re.search(r'\bmj_warning\s*\(|\bmj_addContact\s*\(|\bmjSTACKCHECK|\bmj_stackFailed\s*\(|'
+                     r'\bmjSTATUS_OOM\b', body)
     } - {'mj_warning'}
     changed = True
     while changed:
@@ -415,8 +418,11 @@ class DocTest(googletest.TestCase):
     with open(_get_path('include', 'mujoco', 'mujoco.h'), encoding='utf-8') as f:
       header = f.read()
     sections = re.split(r'\n//-{20,} *(.*?) *-{5,}\n', header)
-    # mj_addContact keeps its documented 0/1; its callers translate a full buffer
-    exempt = {'mj_addContact'}
+    # mj_addContact keeps its documented 0/1; its callers translate a full buffer. The public
+    # utilities that allocate scratch keep their signatures: called by a user an overflow is an
+    # error, called by the pipeline they are given their scratch
+    exempt = {'mj_addContact', 'mj_geomDistance', 'mj_tendonDot', 'mj_resetData',
+              'mj_resetDataDebug', 'mj_resetDataKeyframe'}
     # reporting functions whose last warning site was refactored away: a published
     # signature outlives its warnings, and the function returns mjSTATUS_OK
     quiet = set()

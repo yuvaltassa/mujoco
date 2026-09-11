@@ -200,9 +200,9 @@ int mju_cholFactorSymbolic(int* restrict L_colind, int* restrict L_rownnz, int* 
                            int* restrict LT_rowadr, int* restrict LT_map,
                            const int* rownnz, const int* rowadr, const int* colind, int n,
                            mjData* d) {
-  // d supplies stack scratch; if NULL, scratch is heap-allocated
+  // d supplies stack scratch, returning -1 if it runs out; if NULL, scratch is heap-allocated
   if (d) {
-    mj_markStack(d);
+    mj_markStackChecked(d);
   }
   int* restrict parent = d ? mjSTACKALLOC(d, n, int) : (int*) mju_malloc(sizeof(int)*n);
   int* restrict flag = d ? mjSTACKALLOC(d, n, int) : (int*) mju_malloc(sizeof(int)*n);
@@ -213,6 +213,12 @@ int mju_cholFactorSymbolic(int* restrict L_colind, int* restrict L_rownnz, int* 
   if (L_colind) {
     cursor = d ? mjSTACKALLOC(d, n, int) : (int*) mju_malloc(sizeof(int)*n);
     LT_write = d ? mjSTACKALLOC(d, n, int) : (int*) mju_malloc(sizeof(int)*n);
+  }
+  if (d && mj_stackFailed(d)) {
+    mj_freeStack(d);
+    return -1;
+  }
+  if (L_colind) {
     for (int r = 0; r < n; r++) {
       cursor[r] = L_rowadr[r] + L_rownnz[r] - 2;  // end of row r (before diagonal)
       LT_write[r] = LT_rowadr[r];                 // start of LT row r

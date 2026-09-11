@@ -61,6 +61,7 @@ static mjtNum* cell_pos_and_jac(const mjModel* m, mjData* d, int flex_id, int np
   *cell_nnz = 0;
   int* dof_used = mjSTACKALLOC(d, nv, int);
   int* temp_chain = mjSTACKALLOC(d, nv, int);
+  mjSTACKCHECK_(d, (void)0, NULL);
   mju_zeroInt(dof_used, nv);
   for (int n = 0; n < npc; n++) {
     int temp_nnz = mj_bodyChain(m, bodyid[gindices[n]], temp_chain);
@@ -76,9 +77,10 @@ static mjtNum* cell_pos_and_jac(const mjModel* m, mjData* d, int flex_id, int np
 
   // build per-cell node Jacobians: 3*npc x cell_nnz
   mjtNum* cell_node_jac = mjSTACKALLOC(d, 3*npc*(*cell_nnz), mjtNum);
-  mju_zero(cell_node_jac, 3*npc*(*cell_nnz));
   int* chain_col = mjSTACKALLOC(d, nv, int);
   mjtNum* blk_jac = mjSTACKALLOC(d, 3*nv, mjtNum);
+  mjSTACKCHECK_(d, (void)0, NULL);
+  mju_zero(cell_node_jac, 3*npc*(*cell_nnz));
   for (int n = 0; n < npc; n++) {
     int body = bodyid[gindices[n]];
     int chain_n = mj_bodyChain(m, body, chain_col);
@@ -582,7 +584,8 @@ static void mj_equalityAnchors(const mjModel* m, const mjData* d, int eq_id,
 //--------------------- instantiate constraints by type --------------------------------------------
 
 // equality constraints
-void mj_instantiateEquality(const mjModel* m, mjData* d) {
+mjtStatus mj_instantiateEquality(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int issparse = mj_isSparse(m), nv = m->nv;
   int id[2], size, NV, NV2, *chain = NULL, *chain2 = NULL;
   int flex_edgeadr, flex_edgenum;
@@ -593,13 +596,13 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
 
   // disabled or no equality constraints: return
   if (mjDISABLED(mjDSBL_EQUALITY) || m->nemax == 0) {
-    return;
+    return status;
   }
 
   // sleep filtering
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->ntree_awake < m->ntree;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // allocate space
   jac[0] = mjSTACKALLOC(d, 6*nv, mjtNum);
@@ -609,6 +612,7 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
     chain = mjSTACKALLOC(d, nv, int);
     chain2 = mjSTACKALLOC(d, nv, int);
   }
+  mjSTACKCHECK(d);
 
   // find active equality constraints
   for (int i=0; i < m->neq; i++) {
@@ -830,7 +834,7 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
         elem_idx = ci * cy * cz + cj * cz + ck;
       }
 
-      mj_markStack(d);
+      mj_markStackChecked(d);
 
       // get element node indices
       int gindices[125];  // max npc = 125 for quadratic
@@ -846,6 +850,11 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
       // compute positions only for element nodes (npe << nodenum)
       mjtNum* xpos_e = mjSTACKALLOC(d, 3*npe, mjtNum);
       mjtNum* refpos_e = mjSTACKALLOC(d, 3*npe, mjtNum);
+      if (mj_stackFailed(d)) {
+        mj_freeStack(d);  // this frame, and the one it is nested in
+        mj_freeStack(d);
+        return mji_report(d, mjSTATUS_OOM);
+      }
       for (int n = 0; n < npe; n++) {
         int gn = gindices[n];
         if (m->flex_centered[f] ||
@@ -890,18 +899,38 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
 
       // build per-element sparse chain and node Jacobians
       int* elem_chain = mjSTACKALLOC(d, nv, int);
+      if (mj_stackFailed(d)) {
+        mj_freeStack(d);  // this frame, and the one it is nested in
+        mj_freeStack(d);
+        return mji_report(d, mjSTATUS_OOM);
+      }
       int elem_nnz = 0;
       mjtNum* elem_node_jac = cell_pos_and_jac(m, d, f, npe, gindices, nv, xpos_e, elem_chain,
                                                &elem_nnz);
+      if (mj_stackFailed(d)) {
+        mj_freeStack(d);  // this frame, and the one it is nested in
+        mj_freeStack(d);
+        return mji_report(d, mjSTATUS_OOM);
+      }
 
 
       mjtNum* strain_jac = mjSTACKALLOC(d, elem_nnz, mjtNum);
       mjtNum* dSdx_local = mjSTACKALLOC(d, 3*npe, mjtNum);
+      if (mj_stackFailed(d)) {
+        mj_freeStack(d);  // this frame, and the one it is nested in
+        mj_freeStack(d);
+        return mji_report(d, mjSTATUS_OOM);
+      }
 
       // for dense mode: allocate and zero a dense Jacobian buffer once
       mjtNum* dense_jac = NULL;
       if (!issparse) {
         dense_jac = mjSTACKALLOC(d, nv, mjtNum);
+        if (mj_stackFailed(d)) {
+          mj_freeStack(d);  // this frame, and the one it is nested in
+          mj_freeStack(d);
+          return mji_report(d, mjSTATUS_OOM);
+        }
         mju_zero(dense_jac, nv);
       }
 
@@ -918,6 +947,11 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
 
       // compute displacement in corotational frame
       mjtNum* displ_e = mjSTACKALLOC(d, ndof_elem, mjtNum);
+      if (mj_stackFailed(d)) {
+        mj_freeStack(d);  // this frame, and the one it is nested in
+        mj_freeStack(d);
+        return mji_report(d, mjSTATUS_OOM);
+      }
       for (int n = 0; n < npe; n++) {
         // rotate xpos_e to corotational frame
         mjtNum xrot[3];
@@ -1039,23 +1073,26 @@ void mj_instantiateEquality(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 // subtract Jdot*v correction from result vector for equality constraints
-void mj_Jdotv(const mjModel* m, mjData* d, mjtNum* result) {
+mjtStatus mj_Jdotv(const mjModel* m, mjData* d, mjtNum* result) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, ne = d->ne;
 
   // nothing to do
   if (!ne || !nv) {
-    return;
+    return status;
   }
 
   int issparse = mj_isSparse(m);
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // allocate scratch for jacDot matrices (translational and rotational)
   int* chain = issparse ? mjSTACKALLOC(d, nv, int) : NULL;
+  mjSTACKCHECK(d);
   mjtNum* jacdot1 = NULL;
   mjtNum* jacdot2 = NULL;
   mjtNum* jacrdot1 = NULL;
@@ -1075,12 +1112,14 @@ void mj_Jdotv(const mjModel* m, mjData* d, mjtNum* result) {
       if (!jacdot1) {
         jacdot1 = mjSTACKALLOC(d, 3*nv, mjtNum);
         jacdot2 = mjSTACKALLOC(d, 3*nv, mjtNum);
+        mjSTACKCHECK(d);
       }
 
       // allocate rotational scratch on first weld
       if (type == mjEQ_WELD && !jacrdot1) {
         jacrdot1 = mjSTACKALLOC(d, 3*nv, mjtNum);
         jacrdot2 = mjSTACKALLOC(d, 3*nv, mjtNum);
+        mjSTACKCHECK(d);
       }
 
       // compute global anchor points and body ids
@@ -1241,6 +1280,7 @@ void mj_Jdotv(const mjModel* m, mjData* d, mjtNum* result) {
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
@@ -1270,10 +1310,11 @@ static int mj_instantiateFriction(const mjModel* m, mjData* d, int count_only, i
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->ntree_awake < m->ntree;
 
   if (!count_only) {
-    mj_markStack(d);
+    mj_markStackChecked(d);
 
     // allocate Jacobian
     jac = mjSTACKALLOC(d, nv, mjtNum);
+    mjSTACKCHECK_(d, mj_freeStack(d), -1);
   }
 
   // find frictional DOFs
@@ -1361,10 +1402,11 @@ static int mj_instantiateLimit(const mjModel* m, mjData* d, int count_only, int*
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->ntree_awake < m->ntree;
 
   if (!count_only) {
-    mj_markStack(d);
+    mj_markStackChecked(d);
 
     // allocate Jacobian
     jac = mjSTACKALLOC(d, nv, mjtNum);
+    mjSTACKCHECK_(d, mj_freeStack(d), -1);
   }
 
   // find joint limits
@@ -1603,17 +1645,18 @@ int mj_contactJacobian(const mjModel* m, mjData* d, const mjContact* con, int di
 
 
 // frictionless and frictional contacts
-void mj_instantiateContact(const mjModel* m, mjData* d) {
+mjtStatus mj_instantiateContact(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int ispyramid = mj_isPyramidal(m), issparse = mj_isSparse(m), ncon = d->ncon;
   int dim, NV, nv = m->nv, *chain = NULL;
   mjContact* con;
   mjtNum cpos[6], cmargin[6], *jac, *jacdifp, *jacdifr, *jac1p, *jac2p, *jac1r, *jac2r;
 
   if (mjDISABLED(mjDSBL_CONTACT) || ncon == 0 || nv == 0) {
-    return;
+    return status;
   }
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // allocate Jacobian
   jac = mjSTACKALLOC(d, 6*nv, mjtNum);
@@ -1626,6 +1669,7 @@ void mj_instantiateContact(const mjModel* m, mjData* d) {
   if (issparse) {
     chain = mjSTACKALLOC(d, nv, int);
   }
+  mjSTACKCHECK(d);
 
   // find contacts to be included
   for (int i=0; i < ncon; i++) {
@@ -1639,6 +1683,10 @@ void mj_instantiateContact(const mjModel* m, mjData* d) {
     con->efc_address = d->nefc;
     NV = mj_contactJacobian(m, d, con, dim, jacdifp, jacdifr,
                             jac1p, jac2p, jac1r, jac2r, chain);
+    if (NV < 0) {
+      mj_freeStack(d);
+      return mjSTATUS_OOM;
+    }
 
     // skip contact if no DOFs affected
     if (NV == 0) {
@@ -1699,6 +1747,7 @@ void mj_instantiateContact(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
@@ -2296,19 +2345,20 @@ void mj_makeImpedance(const mjModel* m, mjData* d) {
 
 // forward declarations (defined in the projection section below)
 static mjNODISCARD mjtStatus mj_makeYSymbolic(const mjModel* m, mjData* d);
-static void mj_makeYNumeric(const mjModel* m, mjData* d, int flg_diagexact);
+static mjtStatus mj_makeYNumeric(const mjModel* m, mjData* d, int flg_diagexact);
 static mjNODISCARD mjtStatus mj_makeARSymbolic(const mjModel* m, mjData* d);
-static void mj_makeARNumeric(const mjModel* m, mjData* d);
+static mjtStatus mj_makeARNumeric(const mjModel* m, mjData* d);
 
 // compute constraint regularization in the current solve metric: efc_diagA (approximate,
 // or exact under diagexact), then R, D, KBIP. Under the discrete integrator this runs at
 // the actuation stage, where the effective metric is final; islands are discovered at the
 // position stage, so their R/D copies are refreshed here. flg_AR: assemble the dual's AR
 // (forward path); inverse dynamics never consumes it and passes 0
-void mj_regularizeConstraint(const mjModel* m, mjData* d, int flg_AR) {
+mjtStatus mj_regularizeConstraint(const mjModel* m, mjData* d, int flg_AR) {
+  mjtStatus status = mjSTATUS_OK;
   int nefc = d->nefc, nv = m->nv;
   if (!nefc) {
-    return;
+    return status;
   }
 
   // whitened Jacobian against the metric factor: exact diagonal, and/or the dual's AR.
@@ -2316,7 +2366,7 @@ void mj_regularizeConstraint(const mjModel* m, mjData* d, int flg_AR) {
   // laid down by mj_projectConstraint; re-running this stage allocates nothing
   int isDual = mj_isDual(m);
   if (mjENABLED(mjENBL_DIAGEXACT) || (isDual && flg_AR)) {
-    mj_makeYNumeric(m, d, mjENABLED(mjENBL_DIAGEXACT));
+    mjSTAGE(mj_makeYNumeric(m, d, mjENABLED(mjENBL_DIAGEXACT)));
   }
 
   // approximate diagonal, corrected per row by the diagonal-class metric ratio
@@ -2350,7 +2400,7 @@ void mj_regularizeConstraint(const mjModel* m, mjData* d, int flg_AR) {
 
   // assemble AR = Y*Y' + diag(R) for the dual solvers
   if (isDual && flg_AR) {
-    mj_makeARNumeric(m, d);
+    mjSTAGE(mj_makeARNumeric(m, d));
   }
 
   // refresh island copies of R and D
@@ -2358,6 +2408,7 @@ void mj_regularizeConstraint(const mjModel* m, mjData* d, int flg_AR) {
     mju_gather(d->iefc_D, d->efc_D, d->map_iefc2efc, nefc);
     mju_gather(d->iefc_R, d->efc_R, d->map_iefc2efc, nefc);
   }
+  return status;
 }
 
 
@@ -2368,9 +2419,10 @@ static int mj_jacSumCount(const mjModel* m, mjData* d, int* chain,
                           int n, const int* body) {
   int nv = m->nv, NV;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   int* bodychain = mjSTACKALLOC(d, nv, int);
   int* tempchain = mjSTACKALLOC(d, nv, int);
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
 
   // set first
   NV = mj_bodyChain(m, body[0], chain);
@@ -2410,15 +2462,17 @@ static int mj_ne(const mjModel* m, mjData* d, int* nnz) {
   // sleep filtering
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->ntree_awake < m->ntree;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   if (nnz) {
     chain = mjSTACKALLOC(d, nv, int);
     chain2 = mjSTACKALLOC(d, nv, int);
+    mjSTACKCHECK_(d, mj_freeStack(d), -1);
   }
 
   // pre-allocate buffer for cell body IDs (max npc = 125 for order=2)
   int* cell_bodies = nnz ? mjSTACKALLOC(d, 125, int) : NULL;
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
 
   // find active equality constraints
   for (int i=0; i < neq; i++) {
@@ -2598,6 +2652,10 @@ static int mj_ne(const mjModel* m, mjData* d, int* nnz) {
           cell_bodies[n] = m->flex_nodebodyid[nstart + gindices[n]];
         }
         NV = mj_jacSumCount(m, d, chain, npe, cell_bodies);
+        if (NV < 0) {
+          mj_freeStack(d);
+          return -1;
+        }
         NV = size * NV;
       }
       break;
@@ -2639,8 +2697,9 @@ static int mj_nc(const mjModel* m, mjData* d, int* nnz) {
   // sleep filtering
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->ntree_awake < m->ntree;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   int *chain = mjSTACKALLOC(d, m->nv, int);
+  mjSTACKCHECK_(d, mj_freeStack(d), -1);
 
   for (int i=0; i < ncon; i++) {
     mjContact* con = d->contact + i;
@@ -2761,6 +2820,10 @@ static int mj_nc(const mjModel* m, mjData* d, int* nnz) {
 
         // count non-zeros in merged chain
         NV = mj_jacSumCount(m, d, chain, nb, bid);
+        if (NV < 0) {
+          mj_freeStack(d);
+          return -1;
+        }
       }
       if (!NV) {
         continue;
@@ -2939,6 +3002,9 @@ mjtStatus mj_makeConstraint(const mjModel* m, mjData* d) {
   int nf_allocated = mj_instantiateFriction(m, d, 1, nnz);
   int nl_allocated = mj_instantiateLimit(m, d, 1, nnz);
   int nc_allocated = mj_nc(m, d, nnz);
+  if (ne_allocated < 0 || nf_allocated < 0 || nl_allocated < 0 || nc_allocated < 0) {
+    return mji_report(d, mjSTATUS_OOM);
+  }
   int nefc_allocated = ne_allocated + nf_allocated + nl_allocated + nc_allocated;
   if (!mj_isSparse(m)) {
     d->nJ = nefc_allocated * m->nv;
@@ -2956,10 +3022,14 @@ mjtStatus mj_makeConstraint(const mjModel* m, mjData* d) {
 
   // reset nefc for the instantiation functions, instantiate all elements of Jacobian
   d->nefc = 0;
-  mj_instantiateEquality(m, d);
-  mj_instantiateFriction(m, d, 0, NULL);
-  mj_instantiateLimit(m, d, 0, NULL);
-  mj_instantiateContact(m, d);
+  mjSTAGE(mj_instantiateEquality(m, d));
+  if (mj_instantiateFriction(m, d, 0, NULL) < 0) {
+    return mji_report(d, mjSTATUS_OOM);
+  }
+  if (mj_instantiateLimit(m, d, 0, NULL) < 0) {
+    return mji_report(d, mjSTATUS_OOM);
+  }
+  mjSTAGE(mj_instantiateContact(m, d));
 
   // check sparse allocation
   if (mj_isSparse(m)) {
@@ -3038,8 +3108,9 @@ static mjtStatus mj_makeYSymbolic(const mjModel* m, mjData* d) {
     }
 
     // pre-count Y_rownnz, Y_rowadr, nY (total nonzeros)
-    mj_markStack(d);
+    mj_markStackChecked(d);
     int* marker = mjSTACKALLOC(d, nv, int);
+    mjSTACKCHECK(d);
     d->nY = computeY_precount(d->efc_Y_rownnz, d->efc_Y_rowadr, nefc, nv,
                               d->efc_J_rownnz, d->efc_J_rowadr, d->efc_J_colind,
                               m->M_rownnz, m->M_rowadr, m->M_colind, marker);
@@ -3083,15 +3154,16 @@ static mjtStatus mj_makeYSymbolic(const mjModel* m, mjData* d) {
 // numeric phase of Y = J*M^{-1/2}: refill values from J and backsubstitute against the
 // current solve metric's factor; if flg_diagexact, overwrite efc_diagA with ||Y_i||^2.
 // No allocation: safe to re-run at the actuation stage (mj_regularizeConstraint)
-static void mj_makeYNumeric(const mjModel* m, mjData* d, int flg_diagexact) {
+static mjtStatus mj_makeYNumeric(const mjModel* m, mjData* d, int flg_diagexact) {
+  mjtStatus status = mjSTATUS_OK;
   int nefc = d->nefc, nv = m->nv;
 
   // symbolic phase did not run (option flags changed mid-step): nothing to fill
   if (!d->efc_Y) {
-    return;
+    return status;
   }
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // factor of the solve metric: the qH backbone under discrete, else qLD. The backbone is
   // all the dual solvers see: under PGS the coupling classes are excluded from the metric
@@ -3104,6 +3176,7 @@ static void mj_makeYNumeric(const mjModel* m, mjData* d, int flg_diagexact) {
 
   // inverse square root of D from the metric factor's LDL decomposition
   mjtNum* sqrtInvD = mjSTACKALLOC(d, nv, mjtNum);
+  mjSTACKCHECK(d);
   for (int i=0; i < nv; i++) {
     int diag = m->M_rowadr[i] + m->M_rownnz[i] - 1;
     sqrtInvD[i] = 1 / mju_sqrt(factor[diag]);
@@ -3145,6 +3218,7 @@ static void mj_makeYNumeric(const mjModel* m, mjData* d, int flg_diagexact) {
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
@@ -3160,12 +3234,13 @@ static mjtStatus mj_makeARSymbolic(const mjModel* m, mjData* d) {
     // Y supernodes are identical to J supernodes
     const int* Y_rowsuper = d->efc_J_rowsuper;
 
-    mj_markStack(d);
+    mj_markStackChecked(d);
 
     // Y transposed, pattern only
     int* YT_rownnz = mjSTACKALLOC(d, nv, int);
     int* YT_rowadr = mjSTACKALLOC(d, nv, int);
     int* YT_colind = mjSTACKALLOC(d, d->nY, int);
+    mjSTACKCHECK(d);
     mju_transposeSparse(NULL, NULL, nefc, nv,
                         YT_rownnz, YT_rowadr, YT_colind, NULL,
                         d->efc_Y_rownnz, d->efc_Y_rowadr, d->efc_Y_colind);
@@ -3182,10 +3257,15 @@ static mjtStatus mj_makeARSymbolic(const mjModel* m, mjData* d) {
     }
 
     int* diagind = mjSTACKALLOC(d, nefc, int);
+    mjSTACKCHECK(d);
     d->nA = mju_sqrMatTDSparseSymbolic(
         d->efc_AR_rownnz, d->efc_AR_rowadr, NULL, diagind,
         nv, nefc, YT_rownnz, YT_rowadr, YT_colind,
         d->efc_Y_rownnz, d->efc_Y_rowadr, d->efc_Y_colind, Y_rowsuper, d);
+    if (d->nA < 0) {
+      mj_freeStack(d);
+      return mjSTATUS_OOM;
+    }
 
     // allocate A values and column indices on arena
     d->efc_AR = mj_arenaAllocByte(d, sizeof(mjtNum) * d->nA, _Alignof(mjtNum));
@@ -3199,10 +3279,13 @@ static mjtStatus mj_makeARSymbolic(const mjModel* m, mjData* d) {
     }
 
     // A = Y * Y': symbolic phase
-    mju_sqrMatTDSparseSymbolic(
+    if (mju_sqrMatTDSparseSymbolic(
         d->efc_AR_rownnz, d->efc_AR_rowadr, d->efc_AR_colind, diagind,
         nv, nefc, YT_rownnz, YT_rowadr, YT_colind,
-        d->efc_Y_rownnz, d->efc_Y_rowadr, d->efc_Y_colind, Y_rowsuper, d);
+        d->efc_Y_rownnz, d->efc_Y_rowadr, d->efc_Y_colind, Y_rowsuper, d) < 0) {
+      mj_freeStack(d);
+      return mjSTATUS_OOM;
+    }
 
     mj_freeStack(d);
   }
@@ -3224,15 +3307,16 @@ static mjtStatus mj_makeARSymbolic(const mjModel* m, mjData* d) {
 
 // numeric phase of AR = Y*Y' + diag(R), into the pattern laid down by the symbolic
 // phase. No allocation: safe to re-run at the actuation stage (mj_regularizeConstraint)
-static void mj_makeARNumeric(const mjModel* m, mjData* d) {
+static mjtStatus mj_makeARNumeric(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nefc = d->nefc, nv = m->nv;
 
   // symbolic phase did not run (option flags changed mid-step): nothing to fill
   if (!d->efc_AR) {
-    return;
+    return status;
   }
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
 
   // sparse
   if (mj_isSparse(m)) {
@@ -3244,12 +3328,14 @@ static void mj_makeARNumeric(const mjModel* m, mjData* d) {
     int* YT_rowadr = mjSTACKALLOC(d, nv, int);
     int* YT_colind = mjSTACKALLOC(d, d->nY, int);
     mjtNum* YT = mjSTACKALLOC(d, d->nY, mjtNum);
+    mjSTACKCHECK(d);
     mju_transposeSparse(YT, d->efc_Y, nefc, nv,
                         YT_rownnz, YT_rowadr, YT_colind, NULL,
                         d->efc_Y_rownnz, d->efc_Y_rowadr, d->efc_Y_colind);
 
     // diagonal positions, recovered from the stored pattern (rows are sorted)
     int* diagind = mjSTACKALLOC(d, nefc, int);
+    mjSTACKCHECK(d);
     for (int i=0; i < nefc; i++) {
       int adr = d->efc_AR_rowadr[i];
       int end = adr + d->efc_AR_rownnz[i];
@@ -3276,6 +3362,7 @@ static void mj_makeARNumeric(const mjModel* m, mjData* d) {
   else {
     // construct YT on stack
     mjtNum* YT = mjSTACKALLOC(d, nv*nefc, mjtNum);
+    mjSTACKCHECK(d);
     mju_transpose(YT, d->efc_Y, nefc, nv);
 
     // AR = Y * Y'
@@ -3288,6 +3375,7 @@ static void mj_makeARNumeric(const mjModel* m, mjData* d) {
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
@@ -3312,9 +3400,9 @@ mjtStatus mj_projectConstraint(const mjModel* m, mjData* d) {
   // allocation-free
   if (mj_isMetric(m)) {
     if (isDual || diagexact) {
-      status = mji_join(status, mj_makeYSymbolic(m, d));
+      mjSTAGE(mj_makeYSymbolic(m, d));
       if (isDual && d->nefc) {
-        status = mji_join(status, mj_makeARSymbolic(m, d));
+        mjSTAGE(mj_makeARSymbolic(m, d));
       }
     }
     return mji_report(d, status);
@@ -3324,7 +3412,7 @@ mjtStatus mj_projectConstraint(const mjModel* m, mjData* d) {
   if (isDual || diagexact) {
     mjSTAGE(mj_makeYSymbolic(m, d));
     if (d->nefc) {
-      mj_makeYNumeric(m, d, diagexact);
+      mjSTAGE(mj_makeYNumeric(m, d, diagexact));
     }
   }
 
@@ -3341,9 +3429,9 @@ mjtStatus mj_projectConstraint(const mjModel* m, mjData* d) {
 
   // assemble AR for dual solver
   if (isDual && d->nefc) {
-    status = mji_join(status, mj_makeARSymbolic(m, d));
+    mjSTAGE(mj_makeARSymbolic(m, d));
     if (d->nefc) {
-      mj_makeARNumeric(m, d);
+      mjSTAGE(mj_makeARNumeric(m, d));
     }
   }
   return mji_report(d, status);
@@ -3462,7 +3550,8 @@ void mj_velocityConstraint(const mjModel* m, mjData* d) {
 
 
 // compute efc_vel, efc_aref
-void mj_referenceConstraint(const mjModel* m, mjData* d) {
+mjtStatus mj_referenceConstraint(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nefc = d->nefc;
   const mjtNum* KBIP = d->efc_KBIP;
   int metric = mj_isMetric(m);
@@ -3483,7 +3572,7 @@ void mj_referenceConstraint(const mjModel* m, mjData* d) {
 
   // subtract Jdot*v correction for connect/weld equality constraints
   if (d->ne > 0) {
-    mj_Jdotv(m, d, d->efc_aref);
+    mjSTAGE(mj_Jdotv(m, d, d->efc_aref));
   }
 
   // implicit rows: divide by the factor which scaled the row weight in mj_makeImpedance;
@@ -3497,6 +3586,7 @@ void mj_referenceConstraint(const mjModel* m, mjData* d) {
   // bias adhesive contact rows: a force offset (D*R*edge = edge), independent of the row factor,
   // so it is added after the division
   mj_adhesionRef(m, d);
+  return mji_report(d, status);
 }
 
 

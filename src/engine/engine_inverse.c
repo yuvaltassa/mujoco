@@ -47,8 +47,8 @@ mjtStatus mj_invPosition(const mjModel* m, mjData* d) {
   mj_kinematics(m, d);
   mj_comPos(m, d);
   mj_camlight(m, d);
-  mj_flex(m, d);
-  mj_tendon(m, d);
+  mjSTAGE(mj_flex(m, d));
+  mjSTAGE(mj_tendon(m, d));
   TM_END(mjTIMER_POS_KINEMATICS);
 
   mj_makeM(m, d);  // timed internally (POS_INERTIA)
@@ -68,11 +68,11 @@ mjtStatus mj_invPosition(const mjModel* m, mjData* d) {
   }
 
   TM_RESTART;
-  mj_transmission(m, d);
+  mjSTAGE(mj_transmission(m, d));
   TM_ADD(mjTIMER_POS_KINEMATICS);
 
   // implicit effective metric: multiply-only build (no factorization) for the inverse
-  mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/0);
+  mjSTAGE(mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/0));
 
   TM_END1(mjTIMER_POSITION);
   return mji_report(d, status);
@@ -80,18 +80,22 @@ mjtStatus mj_invPosition(const mjModel* m, mjData* d) {
 
 
 // velocity-dependent computations
-void mj_invVelocity(const mjModel* m, mjData* d) {
-  mj_fwdVelocity(m, d);
+mjtStatus mj_invVelocity(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
+  mjSTAGE(mj_fwdVelocity(m, d));
+  return mji_report(d, status);
 }
 
 
 // convert discrete-time qacc to continuous-time qacc
-static void mj_discreteAcc(const mjModel* m, mjData* d) {
+static mjtStatus mj_discreteAcc(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nC = m->nC, nD = m->nD, dof_damping;
   mjtNum *qacc = d->qacc;
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* qfrc = mjSTACKALLOC(d, nv, mjtNum);
+  mjSTACKCHECK(d);
 
   // use selected integrator
   switch ((mjtIntegrator) m->opt.integrator) {
@@ -99,12 +103,12 @@ static void mj_discreteAcc(const mjModel* m, mjData* d) {
     // qacc is already the discrete step map: the effective-metric terms are handled
     // natively by mj_inverseSkip, so INVDISCRETE is implied and there is nothing to do
     mj_freeStack(d);
-    return;
+    return status;
 
   case mjINT_RK4:
     // not supported by RK4
     mjERROR("discrete inverse dynamics is not supported by RK4 integrator");
-    return;
+    return status;
 
   case mjINT_EULER:
     // check for dof damping if disable flag is not set
@@ -123,7 +127,7 @@ static void mj_discreteAcc(const mjModel* m, mjData* d) {
     // if disabled or no dof damping, nothing to do
     if (!dof_damping) {
       mj_freeStack(d);
-      return;
+      return status;
     }
 
     // set qfrc = (M + h*diag(B)) * qacc
@@ -141,7 +145,7 @@ static void mj_discreteAcc(const mjModel* m, mjData* d) {
 
   case mjINT_IMPLICIT:
     // compute qDeriv
-    mjd_smooth_vel(m, d, /* flg_bias = */ 1);
+    mjSTAGE_(mjd_smooth_vel(m, d, /* flg_bias = */ 1), mj_freeStack(d));
 
     // gather qLU <- M (lower to full)
     mju_gatherMasked(d->qLU, d->M, m->mapM2D, nD);
@@ -156,10 +160,11 @@ static void mj_discreteAcc(const mjModel* m, mjData* d) {
 
   case mjINT_IMPLICITFAST:
     // compute analytical derivative qDeriv; skip rne derivative
-    mjd_smooth_vel(m, d, /* flg_bias = */ 0);
+    mjSTAGE_(mjd_smooth_vel(m, d, /* flg_bias = */ 0), mj_freeStack(d));
 
     // save mass matrix
     mjtNum* Msave = mjSTACKALLOC(d, m->nC, mjtNum);
+    mjSTACKCHECK(d);
     mju_copy(Msave, d->M, m->nC);
 
     // modified mass matrix: gather qH <- qDeriv (full to lower)
@@ -190,12 +195,14 @@ static void mj_discreteAcc(const mjModel* m, mjData* d) {
   mj_freeStack(d);
 
   // refresh the metric's velocity-stage values
-  mjd_effShift(m, d);
+  mjSTAGE_(mjd_effShift(m, d), mj_freeStack(d));
+  return status;
 }
 
 
 // inverse constraint solver
-void mj_invConstraint(const mjModel* m, mjData* d) {
+mjtStatus mj_invConstraint(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   TM_START;
   int nefc = d->nefc;
 
@@ -203,11 +210,12 @@ void mj_invConstraint(const mjModel* m, mjData* d) {
   if (!nefc) {
     mju_zero(d->qfrc_constraint, m->nv);
     TM_END(mjTIMER_CONSTRAINT);
-    return;
+    return mji_report(d, status);
   }
 
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* jar = mjSTACKALLOC(d, nefc, mjtNum);
+  mjSTACKCHECK(d);
 
   // compute jar = Jac*qacc - aref
   mj_mulJacVec(m, d, jar, d->qacc);
@@ -218,6 +226,7 @@ void mj_invConstraint(const mjModel* m, mjData* d) {
 
   mj_freeStack(d);
   TM_END(mjTIMER_CONSTRAINT);
+  return mji_report(d, status);
 }
 
 
@@ -226,7 +235,7 @@ mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
                          int skipstage, int skipsensor) {
   TM_START;
   mjtStatus status = mjSTATUS_OK;
-  mj_markStack(d);
+  mj_markStackChecked(d);
   mjtNum* qacc;
   int nv = m->nv;
 
@@ -237,7 +246,7 @@ mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
   if (skipstage < mjSTAGE_POS) {
     mjSTAGE_(mj_invPosition(m, d), mj_freeStack(d));
     if (!skipsensor) {
-      mj_sensorPos(m, d);
+      mjSTAGE_(mj_sensorPos(m, d), mj_freeStack(d));
     }
     if (mjENABLED(mjENBL_ENERGY) && !d->flg_energypos) {
       mj_energyPos(m, d);
@@ -246,51 +255,53 @@ mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
 
   // velocity-dependent
   if (skipstage < mjSTAGE_VEL) {
-    mj_invVelocity(m, d);
+    mjSTAGE_(mj_invVelocity(m, d), mj_freeStack(d));
     if (!skipsensor) {
-      mj_sensorVel(m, d);
+      mjSTAGE_(mj_sensorVel(m, d), mj_freeStack(d));
     }
     if (mjENABLED(mjENBL_ENERGY) && !d->flg_energyvel) {
-      mj_energyVel(m, d);
+      mjSTAGE_(mj_energyVel(m, d), mj_freeStack(d));
     }
   }
 
   // actuation-stage metric refresh: reads ctrl/act from mjData without running actuation
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
-    mj_regularizeConstraint(m, d, /*flg_AR=*/0);
-    mj_referenceConstraint(m, d);
+    mjSTAGE_(mj_regularizeConstraint(m, d, /*flg_AR=*/0), mj_freeStack(d));
+    mjSTAGE_(mj_referenceConstraint(m, d), mj_freeStack(d));
   }
 
   if (mjENABLED(mjENBL_INVDISCRETE)) {
     // save current qacc
     qacc = mjSTACKALLOC(d, nv, mjtNum);
+    mjSTACKCHECK(d);
     mju_copy(qacc, d->qacc, nv);
 
     // modify qacc in-place
-    mj_discreteAcc(m, d);
+    mjSTAGE_(mj_discreteAcc(m, d), mj_freeStack(d));
   }
 
   // acceleration-dependent
-  mj_invConstraint(m, d);
+  mjSTAGE_(mj_invConstraint(m, d), mj_freeStack(d));
 
   // sum of bias forces in qfrc_inverse = centripetal + Coriolis + tendon bias
-  mj_rne(m, d, 0, d->qfrc_inverse);
-  mj_tendonBias(m, d, d->qfrc_inverse);
+  mjSTAGE_(mj_rne(m, d, 0, d->qfrc_inverse), mj_freeStack(d));
+  mjSTAGE_(mj_tendonBias(m, d, d->qfrc_inverse), mj_freeStack(d));
 
   if (!skipsensor) {
     d->flg_rnepost = 0;  // clear flag for lazy evaluation
-    mj_sensorAcc(m, d);
+    mjSTAGE_(mj_sensorAcc(m, d), mj_freeStack(d));
   }
 
   // compute Ma = M*qacc
   mjtNum* Ma = mjSTACKALLOC(d, nv, mjtNum);
+  mjSTACKCHECK(d);
   mj_mulM(m, d, Ma, d->qacc);
 
   // implicit effective metric (built in mj_invPosition): the forward dynamics solved
   // (M+K)*qacc = qfrc + c + J'*f, so the discrete-consistent inverse adds K*qacc - c
   if (d->efm_active) {
-    mjd_effMulAdd(m, d, Ma, d->qacc, /*flg_contact=*/1);
+    mjSTAGE_(mjd_effMulAdd(m, d, Ma, d->qacc, /*flg_contact=*/1), mj_freeStack(d));
 
     // decoupled standalone free bodies took the local gyroscopic solve in the forward
     // pass (mj_discreteGyro): mirror it, overwriting their rows with the local product
@@ -330,7 +341,7 @@ mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
 // inverse dynamics
 mjtStatus mj_inverse(const mjModel* m, mjData* d) {
   mjtStatus status = mjSTATUS_OK;
-  status = mji_join(status, mj_inverseSkip(m, d, mjSTAGE_NONE, 0));
+  mjSTAGE(mj_inverseSkip(m, d, mjSTAGE_NONE, 0));
   return mji_report(d, status);
 }
 
@@ -350,16 +361,17 @@ mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d) {
   }
 
   // allocate
-  mj_markStack(d);
+  mj_markStackChecked(d);
   qforce = mjSTACKALLOC(d, nv, mjtNum);
   dif = mjSTACKALLOC(d, nv, mjtNum);
   save_qfrc_constraint = mjSTACKALLOC(d, nv, mjtNum);
   save_efc_force = mjSTACKALLOC(d, nefc, mjtNum);
+  mjSTACKCHECK(d);
 
   // qforce = qfrc_applied + J'*xfrc_applied + qfrc_actuator
   //  should equal result of inverse dynamics
   mju_add(qforce, d->qfrc_applied, d->qfrc_actuator, nv);
-  mj_xfrcAccumulate(m, d, qforce);
+  mjSTAGE_(mj_xfrcAccumulate(m, d, qforce), mj_freeStack(d));
 
   // save forward dynamics results that are about to be modified
   mju_copy(save_qfrc_constraint, d->qfrc_constraint, nv);

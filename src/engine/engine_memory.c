@@ -68,6 +68,8 @@ typedef struct {
 typedef struct {
   size_t pbase;   // value of d->pbase immediately before mj_markStack
   size_t pstack;  // value of d->pstack immediately before mj_markStack
+  size_t checked; // an engine allocation that overflows returns NULL and counts in failed
+  size_t failed;  // number of allocations on this frame that overflowed
   void* pc;       // program counter of the call site of mj_markStack (only set when under asan)
 } mjStackFrame;
 
@@ -139,10 +141,27 @@ void* mj_arenaAllocByte(mjData* d, size_t bytes, size_t alignment) {
 }
 
 
+// overflow on a checked frame: record it, report it once unless on a worker thread (the
+// dispatcher reports after the join), and let the allocation fail
+static int stackfail(const mjData* d, mjStackFrame* frame, const char* info) {
+  if (mj_atomic_add_size_t(&frame->failed, 1) == 0 && !d->threadlock) {
+    mju_warning("%s", info);
+  }
+  return 1;
+}
+
+
+// bytes at the end of the stack that allocations on a checked frame leave for frame records: a
+// function called from a checked frame can always mark its own, and it is the allocations on the
+// frame that fail. Allocations on plain frames, the model compiler's among them, are unaffected.
+#define mjSTACKRESERVE 2048
+
 // internal: allocate size bytes on the provided stack shard
-// declared inline so that modular arithmetic with specific alignments can be optimized out
+// declared inline so that modular arithmetic with specific alignments can be optimized out;
+// an overflow on a checked frame returns NULL if the caller can take it (flg_checked > 0), else
+// raises an error; flg_checked < 0 marks a frame record, which may use the reserve
 static inline void* stackallocinternal(mjData* d, mjStackInfo* stack_info, size_t size,
-    size_t alignment, const char* caller, int line) {
+    size_t alignment, const char* caller, int line, int flg_checked) {
   // return NULL if empty
   if (mjUNLIKELY(!size)) {
     return NULL;
@@ -161,22 +180,32 @@ static inline void* stackallocinternal(mjData* d, mjStackInfo* stack_info, size_
   size_t current_alloc_usage = stack_info->top - new_top_ptr - 2 * mjREDZONE;
   size_t usage = current_alloc_usage + (stack_info->bottom - stack_info->top);
 
-  // check size
+  // check size; an allocation on a checked frame keeps the reserve for frame records
+  mjStackFrame* frame = (mjStackFrame*) stack_info->stack_base;
+  int checked = flg_checked > 0 && frame && frame->checked;
   size_t stack_available_bytes = stack_info->top - stack_info->limit;
+  if (checked) {
+    stack_available_bytes = stack_available_bytes > mjSTACKRESERVE ?
+                            stack_available_bytes - mjSTACKRESERVE : 0;
+  }
   size_t stack_required_bytes = stack_info->top - new_top_ptr;
   if (mjUNLIKELY(stack_required_bytes > stack_available_bytes)) {
-    char info[1024];
+    char site[1024], info[1200];
     if (caller) {
-      snprintf(info, sizeof(info), " at %s, line %d", caller, line);
+      snprintf(site, sizeof(site), " at %s, line %d", caller, line);
     } else {
-      info[0] = '\0';
+      site[0] = '\0';
     }
-    mju_error(
-        "mj_stackAlloc: out of memory, stack overflow%s\n"
-        "  max = %" PRIuPTR ", available = %" PRIuPTR ", requested = %" PRIuPTR
-        "\n nefc = %d, ncon = %d",
-        info, stack_info->bottom - stack_info->limit, stack_available_bytes,
-        stack_required_bytes, d->nefc, d->ncon);
+    snprintf(info, sizeof(info),
+             "mj_stackAlloc: out of memory, stack overflow%s\n"
+             "  max = %" PRIuPTR ", available = %" PRIuPTR ", requested = %" PRIuPTR
+             "\n nefc = %d, ncon = %d",
+             site, stack_info->bottom - stack_info->limit, stack_available_bytes,
+             stack_required_bytes, d->nefc, d->ncon);
+    if (checked && stackfail(d, frame, info)) {
+      return NULL;
+    }
+    mju_error("%s", info);
   }
 
 #ifdef mjUSEASAN
@@ -206,7 +235,7 @@ static inline void* stackallocinternal(mjData* d, mjStackInfo* stack_info, size_
 // internal: allocate size bytes in mjData
 // declared inline so that modular arithmetic with specific alignments can be optimized out
 static inline void* stackalloc(mjData* d, size_t size, size_t alignment,
-                               const char* caller, int line) {
+                               const char* caller, int line, int flg_checked) {
   // size zero: no-op
   if (!size) {
     return NULL;
@@ -217,22 +246,34 @@ static inline void* stackalloc(mjData* d, size_t size, size_t alignment,
     size_t alloc_size = size + alignment - 1 + 2 * mjREDZONE;
     size_t old_pstack = mj_atomic_add_size_t(&d->pstack, alloc_size);
 
-    // check for stack overflow
+    // check for stack overflow; on the dispatcher's checked frame keep the reserve for records
+    mjStackFrame* frame = (mjStackFrame*) d->pbase;
+    int checked = flg_checked > 0 && frame && frame->checked;
     size_t stack_available_bytes = (size_t)d->narena - d->parena;
+    if (checked) {
+      stack_available_bytes = stack_available_bytes > mjSTACKRESERVE ?
+                              stack_available_bytes - mjSTACKRESERVE : 0;
+    }
     if (mjUNLIKELY(old_pstack + alloc_size > stack_available_bytes)) {
-      char info[1024];
+      char site[1024], info[1200];
       if (caller) {
-        snprintf(info, sizeof(info), " at %s, line %d", caller, line);
+        snprintf(site, sizeof(site), " at %s, line %d", caller, line);
       } else {
-        info[0] = '\0';
+        site[0] = '\0';
       }
-      mju_error(
-          "mj_stackAlloc: out of memory, stack overflow%s (threadlock)\n"
-          "  max = %" PRIuPTR ", available = %" PRIuPTR ", requested = %" PRIuPTR
-          "\n nefc = %d, ncon = %d",
-          info, (uintptr_t)stack_available_bytes,
-          (uintptr_t)(stack_available_bytes - old_pstack),
-          (uintptr_t)alloc_size, d->nefc, d->ncon);
+      snprintf(info, sizeof(info),
+               "mj_stackAlloc: out of memory, stack overflow%s (threadlock)\n"
+               "  max = %" PRIuPTR ", available = %" PRIuPTR ", requested = %" PRIuPTR
+               "\n nefc = %d, ncon = %d",
+               site, (uintptr_t)stack_available_bytes,
+               (uintptr_t)(old_pstack < stack_available_bytes ? stack_available_bytes - old_pstack : 0),
+               (uintptr_t)alloc_size, d->nefc, d->ncon);
+
+      // the frame is the one mju_dispatch marked, shared by the workers
+      if (checked && stackfail(d, frame, info)) {
+        return NULL;
+      }
+      mju_error("%s", info);
     }
 
     uintptr_t bottom = (uintptr_t)d->arena + (uintptr_t)d->narena;
@@ -243,7 +284,7 @@ static inline void* stackalloc(mjData* d, size_t size, size_t alignment,
   }
 
   mjStackInfo stack_info = get_stack_info_from_data(d);
-  void* result = stackallocinternal(d, &stack_info, size, alignment, caller, line);
+  void* result = stackallocinternal(d, &stack_info, size, alignment, caller, line, flg_checked);
   d->pstack = stack_info.bottom - stack_info.top;
   return result;
 }
@@ -253,12 +294,16 @@ static inline void* stackalloc(mjData* d, size_t size, size_t alignment,
 #ifdef mjUSEASAN
 __attribute__((always_inline))
 #endif
-static inline void markstackinternal(mjData* d, mjStackInfo* stack_info) {
+static inline void markstackinternal(mjData* d, mjStackInfo* stack_info, int flg_checked) {
   size_t top_old = stack_info->top;
-  mjStackFrame* s =
-    (mjStackFrame*) stackallocinternal(d, stack_info, sizeof(mjStackFrame), _Alignof(mjStackFrame), NULL, 0);
+
+  // the frame record comes out of the reserve; an overflow here is an error on any frame
+  mjStackFrame* s = (mjStackFrame*) stackallocinternal(d, stack_info, sizeof(mjStackFrame),
+                                                       _Alignof(mjStackFrame), NULL, 0, -1);
   s->pbase = stack_info->stack_base;
   s->pstack = top_old;
+  s->checked = flg_checked;
+  s->failed = 0;
 #ifdef mjUSEASAN
   // store the program counter to the caller so that we can compare against mj_freeStack later
   s->pc = __sanitizer_return_address();
@@ -280,9 +325,35 @@ void mj__markStack(mjData* d)
   }
 
   mjStackInfo stack_info = get_stack_info_from_data(d);
-  markstackinternal(d, &stack_info);
+  markstackinternal(d, &stack_info, 0);
   d->pstack = stack_info.bottom - stack_info.top;
   d->pbase = stack_info.stack_base;
+}
+
+
+// mjData mark checked stack frame
+#ifndef mjUSEASAN
+void mj_markStackChecked(mjData* d)
+#else
+void mj__markStackChecked(mjData* d)
+#endif
+{
+  // no-op if called from mju_dispatch: the dispatcher's frame is the checked one
+  if (d->threadlock) {
+    return;
+  }
+
+  mjStackInfo stack_info = get_stack_info_from_data(d);
+  markstackinternal(d, &stack_info, 1);
+  d->pstack = stack_info.bottom - stack_info.top;
+  d->pbase = stack_info.stack_base;
+}
+
+
+// nonzero if an allocation on the current frame failed
+int mj_stackFailed(const mjData* d) {
+  const mjStackFrame* frame = (const mjStackFrame*) d->pbase;
+  return frame && frame->failed;
 }
 
 
@@ -334,16 +405,17 @@ void mj__freeStack(mjData* d)
 }
 
 
-// allocate bytes on the stack
+// allocate bytes on the stack: a public entry, an overflow is an error on any frame
 void* mj_stackAllocByte(mjData* d, size_t bytes, size_t alignment) {
-  return stackalloc(d, bytes, alignment, NULL, 0);
+  return stackalloc(d, bytes, alignment, NULL, 0, 0);
 }
 
 
-// allocate bytes on the stack, with caller information
+// allocate bytes on the stack, with caller information: the engine's entry, an overflow on a
+// checked frame returns NULL
 void* mj_stackAllocInfo(mjData* d, size_t bytes, size_t alignment,
                         const char* caller, int line) {
-  return stackalloc(d, bytes, alignment, caller, line);
+  return stackalloc(d, bytes, alignment, caller, line, 1);
 }
 
 
@@ -352,7 +424,7 @@ mjtNum* mj_stackAllocNum(mjData* d, size_t size) {
   if (mjUNLIKELY(size >= SIZE_MAX / sizeof(mjtNum))) {
     mjERROR("requested size is too large (more than 2^64 bytes).");
   }
-  return (mjtNum*) stackalloc(d, size * sizeof(mjtNum), _Alignof(mjtNum), NULL, 0);
+  return (mjtNum*) stackalloc(d, size * sizeof(mjtNum), _Alignof(mjtNum), NULL, 0, 0);
 }
 
 
@@ -361,5 +433,5 @@ int* mj_stackAllocInt(mjData* d, size_t size) {
   if (mjUNLIKELY(size >= SIZE_MAX / sizeof(int))) {
     mjERROR("requested size is too large (more than 2^64 bytes).");
   }
-  return (int*) stackalloc(d, size * sizeof(int), _Alignof(int), NULL, 0);
+  return (int*) stackalloc(d, size * sizeof(int), _Alignof(int), NULL, 0, 0);
 }

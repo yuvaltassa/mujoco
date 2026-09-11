@@ -2819,6 +2819,7 @@ typedef enum mjtWarning {           // warning types
   mjNWARNING                        // number of warnings
 } mjtWarning;
 typedef enum mjtStatus {            // status of a pipeline call, stored in mjData.status
+  mjSTATUS_OOM         = -1,        // out of mjData memory: the call stopped, its outputs are not valid
   mjSTATUS_OK          = 0,         // nothing to report
 
   // simulation warnings, mjtWarning + 1
@@ -3741,9 +3742,9 @@ int mj_printSchema(const char* filename, char* buffer, int buffer_sz,
 void mj_printScene(const mjvScene* s, const char* filename);
 void mj_printFormattedScene(const mjvScene* s, const char* filename,
                             const char* float_format);
-void mj_fwdKinematics(const mjModel* m, mjData* d);
+mjtStatus mj_fwdKinematics(const mjModel* m, mjData* d);
 mjtStatus mj_fwdPosition(const mjModel* m, mjData* d);
-void mj_fwdVelocity(const mjModel* m, mjData* d);
+mjtStatus mj_fwdVelocity(const mjModel* m, mjData* d);
 mjtStatus mj_fwdActuation(const mjModel* m, mjData* d);
 mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d);
 mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d);
@@ -3751,23 +3752,23 @@ mjtStatus mj_Euler(const mjModel* m, mjData* d);
 mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N);
 mjtStatus mj_implicit(const mjModel* m, mjData* d);
 mjtStatus mj_invPosition(const mjModel* m, mjData* d);
-void mj_invVelocity(const mjModel* m, mjData* d);
-void mj_invConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_invVelocity(const mjModel* m, mjData* d);
+mjtStatus mj_invConstraint(const mjModel* m, mjData* d);
 mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d);
-void mj_sensorPos(const mjModel* m, mjData* d);
-void mj_sensorVel(const mjModel* m, mjData* d);
-void mj_sensorAcc(const mjModel* m, mjData* d);
+mjtStatus mj_sensorPos(const mjModel* m, mjData* d);
+mjtStatus mj_sensorVel(const mjModel* m, mjData* d);
+mjtStatus mj_sensorAcc(const mjModel* m, mjData* d);
 void mj_energyPos(const mjModel* m, mjData* d);
-void mj_energyVel(const mjModel* m, mjData* d);
+mjtStatus mj_energyVel(const mjModel* m, mjData* d);
 mjtStatus mj_checkPos(const mjModel* m, mjData* d);
 mjtStatus mj_checkVel(const mjModel* m, mjData* d);
 mjtStatus mj_checkAcc(const mjModel* m, mjData* d);
 void mj_kinematics(const mjModel* m, mjData* d);
 void mj_comPos(const mjModel* m, mjData* d);
 void mj_camlight(const mjModel* m, mjData* d);
-void mj_flex(const mjModel* m, mjData* d);
-void mj_tendon(const mjModel* m, mjData* d);
-void mj_transmission(const mjModel* m, mjData* d);
+mjtStatus mj_flex(const mjModel* m, mjData* d);
+mjtStatus mj_tendon(const mjModel* m, mjData* d);
+mjtStatus mj_transmission(const mjModel* m, mjData* d);
 void mj_crb(const mjModel* m, mjData* d);
 void mj_makeM(const mjModel* m, mjData* d);
 mjtStatus mj_factorM(const mjModel* m, mjData* d);
@@ -3775,16 +3776,16 @@ void mj_solveM(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y, int n);
 void mj_solveM2(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y,
                 const mjtNum* sqrtInvD, int n);
 void mj_comVel(const mjModel* m, mjData* d);
-void mj_passive(const mjModel* m, mjData* d);
-void mj_subtreeVel(const mjModel* m, mjData* d);
-void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result);
+mjtStatus mj_passive(const mjModel* m, mjData* d);
+mjtStatus mj_subtreeVel(const mjModel* m, mjData* d);
+mjtStatus mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result);
 void mj_rnePostConstraint(const mjModel* m, mjData* d);
 int mj_maxContact(const mjModel* m, int g1, int g2, int has_margin);
 mjtStatus mj_collision(const mjModel* m, mjData* d);
 mjtStatus mj_makeConstraint(const mjModel* m, mjData* d);
 mjtStatus mj_island(const mjModel* m, mjData* d);
 mjtStatus mj_projectConstraint(const mjModel* m, mjData* d);
-void mj_referenceConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_referenceConstraint(const mjModel* m, mjData* d);
 void mj_constraintUpdate(const mjModel* m, mjData* d, const mjtNum* jar,
                          mjtNum cost[1], int flg_coneHessian);
 int mj_stateSize(const mjModel* m, int sig);
@@ -3814,7 +3815,7 @@ void mj_jacBodyCom(const mjModel* m, const mjData* d, mjtNum* jacp, mjtNum* jacr
 void mj_jacSubtreeCom(const mjModel* m, mjData* d, mjtNum* jacp, int body);
 void mj_jacGeom(const mjModel* m, const mjData* d, mjtNum* jacp, mjtNum* jacr, int geom);
 void mj_jacSite(const mjModel* m, const mjData* d, mjtNum* jacp, mjtNum* jacr, int site);
-void mj_jacPointAxis(const mjModel* m, mjData* d, mjtNum* jacPoint, mjtNum* jacAxis,
+mjtStatus mj_jacPointAxis(const mjModel* m, mjData* d, mjtNum* jacPoint, mjtNum* jacAxis,
                      const mjtNum point[3], const mjtNum axis[3], int body);
 void mj_jacDot(const mjModel* m, const mjData* d, mjtNum* jacp, mjtNum* jacr,
                const mjtNum point[3], int body);
@@ -3826,7 +3827,7 @@ void mj_fullM(const mjModel* m, const mjData* d, mjtNum* dst);
 void mj_mulM(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec);
 void mj_mulM2(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec);
 void mj_addM(const mjModel* m, mjData* d, mjtNum* dst, int* rownnz, int* rowadr, int* colind);
-void mj_applyFT(const mjModel* m, mjData* d, const mjtNum force[3], const mjtNum torque[3],
+mjtStatus mj_applyFT(const mjModel* m, mjData* d, const mjtNum force[3], const mjtNum torque[3],
                 const mjtNum point[3], int body, mjtNum* qfrc_target);
 void mj_objectVelocity(const mjModel* m, const mjData* d,
                        int objtype, int objid, mjtNum res[6], int flg_local);
@@ -3852,7 +3853,7 @@ const char* mj_versionString(void);
 mjtNum mj_ray(const mjModel* m, const mjData* d, const mjtNum pnt[3], const mjtNum vec[3],
               const mjtByte* geomgroup, mjtBool flg_static, int bodyexclude,
               int geomid[1], mjtNum normal[3]);
-void mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum* vec,
+mjtStatus mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum* vec,
                  const mjtByte* geomgroup, mjtBool flg_static, int bodyexclude,
                  int* geomid, mjtNum* dist, mjtNum* normal, int nray, mjtNum cutoff);
 mjtNum mj_rayHfield(const mjModel* m, const mjData* d, int geomid,

@@ -195,6 +195,11 @@ void scanPluginLibraries() {
 
 // message of the simulation warning that stopped the step, or should stop the stepping; else NULL
 const char* Diverged(const mjModel* m, const mjData* d) {
+  // out of memory: the step stopped
+  if (d->status < 0) {
+    return "Out of mjData memory: increase the memory option";
+  }
+
   // stop policy: the step stopped at a warning
   if (m->opt.onwarn == mjONWARN_STOP && d->status > 0) {
     return mju_warningText(d->status - 1, d->warning[d->status - 1].lastinfo);

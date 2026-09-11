@@ -23,6 +23,7 @@
 #include <mujoco/mjmacro.h>
 #include <mujoco/mjmodel.h>
 #include "engine/engine_memory.h"
+#include "engine/engine_util_errmem.h"
 
 // context for thread pool stored on mjData
 class ThreadPoolContext {
@@ -149,36 +150,46 @@ void mju_threadpool(mjData* d, int nthread) {
 
 
 // dispatch ntask tasks to the thread pool; passes arg into func along with
-// thread_id and task_id
-void mju_dispatch(const mjModel* m, mjData* d, mjTaskFunc func, void* arg,
-                  int ntask) {
+// thread_id and task_id. The workers allocate on one checked frame: an allocation that
+// overflows fails, the task reports it through arg, and the dispatch reports it as well once
+// every worker has finished and the frame is released.
+mjtStatus mju_dispatch(const mjModel* m, mjData* d, mjTaskFunc func, void* arg,
+                       int ntask) {
   // no thread pool or trivial number of tasks: run on main thread
   if (!d->threadpool || ntask < 2) {
     for (int i = 0; i < ntask; i++) {
       func(m, d, arg, 0, i);
     }
-    return;
+    return mjSTATUS_OK;
   }
 
   ThreadPoolContext& ctx = *reinterpret_cast<ThreadPoolContext*>(d->threadpool);
 
   // lock mjData and mark stack frame, memory will be freed after thread completion
-  if (!d->threadlock) {
-    mj_markStack(d);
+  bool outermost = !d->threadlock;
+  if (outermost) {
+    mj_markStackChecked(d);
     d->threadlock = true;
   }
 
   ctx.Dispatch(m, d, func, arg, ntask);
 
-  if (d->threadlock) {
-    // update max usage statistics
-    d->maxuse_stack = mjMAX(d->maxuse_stack, d->pstack);
-    d->maxuse_arena = mjMAX(d->maxuse_arena, d->pstack + d->parena);
+  mjtStatus status = mj_stackFailed(d) ? mjSTATUS_OOM : mjSTATUS_OK;
+  if (status == mjSTATUS_OOM && outermost) {
+    mju_warning("mj_stackAlloc: out of memory, stack overflow in a worker thread");
+  }
+  if (outermost) {
+    // update max usage statistics, unless the workers overshot the stack
+    if (status == mjSTATUS_OK) {
+      d->maxuse_stack = mjMAX(d->maxuse_stack, d->pstack);
+      d->maxuse_arena = mjMAX(d->maxuse_arena, d->pstack + d->parena);
+    }
 
     // unlock mjData and free stack used during worker execution
     d->threadlock = false;
     mj_freeStack(d);
   }
+  return status;
 }
 
 

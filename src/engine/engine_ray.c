@@ -13,6 +13,7 @@
 // limitations under the License.
 //---------------------------------//
 
+#include "engine/engine_core_util.h"
 #include "engine/engine_ray.h"
 
 #include <math.h>
@@ -1541,14 +1542,16 @@ static mjtNum mju_singleRay(const mjModel* m, mjData* d, const mjtNum pnt[3], co
 
 
 // performs multiple ray intersections, compute normals if given
-void mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum* vec,
+mjtStatus mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum* vec,
                  const mjtByte* geomgroup, mjtBool flg_static, int bodyexclude,
                  int* geomid, mjtNum* dist, mjtNum* normal, int nray, mjtNum cutoff) {
-  mj_markStack(d);
+  mjtStatus status = mjSTATUS_OK;
+  mj_markStackChecked(d);
 
   // allocate source
   mjtNum* geom_ba = mjSTACKALLOC(d, 4*m->ngeom, mjtNum);
   int* geom_eliminate = mjSTACKALLOC(d, m->ngeom, int);
+  mjSTACKCHECK(d);
 
   // initialize source
   mju_multiRayPrepare(m, d, pnt, NULL, geomgroup, flg_static, bodyexclude,
@@ -1566,5 +1569,6 @@ void mj_multiRay(const mjModel* m, mjData* d, const mjtNum pnt[3], const mjtNum*
   }
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 

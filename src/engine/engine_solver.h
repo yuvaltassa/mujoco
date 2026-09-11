@@ -22,31 +22,31 @@
 //------------------------------ monolithic solvers ------------------------------------------------
 
 // PGS solver
-void mj_solPGS(const mjModel* m, mjData* d, int maxiter);
+mjtStatus mj_solPGS(const mjModel* m, mjData* d, int maxiter);
 
 // No Slip solver (modified PGS)
-void mj_solNoSlip(const mjModel* m, mjData* d, int maxiter);
+mjtStatus mj_solNoSlip(const mjModel* m, mjData* d, int maxiter);
 
 // CG solver
-void mj_solCG(const mjModel* m, mjData* d, int maxiter);
+mjtStatus mj_solCG(const mjModel* m, mjData* d, int maxiter);
 
 // Newton solver
-void mj_solNewton(const mjModel* m, mjData* d, int maxiter);
+mjtStatus mj_solNewton(const mjModel* m, mjData* d, int maxiter);
 
 
 //------------------------------ per-island solvers ------------------------------------------------
 
 // PGS solver (one island, no dualFinish — caller handles it)
-void mj_solPGS_island(const mjModel* m, mjData* d, int island, int maxiter);
+mjtStatus mj_solPGS_island(const mjModel* m, mjData* d, int island, int maxiter);
 
 // NoSlip solver (one island, no dualFinish — caller handles it)
-void mj_solNoSlip_island(const mjModel* m, mjData* d, int island, int maxiter);
+mjtStatus mj_solNoSlip_island(const mjModel* m, mjData* d, int island, int maxiter);
 
 // CG solver
-void mj_solCG_island(const mjModel* m, mjData* d, int island, int maxiter);
+mjtStatus mj_solCG_island(const mjModel* m, mjData* d, int island, int maxiter);
 
 // Newton entry point
-void mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter);
+mjtStatus mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter);
 
 // map efc_force to joint space (used after dual island dispatch)
 mjNODISCARD mjtStatus mj_dualFinish(const mjModel* m, mjData* d);

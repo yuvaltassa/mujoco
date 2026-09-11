@@ -644,6 +644,33 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     # the functions that cannot raise a simulation warning return nothing
     self.assertIsNone(mujoco.mj_kinematics(self.model, self.data))
 
+  def test_out_of_memory_is_a_status(self):
+    # a scratch allocation that overflows the arena ends the call with a
+    # negative status instead of an error, and the data is usable again; the
+    # arena fits the compiler's own pass, not the collision pipeline
+    model = mujoco.MjModel.from_xml_string("""
+    <mujoco>
+      <size memory="12K"/>
+      <worldbody>
+        <geom type="plane" size="1 1 1"/>
+        <replicate count="16" offset=".15 0 0">
+          <body pos="0 0 .1"><freejoint/><geom size=".1"/></body>
+        </replicate>
+      </worldbody>
+    </mujoco>
+    """)
+    data = mujoco.MjData(model)
+    status = mujoco.mj_step(model, data)
+    self.assertEqual(status, mujoco.mjtStatus.mjSTATUS_OOM)
+    self.assertLess(int(status), 0)
+    self.assertEqual(data.status, mujoco.mjtStatus.mjSTATUS_OOM)
+    self.assertEqual(data.time, 0)
+
+    # under stop and auto alike, and with nstep the steps stop at the first
+    model.opt.onwarn = mujoco.mjtOnWarn.mjONWARN_STOP
+    self.assertEqual(mujoco.mj_step(model, data, nstep=5), mujoco.mjtStatus.mjSTATUS_OOM)
+    self.assertEqual(data.time, 0)
+
   def test_abandoned_call_needs_a_reset(self):
     # an exception raised in a callback abandons the call in progress: the
     # exception leaves the engine without freeing the stack frames of the

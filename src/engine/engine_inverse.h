@@ -35,10 +35,10 @@ MJAPI mjNODISCARD mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
 MJAPI mjNODISCARD mjtStatus mj_invPosition(const mjModel* m, mjData* d);
 
 // velocity-dependent computations
-MJAPI void mj_invVelocity(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_invVelocity(const mjModel* m, mjData* d);
 
 // inverse constraint solver
-MJAPI void mj_invConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_invConstraint(const mjModel* m, mjData* d);
 
 // compare forward and inverse dynamics, without changing results of forward dynamics
 MJAPI mjNODISCARD mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d);

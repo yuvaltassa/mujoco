@@ -1462,7 +1462,7 @@ void mj_angmomMat_wrapper(const MjModel& m, MjData& d, const val& mat, int body)
   mj_angmomMat(m.get(), d.get(), mat_.data(), body);
 }
 
-void mj_applyFT_wrapper(const MjModel& m, MjData& d, const NumberArray& force, const NumberArray& torque, const NumberArray& point, int body, const val& qfrc_target) {
+mjtStatus mj_applyFT_wrapper(const MjModel& m, MjData& d, const NumberArray& force, const NumberArray& torque, const NumberArray& point, int body, const val& qfrc_target) {
   UNPACK_NULLABLE_ARRAY(mjtNum, force);
   UNPACK_NULLABLE_ARRAY(mjtNum, torque);
   UNPACK_ARRAY(mjtNum, point);
@@ -1471,7 +1471,7 @@ void mj_applyFT_wrapper(const MjModel& m, MjData& d, const NumberArray& force, c
   CHECK_SIZE(force, 3);
   CHECK_SIZE(torque, 3);
   CHECK_SIZE(point, 3);
-  mj_applyFT(m.get(), d.get(), force_.data(), torque_.data(), point_.data(), body, qfrc_target_.data());
+  return mj_applyFT(m.get(), d.get(), force_.data(), torque_.data(), point_.data(), body, qfrc_target_.data());
 }
 
 void mj_camlight_wrapper(const MjModel& m, MjData& d) {
@@ -1563,8 +1563,8 @@ void mj_energyPos_wrapper(const MjModel& m, MjData& d) {
   mj_energyPos(m.get(), d.get());
 }
 
-void mj_energyVel_wrapper(const MjModel& m, MjData& d) {
-  mj_energyVel(m.get(), d.get());
+mjtStatus mj_energyVel_wrapper(const MjModel& m, MjData& d) {
+  return mj_energyVel(m.get(), d.get());
 }
 
 void mj_extractState_wrapper(const MjModel& m, const NumberArray& src, int srcsig, const val& dst, int dstsig) {
@@ -1577,8 +1577,8 @@ mjtStatus mj_factorM_wrapper(const MjModel& m, MjData& d) {
   return mj_factorM(m.get(), d.get());
 }
 
-void mj_flex_wrapper(const MjModel& m, MjData& d) {
-  mj_flex(m.get(), d.get());
+mjtStatus mj_flex_wrapper(const MjModel& m, MjData& d) {
+  return mj_flex(m.get(), d.get());
 }
 
 mjtStatus mj_forward_wrapper(const MjModel& m, MjData& d) {
@@ -1607,16 +1607,16 @@ mjtStatus mj_fwdConstraint_wrapper(const MjModel& m, MjData& d) {
   return mj_fwdConstraint(m.get(), d.get());
 }
 
-void mj_fwdKinematics_wrapper(const MjModel& m, MjData& d) {
-  mj_fwdKinematics(m.get(), d.get());
+mjtStatus mj_fwdKinematics_wrapper(const MjModel& m, MjData& d) {
+  return mj_fwdKinematics(m.get(), d.get());
 }
 
 mjtStatus mj_fwdPosition_wrapper(const MjModel& m, MjData& d) {
   return mj_fwdPosition(m.get(), d.get());
 }
 
-void mj_fwdVelocity_wrapper(const MjModel& m, MjData& d) {
-  mj_fwdVelocity(m.get(), d.get());
+mjtStatus mj_fwdVelocity_wrapper(const MjModel& m, MjData& d) {
+  return mj_fwdVelocity(m.get(), d.get());
 }
 
 mjtNum mj_geomDistance_wrapper(const MjModel& m, MjData& d, int geom1, int geom2, mjtNum distmax, const val& fromto) {
@@ -1668,16 +1668,16 @@ void mj_integratePos_wrapper(const MjModel& m, const val& qpos, const NumberArra
   mj_integratePos(m.get(), qpos_.data(), qvel_.data(), dt);
 }
 
-void mj_invConstraint_wrapper(const MjModel& m, MjData& d) {
-  mj_invConstraint(m.get(), d.get());
+mjtStatus mj_invConstraint_wrapper(const MjModel& m, MjData& d) {
+  return mj_invConstraint(m.get(), d.get());
 }
 
 mjtStatus mj_invPosition_wrapper(const MjModel& m, MjData& d) {
   return mj_invPosition(m.get(), d.get());
 }
 
-void mj_invVelocity_wrapper(const MjModel& m, MjData& d) {
-  mj_invVelocity(m.get(), d.get());
+mjtStatus mj_invVelocity_wrapper(const MjModel& m, MjData& d) {
+  return mj_invVelocity(m.get(), d.get());
 }
 
 mjtStatus mj_inverse_wrapper(const MjModel& m, MjData& d) {
@@ -1748,7 +1748,7 @@ void mj_jacGeom_wrapper(const MjModel& m, const MjData& d, const val& jacp, cons
   mj_jacGeom(m.get(), d.get(), jacp_.data(), jacr_.data(), geom);
 }
 
-void mj_jacPointAxis_wrapper(const MjModel& m, MjData& d, const val& jacPoint, const val& jacAxis, const NumberArray& point, const NumberArray& axis, int body) {
+mjtStatus mj_jacPointAxis_wrapper(const MjModel& m, MjData& d, const val& jacPoint, const val& jacAxis, const NumberArray& point, const NumberArray& axis, int body) {
   UNPACK_NULLABLE_VALUE(mjtNum, jacPoint);
   UNPACK_NULLABLE_VALUE(mjtNum, jacAxis);
   UNPACK_ARRAY(mjtNum, point);
@@ -1757,7 +1757,7 @@ void mj_jacPointAxis_wrapper(const MjModel& m, MjData& d, const val& jacPoint, c
   CHECK_SIZE(axis, 3);
   CHECK_SIZE(jacPoint, m.nv() * 3);
   CHECK_SIZE(jacAxis, m.nv() * 3);
-  mj_jacPointAxis(m.get(), d.get(), jacPoint_.data(), jacAxis_.data(), point_.data(), axis_.data(), body);
+  return mj_jacPointAxis(m.get(), d.get(), jacPoint_.data(), jacAxis_.data(), point_.data(), axis_.data(), body);
 }
 
 void mj_jacSite_wrapper(const MjModel& m, const MjData& d, const val& jacp, const val& jacr, int site) {
@@ -1830,7 +1830,7 @@ void mj_mulM2_wrapper(const MjModel& m, const MjData& d, const val& res, const N
   mj_mulM2(m.get(), d.get(), res_.data(), vec_.data());
 }
 
-void mj_multiRay_wrapper(const MjModel& m, MjData& d, const NumberArray& pnt, const NumberArray& vec, const NumberArray& geomgroup, mjtBool flg_static, int bodyexclude, const val& geomid, const val& dist, const val& normal, int nray, mjtNum cutoff) {
+mjtStatus mj_multiRay_wrapper(const MjModel& m, MjData& d, const NumberArray& pnt, const NumberArray& vec, const NumberArray& geomgroup, mjtBool flg_static, int bodyexclude, const val& geomid, const val& dist, const val& normal, int nray, mjtNum cutoff) {
   UNPACK_ARRAY(mjtNum, pnt);
   UNPACK_ARRAY(mjtNum, vec);
   UNPACK_NULLABLE_ARRAY(mjtByte, geomgroup);
@@ -1840,7 +1840,7 @@ void mj_multiRay_wrapper(const MjModel& m, MjData& d, const NumberArray& pnt, co
   CHECK_SIZE(dist, nray);
   CHECK_SIZE(geomid, nray);
   CHECK_SIZE(vec, 3 * nray);
-  mj_multiRay(m.get(), d.get(), pnt_.data(), vec_.data(), geomgroup_.data(), flg_static, bodyexclude, geomid_.data(), dist_.data(), normal_.data(), nray, cutoff);
+  return mj_multiRay(m.get(), d.get(), pnt_.data(), vec_.data(), geomgroup_.data(), flg_static, bodyexclude, geomid_.data(), dist_.data(), normal_.data(), nray, cutoff);
 }
 
 int mj_name2id_wrapper(const MjModel& m, int type, const String& name) {
@@ -1864,8 +1864,8 @@ void mj_objectVelocity_wrapper(const MjModel& m, const MjData& d, int objtype, i
   mj_objectVelocity(m.get(), d.get(), objtype, objid, res_.data(), flg_local);
 }
 
-void mj_passive_wrapper(const MjModel& m, MjData& d) {
-  mj_passive(m.get(), d.get());
+mjtStatus mj_passive_wrapper(const MjModel& m, MjData& d) {
+  return mj_passive(m.get(), d.get());
 }
 
 void mj_printData_wrapper(const MjModel& m, const MjData& d, const String& filename) {
@@ -1940,8 +1940,8 @@ mjtNum mj_readCtrl_wrapper(const MjModel& m, const MjData& d, int id, mjtNum tim
   return mj_readCtrl(m.get(), d.get(), id, time, interp);
 }
 
-void mj_referenceConstraint_wrapper(const MjModel& m, MjData& d) {
-  mj_referenceConstraint(m.get(), d.get());
+mjtStatus mj_referenceConstraint_wrapper(const MjModel& m, MjData& d) {
+  return mj_referenceConstraint(m.get(), d.get());
 }
 
 void mj_resetCtrl_wrapper(const MjModel& m, MjData& d) {
@@ -1960,26 +1960,26 @@ void mj_resetDataKeyframe_wrapper(const MjModel& m, MjData& d, int key) {
   mj_resetDataKeyframe(m.get(), d.get(), key);
 }
 
-void mj_rne_wrapper(const MjModel& m, MjData& d, int flg_acc, const val& result) {
+mjtStatus mj_rne_wrapper(const MjModel& m, MjData& d, int flg_acc, const val& result) {
   UNPACK_VALUE(mjtNum, result);
   CHECK_SIZE(result, m.nv());
-  mj_rne(m.get(), d.get(), flg_acc, result_.data());
+  return mj_rne(m.get(), d.get(), flg_acc, result_.data());
 }
 
 void mj_rnePostConstraint_wrapper(const MjModel& m, MjData& d) {
   mj_rnePostConstraint(m.get(), d.get());
 }
 
-void mj_sensorAcc_wrapper(const MjModel& m, MjData& d) {
-  mj_sensorAcc(m.get(), d.get());
+mjtStatus mj_sensorAcc_wrapper(const MjModel& m, MjData& d) {
+  return mj_sensorAcc(m.get(), d.get());
 }
 
-void mj_sensorPos_wrapper(const MjModel& m, MjData& d) {
-  mj_sensorPos(m.get(), d.get());
+mjtStatus mj_sensorPos_wrapper(const MjModel& m, MjData& d) {
+  return mj_sensorPos(m.get(), d.get());
 }
 
-void mj_sensorVel_wrapper(const MjModel& m, MjData& d) {
-  mj_sensorVel(m.get(), d.get());
+mjtStatus mj_sensorVel_wrapper(const MjModel& m, MjData& d) {
+  return mj_sensorVel(m.get(), d.get());
 }
 
 void mj_setConst_wrapper(MjModel& m, MjData& d) {
@@ -2040,16 +2040,16 @@ mjtStatus mj_step2_wrapper(const MjModel& m, MjData& d) {
   return mj_step2(m.get(), d.get());
 }
 
-void mj_subtreeVel_wrapper(const MjModel& m, MjData& d) {
-  mj_subtreeVel(m.get(), d.get());
+mjtStatus mj_subtreeVel_wrapper(const MjModel& m, MjData& d) {
+  return mj_subtreeVel(m.get(), d.get());
 }
 
-void mj_tendon_wrapper(const MjModel& m, MjData& d) {
-  mj_tendon(m.get(), d.get());
+mjtStatus mj_tendon_wrapper(const MjModel& m, MjData& d) {
+  return mj_tendon(m.get(), d.get());
 }
 
-void mj_transmission_wrapper(const MjModel& m, MjData& d) {
-  mj_transmission(m.get(), d.get());
+mjtStatus mj_transmission_wrapper(const MjModel& m, MjData& d) {
+  return mj_transmission(m.get(), d.get());
 }
 
 std::string mj_versionString_wrapper() {
@@ -4427,6 +4427,7 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .value("mjSTATE_USER", mjSTATE_USER)
     .value("mjSTATE_INTEGRATION", mjSTATE_INTEGRATION);
   enum_<mjtStatus>("mjtStatus")
+    .value("mjSTATUS_OOM", mjSTATUS_OOM)
     .value("mjSTATUS_OK", mjSTATUS_OK)
     .value("mjSTATUS_INERTIA", mjSTATUS_INERTIA)
     .value("mjSTATUS_CONTACTFULL", mjSTATUS_CONTACTFULL)

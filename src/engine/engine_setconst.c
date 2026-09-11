@@ -1423,6 +1423,9 @@ static void setEfm0Factor(mjModel* m, mjData* d) {
   int* K_rowadr = mjSTACKALLOC(d, nv, int);
   int nK = mjd_flexStiff_assemble(m, d, K_rownnz, K_rowadr, NULL, NULL, h*h, h,
                                   /*flg_bend=*/1, /*flg_stretch=*/0, NULL);
+  if (nK < 0) {
+    mjERROR("out of memory");
+  }
   int* K_colind = mjSTACKALLOC(d, nK > 0 ? nK : 1, int);
   mjtNum* K_val = mjSTACKALLOC(d, nK > 0 ? nK : 1, mjtNum);
   mjd_flexStiff_assemble(m, d, K_rownnz, K_rowadr, K_colind, K_val, h*h, h, 1, 0, NULL);
@@ -1492,6 +1495,9 @@ static void setEfm0Factor(mjModel* m, mjData* d) {
   int nnz = mju_cholFactorSymbolic(NULL, m->efm0_L_rownnz, m->efm0_L_rowadr,
                                    NULL, LT_rownnz, LT_rowadr, NULL,
                                    Hu_rownnz, Hu_rowadr, Hu_colind, nbd, d);
+  if (nnz < 0) {
+    mjERROR("out of memory");
+  }
   if (nnz != m->nefm0L) {
     mj_freeStack(d);
     mjERROR("constant metric factor size mismatch: compiler sized %d, symbolic found %d",

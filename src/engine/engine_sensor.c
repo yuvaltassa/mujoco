@@ -22,8 +22,10 @@
 #include <mujoco/mjplugin.h>
 #include <mujoco/mjsan.h>  // IWYU pragma: keep
 #include "engine/engine_callback.h"
+#include "engine/engine_collision_gjk.h"
 #include "engine/engine_collision_sdf.h"
 #include "engine/engine_core_smooth.h"
+#include "engine/engine_collision_convex.h"
 #include "engine/engine_core_util.h"
 #include "engine/engine_crossplatform.h"
 #include "engine/engine_memory.h"
@@ -519,7 +521,8 @@ static mjtNum* fill_raydata(mjtNum* ptr, int dataspec, mjtNum dist,
 
 
 // compute position-stage sensor value, write to data buffer
-static void mj_computeSensorPos(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+static mjtStatus mj_computeSensorPos(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+  mjtStatus status = mjSTATUS_OK;
   int ne = d->ne, nf = d->nf, nefc = d->nefc;
   mjtSensor type = (mjtSensor)m->sensor_type[i];
   int objtype = m->sensor_objtype[i];
@@ -581,13 +584,15 @@ static void mj_computeSensorPos(const mjModel* m, mjData* d, int i, mjtNum* sens
         if (projection == mjPROJ_PERSPECTIVE) {
           // perspective: all rays share origin, different directions
           const int npixel = width * height;
-          mj_markStack(d);
+          mj_markStackChecked(d);
           mjtNum* vec = mjSTACKALLOC(d, 3*npixel, mjtNum);
           int* geomid = mjSTACKALLOC(d, npixel, int);
           mjtNum* dist = mjSTACKALLOC(d, npixel, mjtNum);
+          mjSTACKCHECK(d);
           mjtNum* normals = NULL;
           if (dataspec & (1 << mjRAYDATA_NORMAL)) {
             normals = mjSTACKALLOC(d, 3*npixel, mjtNum);
+            mjSTACKCHECK(d);
           }
 
           // compute ray directions using helper (normalized)
@@ -777,6 +782,15 @@ static void mj_computeSensorPos(const mjModel* m, mjData* d, int i, mjtNum* sens
         id2 = refid;
       }
 
+      // scratch for the collision functions, so that they allocate nothing themselves
+      mj_markStackChecked(d);
+      int npolygonmax = mjDISABLED(mjDSBL_MULTICCD) ? 0 : m->npolygonmax;
+      int nmeshdegmax = mjDISABLED(mjDSBL_MULTICCD) ? 0 : m->nmeshdegmax;
+      char* ccdbuffer = mjSTACKALLOC(d, mjc_ccdSize(npolygonmax, nmeshdegmax, m->opt.ccd_iterations),
+                                     char);
+      mjSTACKCHECK(d);
+      mjc_setCCDBuffer(ccdbuffer);
+
       // collide all pairs
       for (int geom1=id1; geom1 < id1+n1; geom1++) {
         for (int geom2=id2; geom2 < id2+n2; geom2++) {
@@ -788,6 +802,8 @@ static void mj_computeSensorPos(const mjModel* m, mjData* d, int i, mjtNum* sens
           }
         }
       }
+      mjc_setCCDBuffer(NULL);
+      mj_freeStack(d);
 
       // write data
       if (type == mjSENS_GEOMDIST) {
@@ -813,7 +829,7 @@ static void mj_computeSensorPos(const mjModel* m, mjData* d, int i, mjtNum* sens
 
   case mjSENS_E_KINETIC:                              // kinetic energy
     if (!d->flg_energyvel) {
-      mj_energyVel(m, d);
+      mjSTAGE(mj_energyVel(m, d));
     }
     sensordata[0] = d->energy[1];
     break;
@@ -825,11 +841,13 @@ static void mj_computeSensorPos(const mjModel* m, mjData* d, int i, mjtNum* sens
   default:
     mjERROR("invalid sensor type in POS stage, sensor %d", i);
   }
+  return status;
 }
 
 
 // compute velocity-stage sensor value, write to data buffer
-static void mj_computeSensorVel(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+static mjtStatus mj_computeSensorVel(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+  mjtStatus status = mjSTATUS_OK;
   int ne = d->ne, nf = d->nf, nefc = d->nefc;
   mjtSensor type = (mjtSensor)m->sensor_type[i];
   int objtype = m->sensor_objtype[i];
@@ -842,7 +860,7 @@ static void mj_computeSensorVel(const mjModel* m, mjData* d, int i, mjtNum* sens
   // call mj_subtreeVel for sensors that need it (unless already computed)
   if (!d->flg_subtreevel &&
       (type == mjSENS_SUBTREELINVEL || type == mjSENS_SUBTREEANGMOM)) {
-    mj_subtreeVel(m, d);
+    mjSTAGE(mj_subtreeVel(m, d));
   }
 
   // process according to type
@@ -944,11 +962,13 @@ static void mj_computeSensorVel(const mjModel* m, mjData* d, int i, mjtNum* sens
   default:
     mjERROR("invalid type in VEL stage, sensor %d", i);
   }
+  return status;
 }
 
 
 // compute acceleration-stage sensor value, write to data buffer
-static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+static mjtStatus mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+  mjtStatus status = mjSTATUS_OK;
   int ne = d->ne, nf = d->nf, nefc = d->nefc, nactuator = m->nactuator;
   mjtSensor type = (mjtSensor)m->sensor_type[i];
   int objtype = m->sensor_objtype[i];
@@ -1048,8 +1068,9 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
 
       // prepare for matching loop
       int nmatch = 0;
-      mj_markStack(d);
+      mj_markStackChecked(d);
       ContactInfo *match = mjSTACKALLOC(d, d->ncon, ContactInfo);
+      mjSTACKCHECK(d);
 
       // find matching contacts
       for (int j=0; j < d->ncon; j++) {
@@ -1082,6 +1103,7 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
       // partial sort to get bottom nslot contacts if sorted reduction
       if (reduce == REDUCE_MINDIST || reduce == REDUCE_MAXFORCE) {
         ContactInfo *heap = mjSTACKALLOC(d, nslot, ContactInfo);
+        mjSTACKCHECK(d);
         ContactSelect(match, heap, nmatch, nslot, NULL);
       }
 
@@ -1090,6 +1112,7 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
         mjtNum *wrench = mjSTACKALLOC(d, nmatch * 6, mjtNum);
         mjtNum *pos = mjSTACKALLOC(d, nmatch * 3, mjtNum);
         mjtNum *frame = mjSTACKALLOC(d, nmatch * 9, mjtNum);
+        mjSTACKCHECK(d);
 
         // precompute wrenches, positions, and frames, maybe flip wrench
         for (int j=0; j < nmatch; j++) {
@@ -1144,7 +1167,7 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
 
   case mjSENS_TACTILE:                                // tactile
     {
-      mj_markStack(d);
+      mj_markStackChecked(d);
 
       // get parent weld id
       int mesh_id = m->sensor_objid[i];
@@ -1158,8 +1181,9 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
 
       // deduplicate colliding geoms using a stack-allocated byte mask
       char* seen_geom = mjSTACKALLOC(d, m->ngeom, char);
+      int* contact_geom_ids = mjSTACKALLOC(d, mju_min(2 * d->ncon, m->ngeom), int);
+      mjSTACKCHECK(d);
       memset(seen_geom, 0, m->ngeom);
-      int* contact_geom_ids = mj_stackAllocInt(d, mju_min(2 * d->ncon, m->ngeom));
       int ncontact = 0;
       for (int k = 0; k < d->ncon; k++) {
         int g1 = d->contact[k].geom1;
@@ -1199,6 +1223,7 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
         int ntask = (ncon + batch_size - 1) / batch_size;
 
         mjTactileTaskArgs* task_args = mjSTACKALLOC(d, ntask, mjTactileTaskArgs);
+        mjSTACKCHECK(d);
 
         for (int t = 0; t < ntask; t++) {
           task_args[t].sensor_id = i;
@@ -1213,7 +1238,7 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
           task_args[t].sensordata = sensordata;
         }
 
-        mju_dispatch(m, d, tactileTask, task_args, ntask);
+        mjSTAGE_(mju_dispatch(m, d, tactileTask, task_args, ntask), mj_freeStack(d));
       }
       // sequential path: call tactile_taxel_batch with full range
       else {
@@ -1323,22 +1348,24 @@ static void mj_computeSensorAcc(const mjModel* m, mjData* d, int i, mjtNum* sens
   default:
     mjERROR("invalid type in ACC stage, sensor %d", i);
   }
+  return status;
 }
 
 
 // compute value for one sensor, write to sensordata, apply cutoff
-void mj_computeSensor(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+mjtStatus mj_computeSensor(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+  mjtStatus status = mjSTATUS_OK;
   switch (m->sensor_needstage[i]) {
   case mjSTAGE_POS:
-    mj_computeSensorPos(m, d, i, sensordata);
+    mjSTAGE(mj_computeSensorPos(m, d, i, sensordata));
     break;
 
   case mjSTAGE_VEL:
-    mj_computeSensorVel(m, d, i, sensordata);
+    mjSTAGE(mj_computeSensorVel(m, d, i, sensordata));
     break;
 
   case mjSTAGE_ACC:
-    mj_computeSensorAcc(m, d, i, sensordata);
+    mjSTAGE(mj_computeSensorAcc(m, d, i, sensordata));
     break;
 
   default:
@@ -1347,17 +1374,19 @@ void mj_computeSensor(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
 
   // apply cutoff
   apply_cutoff(m, i, sensordata);
+  return status;
 }
 
 
 // compute sensor or read from history buffer (handles delay and interval logic)
-static void compute_or_read_sensor(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+static mjtStatus compute_or_read_sensor(const mjModel* m, mjData* d, int i, mjtNum* sensordata) {
+  mjtStatus status = mjSTATUS_OK;
   int nsample = m->sensor_history[2*i];
 
   // no history: compute directly
   if (nsample <= 0) {
-    mj_computeSensor(m, d, i, sensordata);
-    return;
+    mjSTAGE(mj_computeSensor(m, d, i, sensordata));
+    return status;
   }
 
   mjtNum delay = m->sensor_delay[i];
@@ -1368,7 +1397,7 @@ static void compute_or_read_sensor(const mjModel* m, mjData* d, int i, mjtNum* s
     int interp = m->sensor_history[2*i+1];
     const mjtNum* ptr = mj_readSensor(m, d, i, d->time, sensordata, interp);
     if (ptr) mju_copy(sensordata, ptr, dim);
-    return;
+    return status;
   }
 
   // interval > 0: compute if interval condition satisfied, else read from buffer
@@ -1380,18 +1409,19 @@ static void compute_or_read_sensor(const mjModel* m, mjData* d, int i, mjtNum* s
 
     if (time_prev + interval <= d->time) {
       // interval condition satisfied: compute new sensor value
-      mj_computeSensor(m, d, i, sensordata);
+      mjSTAGE(mj_computeSensor(m, d, i, sensordata));
     } else {
       // interval condition not satisfied: read from buffer
       int interp = m->sensor_history[2*i+1];
       const mjtNum* ptr = mj_readSensor(m, d, i, d->time, sensordata, interp);
       if (ptr) mju_copy(sensordata, ptr, dim);
     }
-    return;
+    return status;
   }
 
   // history only, no delay or interval: compute directly
-  mj_computeSensor(m, d, i, sensordata);
+  mjSTAGE(mj_computeSensor(m, d, i, sensordata));
+  return status;
 }
 
 
@@ -1411,9 +1441,10 @@ static void compute_user_sensors(const mjModel* m, mjData* d, mjtStage stage) {
 
 
 // compute plugin sensors: call plugin compute and apply cutoff
-static void compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) {
+static mjtStatus compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) {
+  mjtStatus status = mjSTATUS_OK;
   if (!m->nplugin) {
-    return;
+    return status;
   }
 
   const int nslot = mjp_pluginCount();
@@ -1442,7 +1473,7 @@ static void compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) 
     // call stage-specific preparation if needed
     // TODO(b/247107630): add a flag to allow plugin to specify whether it actually needs this
     if (stage == mjSTAGE_VEL && !d->flg_subtreevel) {
-      mj_subtreeVel(m, d);
+      mjSTAGE(mj_subtreeVel(m, d));
     } else if (stage == mjSTAGE_ACC && !d->flg_rnepost) {
       mj_rnePostConstraint(m, d);
     }
@@ -1458,17 +1489,19 @@ static void compute_plugin_sensors(const mjModel* m, mjData* d, mjtStage stage) 
       }
     }
   }
+  return status;
 }
 
 
 // position-dependent sensors
-void mj_sensorPos(const mjModel* m, mjData* d) {
+mjtStatus mj_sensorPos(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nsensor = m->nsensor;
   int nusersensor = 0;
 
   // disabled sensors: return
   if (mjDISABLED(mjDSBL_SENSOR)) {
-    return;
+    return mji_report(d, status);
   }
 
   // sleep filtering
@@ -1497,7 +1530,7 @@ void mj_sensorPos(const mjModel* m, mjData* d) {
         mju_zero(sensordata, m->sensor_dim[i]);
         nusersensor++;
       } else {
-        compute_or_read_sensor(m, d, i, sensordata);
+        mjSTAGE(compute_or_read_sensor(m, d, i, sensordata));
       }
     }
   }
@@ -1508,17 +1541,19 @@ void mj_sensorPos(const mjModel* m, mjData* d) {
   }
 
   // compute plugin sensor values
-  compute_plugin_sensors(m, d, mjSTAGE_POS);
+  mjSTAGE(compute_plugin_sensors(m, d, mjSTAGE_POS));
+  return mji_report(d, status);
 }
 
 
 // velocity-dependent sensors
-void mj_sensorVel(const mjModel* m, mjData* d) {
+mjtStatus mj_sensorVel(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nusersensor = 0;
 
   // disabled sensors: return
   if (mjDISABLED(mjDSBL_SENSOR)) {
-    return;
+    return mji_report(d, status);
   }
 
   // sleep filtering
@@ -1544,14 +1579,14 @@ void mj_sensorVel(const mjModel* m, mjData* d) {
       if (type == mjSENS_USER) {
         // call mj_subtreeVel for user sensors
         if (!d->flg_subtreevel) {
-          mj_subtreeVel(m, d);
+          mjSTAGE(mj_subtreeVel(m, d));
         }
 
         // clear result, compute later
         mju_zero(sensordata, m->sensor_dim[i]);
         nusersensor++;
       } else {
-        compute_or_read_sensor(m, d, i, sensordata);
+        mjSTAGE(compute_or_read_sensor(m, d, i, sensordata));
       }
     }
   }
@@ -1562,17 +1597,19 @@ void mj_sensorVel(const mjModel* m, mjData* d) {
   }
 
   // trigger computation of plugins
-  compute_plugin_sensors(m, d, mjSTAGE_VEL);
+  mjSTAGE(compute_plugin_sensors(m, d, mjSTAGE_VEL));
+  return mji_report(d, status);
 }
 
 
 // acceleration/force-dependent sensors
-void mj_sensorAcc(const mjModel* m, mjData* d) {
+mjtStatus mj_sensorAcc(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nusersensor = 0;
 
   // disabled sensors: return
   if (mjDISABLED(mjDSBL_SENSOR)) {
-    return;
+    return mji_report(d, status);
   }
 
   // sleep filtering
@@ -1605,7 +1642,7 @@ void mj_sensorAcc(const mjModel* m, mjData* d) {
         mju_zero(sensordata, m->sensor_dim[i]);
         nusersensor++;
       } else {
-        compute_or_read_sensor(m, d, i, sensordata);
+        mjSTAGE(compute_or_read_sensor(m, d, i, sensordata));
       }
     }
   }
@@ -1616,7 +1653,8 @@ void mj_sensorAcc(const mjModel* m, mjData* d) {
   }
 
   // trigger computation of plugins
-  compute_plugin_sensors(m, d, mjSTAGE_ACC);
+  mjSTAGE(compute_plugin_sensors(m, d, mjSTAGE_ACC));
+  return mji_report(d, status);
 }
 
 
@@ -1730,9 +1768,11 @@ void mj_energyPos(const mjModel* m, mjData* d) {
 
 
 // velocity-dependent energy (kinetic)
-void mj_energyVel(const mjModel* m, mjData* d) {
-  mj_markStack(d);
+mjtStatus mj_energyVel(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
+  mj_markStackChecked(d);
   mjtNum *vec = mjSTACKALLOC(d, m->nv, mjtNum);
+  mjSTACKCHECK(d);
 
   // kinetic energy:  0.5 * qvel' * M * qvel
   mj_mulM(m, d, vec, d->qvel);
@@ -1742,4 +1782,5 @@ void mj_energyVel(const mjModel* m, mjData* d) {
 
   // mark as computed
   d->flg_energyvel = 1;
+  return mji_report(d, status);
 }
