@@ -35,7 +35,8 @@
 //-------------------------- local utilities -------------------------------------------------------
 
 // allocate island arrays on arena, return 1 on success, 0 on failure
-static int arenaAllocIsland(const mjModel* m, mjData* d) {
+// allocate the island arena pointers; return mjSTATUS_OK, or the warning raised on failure
+static mjNODISCARD mjtStatus arenaAllocIsland(const mjModel* m, mjData* d) {
 #undef MJ_M
 #define MJ_M(n) m->n
 #undef MJ_D
@@ -44,9 +45,9 @@ static int arenaAllocIsland(const mjModel* m, mjData* d) {
 #define X(type, name, nr, nc)                                                 \
   d->name = mj_arenaAllocByte(d, sizeof(type) * (nr) * (nc), _Alignof(type)); \
   if (!d->name) {                                                             \
-    mj_warning(d, mjWARN_CNSTRFULL, d->narena);                               \
+    mjtStatus s_ = mj_warning(d, mjWARN_CNSTRFULL, d->narena);                  \
     mj_clearEfc(d);                                                           \
-    return 0;                                                                 \
+    return s_;                                                                \
   }
 
   MJDATA_ARENA_POINTERS_ISLAND
@@ -57,7 +58,7 @@ static int arenaAllocIsland(const mjModel* m, mjData* d) {
 #define MJ_M(n) n
 #undef MJ_D
 #define MJ_D(n) n
-  return 1;
+  return mjSTATUS_OK;
 }
 
 
@@ -503,13 +504,14 @@ static const char* unionConstraintTrees(const mjModel* m, const mjData* d, int* 
 
 // discover islands:
 //   nisland, island_idofadr, dof_island, dof_islandnext, island_efcadr, efc_island, efc_islandnext
-void mj_island(const mjModel* m, mjData* d) {
+mjtStatus mj_island(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nefc = d->nefc, ntree = m->ntree;
 
   // no constraints or islands disabled: quick return
   if (mjDISABLED(mjDSBL_ISLAND) || !nefc) {
     d->nisland = d->nidof = 0;
-    return;
+    return mji_report(d, status);
   }
 
   mj_markStack(d);
@@ -532,15 +534,16 @@ void mj_island(const mjModel* m, mjData* d) {
   if (!d->nisland) {
     d->nidof = 0;
     mj_freeStack(d);
-    return;
+    return mji_report(d, status);
   }
 
   d->nidof = nidof;
 
   // allocate island arrays on arena
-  if (!arenaAllocIsland(m, d)) {
+  status = mji_join(status, arenaAllocIsland(m, d));
+  if (status) {
     mj_freeStack(d);
-    return;
+    return mji_report(d, status);
   }
 
   // local copy
@@ -682,4 +685,5 @@ void mj_island(const mjModel* m, mjData* d) {
   if (!mju_compare(island_nefc2, d->island_nefc, nisland)) mjERROR("island_nefc miscount");
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }

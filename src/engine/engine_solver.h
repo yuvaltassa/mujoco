@@ -17,6 +17,7 @@
 
 #include <mujoco/mjdata.h>
 #include <mujoco/mjmodel.h>
+#include "engine/engine_core_util.h"
 
 //------------------------------ monolithic solvers ------------------------------------------------
 
@@ -48,6 +49,6 @@ void mj_solCG_island(const mjModel* m, mjData* d, int island, int maxiter);
 void mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter);
 
 // map efc_force to joint space (used after dual island dispatch)
-void mj_dualFinish(const mjModel* m, mjData* d);
+mjNODISCARD mjtStatus mj_dualFinish(const mjModel* m, mjData* d);
 
 #endif  // MUJOCO_SRC_ENGINE_ENGINE_SOLVER_H_

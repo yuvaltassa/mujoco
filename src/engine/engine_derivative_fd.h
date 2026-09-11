@@ -18,6 +18,7 @@
 #include <mujoco/mjdata.h>
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmodel.h>
+#include "engine/engine_core_util.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,17 +31,19 @@ MJAPI void mjd_smooth_velFD(const mjModel* m, mjData* d, mjtNum eps);
 MJAPI void mjd_passive_velFD(const mjModel* m, mjData* d, mjtNum eps);
 
 // advance simulation using control callback, skipstage is mjtStage
-MJAPI void mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
+MJAPI mjNODISCARD mjtStatus mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
 
 // finite differenced transition matrices (control theory notation)
-MJAPI void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool centered,
-                            mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D);
+MJAPI mjNODISCARD mjtStatus mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps,
+                                             mjtBool centered, mjtNum* A, mjtNum* B, mjtNum* C,
+                                             mjtNum* D);
 
 // finite differenced Jacobian of  (force, sensors) = mj_inverse(state, acceleration)
-MJAPI void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuation,
-                         mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
-                         mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
-                         mjtNum *DmDq);
+MJAPI mjNODISCARD mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps,
+                                          mjtBool flg_actuation,
+                                          mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
+                                          mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
+                                          mjtNum *DmDq);
 
 #ifdef __cplusplus
 }

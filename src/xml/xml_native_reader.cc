@@ -407,7 +407,6 @@ void mjXReader::Option(XMLElement* section, mjSpec* s, mjOption* opt) {
     READDSBL("sensor",       mjDSBL_SENSOR)
     READDSBL("midphase",     mjDSBL_MIDPHASE)
     READDSBL("eulerdamp",    mjDSBL_EULERDAMP)
-    READDSBL("autoreset",    mjDSBL_AUTORESET)
     READDSBL("nativeccd",    mjDSBL_NATIVECCD)
     READDSBL("island",       mjDSBL_ISLAND)
     READDSBL("multiccd",     mjDSBL_MULTICCD)

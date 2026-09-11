@@ -17,6 +17,8 @@
 
 #include <mujoco/mjdata.h>
 #include <mujoco/mjmodel.h>
+#include <mujoco/mjtype.h>
+#include "engine/engine_core_util.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +28,7 @@ extern "C" {
 // incremental potential with penetration-free contact by a barrier-free augmented-Lagrangian
 // method; flex self-contact (vertex-triangle, edge-edge) and flex-vs-geom. Elasticity rides the
 // native efc rows (edge equality) and the effective metric (elastic2d).
-void mj_ipc(const mjModel* m, mjData* d);
+mjNODISCARD mjtStatus mj_ipc(const mjModel* m, mjData* d);
 
 
 #ifdef __cplusplus

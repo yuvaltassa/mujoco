@@ -31,6 +31,27 @@ Engine
 - The sparse Newton solver no longer aborts with a "rank-deficient sparse Hessian" error when rounding loses a pivot of
   its Hessian, as can happen in single precision with ill-conditioned inertia. The pivot is now clamped and its row
   decoupled, as in the dense factorization.
+- Added the :ref:`onwarn<option-onwarn>` option, selecting the engine's response to
+  :ref:`simulation warnings<siSimWarning>`: :at-val:`auto` (default) applies the per-warning automatic recovery as
+  before, :at-val:`continue` records the warning without resetting the state, which is what disabling the removed
+  :at:`autoreset` flag used to do (see below), and the new :at-val:`stop` mode stops the top-level call at the first
+  warning, leaving the state available for inspection.
+- The pipeline functions that can raise a simulation warning (:ref:`mj_step`, :ref:`mj_forward` and related) now
+  return an :ref:`mjtStatus`: 0 when no simulation warning was recorded, otherwise the first warning raised. The
+  same value is recorded in the new ``mjData.status``, and the new macro :ref:`mjOK` tests it.
+- Python: these functions return the status, and ``data.status`` records it; ``mj_step(m, d, nstep)`` returns the
+  first warning of the ``nstep`` steps.
+
+.. admonition:: Breaking API changes
+   :class: attention
+
+   - Removed the ``autoreset`` :ref:`flag<option-flag>`, subsumed by :ref:`onwarn<option-onwarn>`: replace
+     :at-val:`autoreset="disable"` with :at-val:`onwarn="continue"` (the enabled default corresponds to
+     :at-val:`onwarn="auto"`). ``mjDSBL_AUTORESET`` is removed from ``mjtDisableBit`` and the subsequent enum
+     values are renumbered.
+   - The pipeline functions that can raise a simulation warning return :ref:`mjtStatus` instead of ``void``.
+     Calls that ignore the result are unaffected; code that stores one of these functions in a pointer to a
+     function returning ``void`` must change the pointer type.
 
 Bug fixes
 ^^^^^^^^^

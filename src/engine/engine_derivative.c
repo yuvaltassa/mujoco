@@ -3661,10 +3661,11 @@ static void effBlockApply(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* 
 // relative residual to opt.tolerance; used for qacc_smooth. Reaching opt.iterations means the
 // metric is too ill-conditioned for the blocks: warn (mjWARN_INERTIA, worst-residual dof) and
 // return x under-converged.
-void mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
+mjtStatus mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
+  mjtStatus status = mjSTATUS_OK;
   if (!d->efm_active) {
     mjd_effPrec(m, d, x, b);
-    return;
+    return status;
   }
 
   // backbone-only metric (no tendon, actuator or flex couplings): the qH solve inside the
@@ -3676,7 +3677,7 @@ void mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
   }
   if (!d->nefmT && !d->nefmA && !flex_any) {
     effBlockApply(m, d, x, b, d->efm_L);
-    return;
+    return status;
   }
   int nv = m->nv;
   mj_markStack(d);
@@ -3737,10 +3738,11 @@ void mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
                     "below, because M+K is the effective inertia.",
                     mju_sqrt(mju_dot(r, r, nv)/bn));
       }
-      mj_warning(d, mjWARN_INERTIA, worst);
+      status = mji_join(status, mj_warning(d, mjWARN_INERTIA, worst));
     }
   }
   mj_freeStack(d);
+  return status;
 }
 
 void mjd_effPrec(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {

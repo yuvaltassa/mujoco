@@ -113,12 +113,27 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
   pymodule.def(
       "mj_step",
       InterceptMjErrors(
-          [](const MjModelWrapper& m, MjDataWrapper& d, int nstep) {
+          [](const MjModelWrapper& m, MjDataWrapper& d, int nstep) -> mjtStatus {
             const raw::MjModel* const m_ptr = m.get();
             raw::MjData* const d_ptr = d.get();
-            for (int i = 0; i < nstep; ++i) {
-              ::mj_step(m_ptr, d_ptr);
+            if (nstep <= 0) {
+              // no call was made: nothing to report, and the data keeps the
+              // status of the previous one
+              return mjSTATUS_OK;
             }
+            // report the first warning of the nstep steps, as one call would
+            mjtStatus status = mjSTATUS_OK;
+            for (int i = 0; i < nstep; ++i) {
+              const mjtStatus step_status = ::mj_step(m_ptr, d_ptr);
+              if (!status) {
+                status = step_status;
+              }
+              if (status && m_ptr->opt.onwarn == mjONWARN_STOP) {
+                break;
+              }
+            }
+            d_ptr->status = status;
+            return status;
           }),
       py::arg("m"), py::arg("d"), py::arg_v("nstep", 1),
       py::doc((std::string(traits::mj_step::doc) +

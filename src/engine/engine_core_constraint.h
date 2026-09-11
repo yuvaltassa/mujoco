@@ -19,6 +19,7 @@
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mjtype.h>
+#include "engine/engine_core_util.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,10 +101,10 @@ void mj_makeImpedance(const mjModel* m, mjData* d);
 //---------------------------- top-level API for constraint construction ---------------------------
 
 // main driver: call all functions above
-MJAPI void mj_makeConstraint(const mjModel* m, mjData* d);
+MJAPI mjNODISCARD mjtStatus mj_makeConstraint(const mjModel* m, mjData* d);
 
 // compute efc_AR
-MJAPI void mj_projectConstraint(const mjModel* m, mjData* d);
+MJAPI mjNODISCARD mjtStatus mj_projectConstraint(const mjModel* m, mjData* d);
 
 // compute efc_vel
 void mj_velocityConstraint(const mjModel* m, mjData* d);
