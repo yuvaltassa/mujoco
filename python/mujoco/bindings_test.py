@@ -606,6 +606,65 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     np.testing.assert_allclose(contact_copy[2].pos[:2], [0.1, 0.1])
     np.testing.assert_allclose(contact_copy[3].pos[:2], [-0.1, 0.1])
 
+  def test_mj_step_status(self):
+    # the call returns its status, falsy when there is nothing to report, and
+    # the data records it
+    status = mujoco.mj_step(self.model, self.data)
+    self.assertEqual(status, mujoco.mjtStatus.mjSTATUS_OK)
+    self.assertFalse(status)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_OK)
+    self.assertFalse(self.data.status)
+
+    # divergence: the status of the call names the warning
+    self.data.qpos[0] = float('nan')
+    status = mujoco.mj_step(self.model, self.data)
+    self.assertTrue(status)
+    self.assertEqual(status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+
+    # a healthy call clears the status, a reset does too
+    mujoco.mj_step(self.model, self.data)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_OK)
+    self.data.qpos[0] = float('nan')
+    mujoco.mj_step(self.model, self.data)
+    mujoco.mj_resetData(self.model, self.data)
+    self.assertEqual(self.data.status, 0)
+
+    # nstep: the status covers all steps, reporting the first warning
+    self.data.qpos[0] = float('nan')
+    self.assertEqual(mujoco.mj_step(self.model, self.data, nstep=3),
+                     mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    self.assertEqual(self.data.warning[mujoco.mjtWarning.mjWARN_BADQPOS].number, 1)
+
+    # zero steps make no call, so they report nothing and overwrite nothing
+    self.assertFalse(mujoco.mj_step(self.model, self.data, nstep=0))
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+
+    # the functions that cannot raise a simulation warning return nothing
+    self.assertIsNone(mujoco.mj_kinematics(self.model, self.data))
+
+  def test_abandoned_call_needs_a_reset(self):
+    # an exception raised in a callback abandons the call in progress: the
+    # exception leaves the engine without freeing the stack frames of the
+    # stages it unwinds, so the data must be reset, as it always has been
+    def raising_callback(unused_model, unused_data):
+      raise ValueError('a host exception')
+
+    mujoco.set_mjcb_control(raising_callback)
+    with self.assertRaises(ValueError):
+      mujoco.mj_step(self.model, self.data)
+    mujoco.set_mjcb_control(None)
+
+    mujoco.mj_resetData(self.model, self.data)
+
+    # the reset data reports its own warnings again
+    self.data.qpos[0] = float('nan')
+    mujoco.mj_step(self.model, self.data)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    mujoco.mj_step(self.model, self.data)
+    self.assertEqual(self.data.status, mujoco.mjtStatus.mjSTATUS_OK)
+
   def test_mj_step(self):
     displacement = 0.25
     self.data.qpos[2] += displacement
@@ -1045,7 +1104,7 @@ Return the current version of MuJoCo as a null-terminated string.
     )
     self.assertEqual(
         mujoco.mj_Euler.__doc__,
-        """mj_Euler(m: mujoco._structs.MjModel, d: mujoco._structs.MjData) -> None
+        """mj_Euler(m: mujoco._structs.MjModel, d: mujoco._structs.MjData) -> mujoco._enums.mjtStatus
 
 Euler integrator, semi-implicit in velocity.
 """,

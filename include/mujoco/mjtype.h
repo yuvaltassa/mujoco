@@ -71,12 +71,11 @@ typedef enum mjtDisableBit {      // disable default feature bitflags
   mjDSBL_SENSOR       = 1<<13,    // sensors
   mjDSBL_MIDPHASE     = 1<<14,    // mid-phase collision filtering
   mjDSBL_EULERDAMP    = 1<<15,    // implicit integration of joint damping in Euler integrator
-  mjDSBL_AUTORESET    = 1<<16,    // automatic reset when numerical issues are detected
-  mjDSBL_NATIVECCD    = 1<<17,    // native convex collision detection
-  mjDSBL_ISLAND       = 1<<18,    // constraint island discovery
-  mjDSBL_MULTICCD     = 1<<19,    // multiple CCD contact points
+  mjDSBL_NATIVECCD    = 1<<16,    // native convex collision detection
+  mjDSBL_ISLAND       = 1<<17,    // constraint island discovery
+  mjDSBL_MULTICCD     = 1<<18,    // multiple CCD contact points
 
-  mjNDISABLE          = 20        // number of disable flags
+  mjNDISABLE          = 19        // number of disable flags
 } mjtDisableBit;
 
 
@@ -564,6 +563,27 @@ typedef enum mjtWarning {           // warning types
 
   mjNWARNING                        // number of warnings
 } mjtWarning;
+
+
+typedef enum mjtStatus {            // status of a pipeline call, stored in mjData.status
+  mjSTATUS_OK          = 0,         // nothing to report
+
+  // simulation warnings, mjtWarning + 1
+  mjSTATUS_INERTIA     = 1,         // (near) singular inertia matrix
+  mjSTATUS_CONTACTFULL,             // too many contacts in contact list
+  mjSTATUS_CNSTRFULL,               // too many constraints
+  mjSTATUS_BADQPOS,                 // bad number in qpos
+  mjSTATUS_BADQVEL,                 // bad number in qvel
+  mjSTATUS_BADQACC,                 // bad number in qacc
+  mjSTATUS_BADCTRL                  // bad number in ctrl
+} mjtStatus;
+
+
+typedef enum mjtOnWarn {            // response to simulation warnings
+  mjONWARN_AUTO = 0,                // apply per-warning automatic recovery and continue
+  mjONWARN_CONTINUE,                // record the warning and continue without resetting the state
+  mjONWARN_STOP                     // stop: return from the top-level call
+} mjtOnWarn;
 
 
 typedef enum mjtTimer {             // internal timers

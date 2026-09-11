@@ -701,12 +701,19 @@ class ModelWriter {
         {MjcPhysicsTokens->mjcFlagSensor, mjDSBL_SENSOR},
         {MjcPhysicsTokens->mjcFlagMidphase, mjDSBL_MIDPHASE},
         {MjcPhysicsTokens->mjcFlagEulerdamp, mjDSBL_EULERDAMP},
-        {MjcPhysicsTokens->mjcFlagAutoreset, mjDSBL_AUTORESET},
         {MjcPhysicsTokens->mjcFlagNativeccd, mjDSBL_NATIVECCD},
         {MjcPhysicsTokens->mjcFlagIsland, mjDSBL_ISLAND},
         {MjcPhysicsTokens->mjcFlagMulticcd, mjDSBL_MULTICCD}};
     for (const auto &[token, flag] : disable_flags) {
       create_flag_attr(token, flag, false);
+    }
+
+    // the autoreset flag was replaced by the onwarn option: the enabled flag is onwarn=auto and
+    // the disabled one onwarn=continue; stop has no representation in the schema
+    if (spec_->option.onwarn != mjONWARN_STOP) {
+      WriteUniformAttribute(physics_scene_spec, pxr::SdfValueTypeNames->Bool,
+                            MjcPhysicsTokens->mjcFlagAutoreset,
+                            spec_->option.onwarn == mjONWARN_AUTO);
     }
 
     // Compiler attributes

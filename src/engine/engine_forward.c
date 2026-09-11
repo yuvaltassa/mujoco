@@ -52,25 +52,31 @@
 //--------------------------- check values ---------------------------------------------------------
 
 // check positions, reset if bad
-void mj_checkPos(const mjModel* m, mjData* d) {
+mjtStatus mj_checkPos(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nq = m->nq;
   const mjtNum* qpos = d->qpos;
   for (int i=0; i < nq; i++) {
     if (mju_isBad(qpos[i])) {
-      mj_warning(d, mjWARN_BADQPOS, i);
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      status = mji_join(status, mj_warning(d, mjWARN_BADQPOS, i));
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
+
+        // restore the warning statistics wiped by the reset; the status is a local,
+        // so the reset cannot touch it
+        d->warning[mjWARN_BADQPOS].number++;
+        d->warning[mjWARN_BADQPOS].lastinfo = i;
       }
-      d->warning[mjWARN_BADQPOS].number++;
-      d->warning[mjWARN_BADQPOS].lastinfo = i;
-      return;
+      return mji_report(d, status);
     }
   }
+  return mji_report(d, status);
 }
 
 
 // check velocities, reset if bad
-void mj_checkVel(const mjModel* m, mjData* d) {
+mjtStatus mj_checkVel(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
   int nv = sleep_filter ? d->nv_awake : m->nv;
 
@@ -78,20 +84,25 @@ void mj_checkVel(const mjModel* m, mjData* d) {
     int i = sleep_filter ? d->dof_awake_ind[j] : j;
 
     if (mju_isBad(d->qvel[i])) {
-      mj_warning(d, mjWARN_BADQVEL, i);
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      status = mji_join(status, mj_warning(d, mjWARN_BADQVEL, i));
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
+
+        // restore the warning statistics wiped by the reset; the status is a local,
+        // so the reset cannot touch it
+        d->warning[mjWARN_BADQVEL].number++;
+        d->warning[mjWARN_BADQVEL].lastinfo = i;
       }
-      d->warning[mjWARN_BADQVEL].number++;
-      d->warning[mjWARN_BADQVEL].lastinfo = i;
-      return;
+      return mji_report(d, status);
     }
   }
+  return mji_report(d, status);
 }
 
 
 // check accelerations, reset if bad
-void mj_checkAcc(const mjModel* m, mjData* d) {
+mjtStatus mj_checkAcc(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
   int nv = sleep_filter ? d->nv_awake : m->nv;
 
@@ -99,18 +110,22 @@ void mj_checkAcc(const mjModel* m, mjData* d) {
     int i = sleep_filter ? d->dof_awake_ind[j] : j;
 
     if (mju_isBad(d->qacc[i])) {
-      mj_warning(d, mjWARN_BADQACC, i);
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      status = mji_join(status, mj_warning(d, mjWARN_BADQACC, i));
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
+
+        // restore the warning statistics wiped by the reset; the status is a local,
+        // so the reset cannot touch it
+        d->warning[mjWARN_BADQACC].number++;
+        d->warning[mjWARN_BADQACC].lastinfo = i;
+
+        // recompute forward dynamics from the reset state
+        status = mji_join(status, mj_forward(m, d));
       }
-      d->warning[mjWARN_BADQACC].number++;
-      d->warning[mjWARN_BADQACC].lastinfo = i;
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
-        mj_forward(m, d);
-      }
-      return;
+      return mji_report(d, status);
     }
   }
+  return mji_report(d, status);
 }
 
 
@@ -129,8 +144,9 @@ void mj_fwdKinematics(const mjModel* m, mjData* d) {
 }
 
 // position-dependent computations
-void mj_fwdPosition(const mjModel* m, mjData* d) {
+mjtStatus mj_fwdPosition(const mjModel* m, mjData* d) {
   TM_START1;
+  mjtStatus status = mjSTATUS_OK;
 
   // clear position-dependent flags for lazy evaluation
   d->flg_energypos = 0;
@@ -142,14 +158,14 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
 
   // inertia, timed internally (POS_INERTIA)
   mj_makeM(m, d);
-  mj_factorM(m, d);
+  mjSTAGE(mj_factorM(m, d));
 
   // collision, timed internally (POS_COLLISION)
-  mj_collision(m, d);
+  mjSTAGE(mj_collision(m, d));
 
   if (mj_wakeCollision(m, d)) {
     mj_updateSleep(m, d);
-    mj_collision(m, d);
+    mjSTAGE(mj_collision(m, d));
   }
 
   if (mj_wakeEquality(m, d)) {
@@ -157,12 +173,12 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   }
 
   TM_RESTART;
-  mj_makeConstraint(m, d);
-  mj_island(m, d);
+  mjSTAGE(mj_makeConstraint(m, d));
+  mjSTAGE(mj_island(m, d));
   TM_END(mjTIMER_POS_MAKE);
 
   TM_RESTART;
-  mj_projectConstraint(m, d);
+  mjSTAGE(mj_projectConstraint(m, d));
   TM_END(mjTIMER_POS_PROJECT);
 
   TM_RESTART;
@@ -175,6 +191,7 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/1);
 
   TM_END1(mjTIMER_POSITION);
+  return mji_report(d, status);
 }
 
 
@@ -360,8 +377,9 @@ static mjtNum slewLimit(mjtNum u, mjtNum u_prev, mjtNum slew_s, mjtNum dt,
 
 
 // (qpos, qvel, ctrl, act) => (qfrc_actuator, actuator_force, act_dot)
-void mj_fwdActuation(const mjModel* m, mjData* d) {
+mjtStatus mj_fwdActuation(const mjModel* m, mjData* d) {
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nu = m->nu, nactuator = m->nactuator, nout = m->nout, ntendon = m->ntendon;
   mjtNum gain, bias, tau;
   mjtNum *force = d->actuator_force;
@@ -375,7 +393,7 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   if (nactuator == 0 || mjDISABLED(mjDSBL_ACTUATION)) {
     mju_zero(d->qfrc_actuator, nv);
     TM_END(mjTIMER_ACTUATION);
-    return;
+    return mji_report(d, status);
   }
 
   // any tendon transmission targets with force limits
@@ -405,7 +423,16 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   // check controls, set all to 0 if any are bad
   for (int i=0; i < nu; i++) {
     if (mju_isBad(ctrl[i])) {
-      mj_warning(d, mjWARN_BADCTRL, i);
+      status = mji_join(status, mj_warning(d, mjWARN_BADCTRL, i));
+
+      // stop: return before applying controls
+      if (m->opt.onwarn == mjONWARN_STOP) {
+        mj_freeStack(d);
+        TM_END(mjTIMER_ACTUATION);
+        return mji_report(d, status);
+      }
+
+      // auto/continue: zero all controls and proceed
       mju_zero(ctrl, nu);
       break;
     }
@@ -1010,11 +1037,13 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
   mj_freeStack(d);
   TM_END(mjTIMER_ACTUATION);
+  return mji_report(d, status);
 }
 
 
 // add up all non-constraint forces, compute qacc_smooth
-void mj_fwdAcceleration(const mjModel* m, mjData* d) {
+mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int sleep_filter = mjENABLED(mjENBL_SLEEP) && d->nv_awake < m->nv;
   int nv;
   const int* index;
@@ -1048,7 +1077,7 @@ void mj_fwdAcceleration(const mjModel* m, mjData* d) {
       if (d->efm_ca) {
         mju_addTo(qfrc_eff, d->efm_ca, nv);
       }
-      mjd_effSolve(m, d, d->qacc_smooth, qfrc_eff);
+      status = mji_join(status, mjd_effSolve(m, d, d->qacc_smooth, qfrc_eff));
     } else {
       // awake dofs only: sleep islands follow the metric couplings, so the metric has no
       // terms across the awake/asleep boundary and zeroed asleep entries remain exactly
@@ -1059,11 +1088,11 @@ void mj_fwdAcceleration(const mjModel* m, mjData* d) {
         mju_addToInd(qfrc_eff, d->efm_ca, index, nv);
       }
       mjtNum* qacc_eff = mjSTACKALLOC(d, m->nv, mjtNum);
-      mjd_effSolve(m, d, qacc_eff, qfrc_eff);
+      status = mji_join(status, mjd_effSolve(m, d, qacc_eff, qfrc_eff));
       mju_copyInd(d->qacc_smooth, qacc_eff, index, nv);
     }
     mj_freeStack(d);
-    return;
+    return mji_report(d, status);
   }
 
   // copy for in-place solve: qacc_smooth = qfrc_smooth
@@ -1076,6 +1105,7 @@ void mj_fwdAcceleration(const mjModel* m, mjData* d) {
   // qacc_smooth = M \ qfrc_smooth
   mj_solveLD(d->qacc_smooth, d->qLD, d->qLDiagInv, nv, 1,
              m->M_rownnz, m->M_rowadr, m->M_colind, index);
+  return mji_report(d, status);
 }
 
 
@@ -1220,8 +1250,9 @@ static void mj_discreteGyro(const mjModel* m, mjData* d) {
 
 
 // compute efc_b, efc_force, qfrc_constraint; update qacc
-void mj_fwdConstraint(const mjModel* m, mjData* d) {
+mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d) {
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nefc = d->nefc, nisland = d->nisland, nidof;
 
   // always clear qfrc_constraint
@@ -1234,7 +1265,7 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
     mju_zeroInt(d->solver_niter, mjNISLAND);
     mj_discreteGyro(m, d);
     TM_END(mjTIMER_CONSTRAINT);
-    return;
+    return mji_report(d, status);
   }
 
   // compute efc_b = J*qacc_smooth - aref
@@ -1319,11 +1350,12 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
 
   // dual solvers: map efc_force to joint space (always monolithic)
   if (m->opt.solver == mjSOL_PGS || m->opt.noslip_iterations > 0) {
-    mj_dualFinish(m, d);
+    status = mji_join(status, mj_dualFinish(m, d));
   }
 
   mj_discreteGyro(m, d);
   TM_END(mjTIMER_CONSTRAINT);
+  return mji_report(d, status);
 }
 
 
@@ -1333,8 +1365,9 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
 //   act_dot: activation derivatives
 //   qacc:    acceleration used to update d->qvel (d->qvel += h*qacc)
 //   qvel:    optional velocity used for position integration; if NULL, use d->qvel
-static void mj_advance(const mjModel* m, mjData* d,
-                       const mjtNum* act_dot, const mjtNum* qacc, const mjtNum* qvel) {
+static mjNODISCARD mjtStatus mj_advance(const mjModel* m, mjData* d, const mjtNum* act_dot,
+                                        const mjtNum* qacc, const mjtNum* qvel) {
+  mjtStatus status = mjSTATUS_OK;
   int nactuator = m->nactuator, nsensor = m->nsensor;
 
   // advance history buffers
@@ -1428,7 +1461,7 @@ static void mj_advance(const mjModel* m, mjData* d,
   // put islands to sleep according to velocity tolerance
   if (mj_sleep(m, d)) {
     // if any trees put to sleep (qvel set to 0), recompute all velocity-dependent quantities
-    mj_forwardSkip(m, d, mjSTAGE_POS, 0);
+    mjSTAGE(mj_forwardSkip(m, d, mjSTAGE_POS, 0));
 
     // update sleep indices
     mj_updateSleep(m, d);
@@ -1467,10 +1500,12 @@ static void mj_advance(const mjModel* m, mjData* d,
 
   // save qacc for next step warmstart
   mju_copy(d->qacc_warmstart, d->qacc, m->nv);
+  return status;
 }
 
 // Euler integrator, semi-implicit in velocity, possibly skipping factorisation
-void mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
+mjtStatus mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
+  mjtStatus status = mjSTATUS_OK;
   TM_START;
   mj_markStack(d);
   mjtNum* qfrc = mjSTACKALLOC(d, m->nv, mjtNum);
@@ -1530,7 +1565,12 @@ void mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
       int clamped = mj_factorI(d->qH, d->qHDiagInv, nv,
                                m->M_rownnz, m->M_rowadr, m->M_colind, dof_awake_ind);
       if (clamped >= 0) {
-        mj_warning(d, mjWARN_INERTIA, clamped);
+        status = mji_join(status, mj_warning(d, mjWARN_INERTIA, clamped));
+        if (m->opt.onwarn == mjONWARN_STOP) {
+          mj_freeStack(d);
+          TM_END(mjTIMER_ADVANCE);
+          return status;
+        }
       }
     }
 
@@ -1547,25 +1587,27 @@ void mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
   }
 
   // advance state and time
-  mj_advance(m, d, d->act_dot, qacc, NULL);
+  status = mji_join(status, mj_advance(m, d, d->act_dot, qacc, NULL));
 
   mj_freeStack(d);
 
   TM_END(mjTIMER_ADVANCE);
+  return status;
 }
 
 
 // Euler integrator, semi-implicit in velocity
-void mj_Euler(const mjModel* m, mjData* d) {
-  mj_EulerSkip(m, d, 0);
+mjtStatus mj_Euler(const mjModel* m, mjData* d) {
+  return mji_report(d, mj_EulerSkip(m, d, 0));
 }
 
 
 // discrete integrator: the solver's qacc is the step map, advance directly
-void mj_discrete(const mjModel* m, mjData* d) {
+mjtStatus mj_discrete(const mjModel* m, mjData* d) {
   TM_START;
-  mj_advance(m, d, d->act_dot, d->qacc, NULL);
+  mjtStatus status = mj_advance(m, d, d->act_dot, d->qacc, NULL);
   TM_END(mjTIMER_ADVANCE);
+  return status;
 }
 
 
@@ -1583,7 +1625,8 @@ const mjtNum RK4_B[4] = {
 
 // Runge Kutta explicit order-N integrator
 //  (A,B) is the tableau, C is set to row_sum(A)
-void mj_RungeKutta(const mjModel* m, mjData* d, int N) {
+mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nq = m->nq, na = m->na;
   mjtNum h = m->opt.timestep, time = d->time;
   mjtNum C[9], T[9], *X[10], *F[10], *dX;
@@ -1646,8 +1689,19 @@ void mj_RungeKutta(const mjModel* m, mjData* d, int N) {
     }
     d->time = T[i-1];
 
-    // evaluate F[i]
-    mj_forwardSkip(m, d, mjSTAGE_NONE, 1);  // 1: do not recompute sensors and energy
+    // evaluate F[i], 1: do not recompute sensors and energy
+    status = mji_join(status, mj_forwardSkip(m, d, mjSTAGE_NONE, 1));
+
+    // stop: restore state and time, return
+    if (mji_stop(m, status)) {
+      d->time = time;
+      mju_copy(d->qpos, X[0], nq);
+      mju_copy(d->qvel, X[0]+nq, nv);
+      mju_copy(d->act, X[0]+nq+nv, na);
+      mj_freeStack(d);
+      return mji_report(d, status);
+    }
+
     mju_copy(F[i], d->qacc, nv);
     if (na) {
       mju_copy(F[i]+nv, d->act_dot, na);
@@ -1668,9 +1722,10 @@ void mj_RungeKutta(const mjModel* m, mjData* d, int N) {
   mju_copy(d->act, X[0]+nq+nv, na);
 
   // advance state and time
-  mj_advance(m, d, dX+2*nv, dX+nv, dX);
+  status = mji_join(status, mj_advance(m, d, dX+2*nv, dX+nv, dX));
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 
 
@@ -1727,7 +1782,8 @@ void mj_checkDiscrete(const mjModel* m) {
 
 
 // fully implicit in velocity, possibly skipping factorization
-void mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
+mjtStatus mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
+  mjtStatus status = mjSTATUS_OK;
   TM_START;
   int nD = m->nD, nC = m->nC, njnt = m->njnt;
 
@@ -1800,7 +1856,12 @@ void mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
 
     // warn if a near-singular pivot was clamped
     if (clamped >= 0) {
-      mj_warning(d, mjWARN_INERTIA, clamped);
+      status = mji_join(status, mj_warning(d, mjWARN_INERTIA, clamped));
+      if (m->opt.onwarn == mjONWARN_STOP) {
+        mj_freeStack(d);
+        TM_END(mjTIMER_ADVANCE);
+        return status;
+      }
     }
   }
 
@@ -1841,32 +1902,34 @@ void mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
   }
 
   // advance state and time
-  mj_advance(m, d, d->act_dot, qacc, NULL);
+  status = mji_join(status, mj_advance(m, d, d->act_dot, qacc, NULL));
 
   mj_freeStack(d);
 
   TM_END(mjTIMER_ADVANCE);
+  return status;
 }
 
 
 // fully implicit in velocity
-void mj_implicit(const mjModel* m, mjData* d) {
-  mj_implicitSkip(m, d, 0);
+mjtStatus mj_implicit(const mjModel* m, mjData* d) {
+  return mji_report(d, mj_implicitSkip(m, d, 0));
 }
 
 
 //-------------------------- top-level API ---------------------------------------------------------
 
 // forward dynamics with skip; skipstage is mjtStage
-void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
+mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
 
   // validate option combinations for the discrete integrator
   mj_checkDiscrete(m);
 
   // position-dependent
   if (skipstage < mjSTAGE_POS) {
-    mj_fwdPosition(m, d);
+    mjSTAGE(mj_fwdPosition(m, d));
 
     if (!skipsensor) {
       mj_sensorPos(m, d);
@@ -1899,61 +1962,65 @@ void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) 
     mjcb_control(m, d);
   }
 
-  mj_fwdActuation(m, d);
+  mjSTAGE(mj_fwdActuation(m, d));
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
     mj_regularizeConstraint(m, d, /*flg_AR=*/1);
     mj_referenceConstraint(m, d);
   }
-  mj_fwdAcceleration(m, d);
-  mj_fwdConstraint(m, d);
+  mjSTAGE(mj_fwdAcceleration(m, d));
+  mjSTAGE(mj_fwdConstraint(m, d));
   if (!skipsensor) {
     d->flg_rnepost = 0;  // clear flag for lazy evaluation
     mj_sensorAcc(m, d);
   }
 
   TM_END(mjTIMER_FORWARD);
+  return mji_report(d, status);
 }
 
 
 // forward dynamics
-void mj_forward(const mjModel* m, mjData* d) {
-  mj_forwardSkip(m, d, mjSTAGE_NONE, 0);
+mjtStatus mj_forward(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
+  status = mji_join(status, mj_forwardSkip(m, d, mjSTAGE_NONE, 0));
+  return mji_report(d, status);
 }
 
 
 // advance simulation using control callback
-void mj_step(const mjModel* m, mjData* d) {
+mjtStatus mj_step(const mjModel* m, mjData* d) {
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
 
   // common to all integrators
-  mj_checkPos(m, d);
-  mj_checkVel(m, d);
-  mj_forward(m, d);
-  mj_checkAcc(m, d);
+  mjSTAGE(mj_checkPos(m, d));
+  mjSTAGE(mj_checkVel(m, d));
+  mjSTAGE(mj_forward(m, d));
+  mjSTAGE(mj_checkAcc(m, d));
 
   // compare forward and inverse solutions if enabled
   if (mjENABLED(mjENBL_FWDINV)) {
-    mj_compareFwdInv(m, d);
+    mjSTAGE(mj_compareFwdInv(m, d));
   }
 
   // use selected integrator
   switch ((mjtIntegrator) m->opt.integrator) {
   case mjINT_EULER:
-    mj_Euler(m, d);
+    status = mji_join(status, mj_Euler(m, d));
     break;
 
   case mjINT_RK4:
-    mj_RungeKutta(m, d, 4);
+    status = mji_join(status, mj_RungeKutta(m, d, 4));
     break;
 
   case mjINT_IMPLICIT:
   case mjINT_IMPLICITFAST:
-    mj_implicit(m, d);
+    status = mji_join(status, mj_implicit(m, d));
     break;
 
   case mjINT_DISCRETE:
-    mj_discrete(m, d);
+    status = mji_join(status, mj_discrete(m, d));
     break;
 
   default:
@@ -1961,16 +2028,19 @@ void mj_step(const mjModel* m, mjData* d) {
   }
 
   TM_END(mjTIMER_STEP);
+  return mji_report(d, status);
 }
 
 
 // advance simulation in two phases: before input is set by user
-void mj_step1(const mjModel* m, mjData* d) {
+mjtStatus mj_step1(const mjModel* m, mjData* d) {
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
+
   mj_checkDiscrete(m);
-  mj_checkPos(m, d);
-  mj_checkVel(m, d);
-  mj_fwdPosition(m, d);
+  mjSTAGE(mj_checkPos(m, d));
+  mjSTAGE(mj_checkVel(m, d));
+  mjSTAGE(mj_fwdPosition(m, d));
   mj_sensorPos(m, d);
 
   if (!d->flg_energypos) {
@@ -1991,6 +2061,7 @@ void mj_step1(const mjModel* m, mjData* d) {
     mjcb_control(m, d);
   }
   TM_END(mjTIMER_STEP);
+  return mji_report(d, status);
 }
 
 
@@ -1998,34 +2069,37 @@ void mj_step1(const mjModel* m, mjData* d) {
 
 
 // advance simulation in two phases: after input is set by user
-void mj_step2(const mjModel* m, mjData* d) {
+mjtStatus mj_step2(const mjModel* m, mjData* d) {
   TM_START;
-  mj_fwdActuation(m, d);
+  mjtStatus status = mjSTATUS_OK;
+
+  mjSTAGE(mj_fwdActuation(m, d));
   mjd_effActuation(m, d);
   if (mj_isMetric(m)) {
     mj_regularizeConstraint(m, d, /*flg_AR=*/1);
     mj_referenceConstraint(m, d);
   }
-  mj_fwdAcceleration(m, d);
-  mj_fwdConstraint(m, d);
+  mjSTAGE(mj_fwdAcceleration(m, d));
+  mjSTAGE(mj_fwdConstraint(m, d));
   d->flg_rnepost = 0;  // clear flag for lazy evaluation
   mj_sensorAcc(m, d);
-  mj_checkAcc(m, d);
+  mjSTAGE(mj_checkAcc(m, d));
 
   // compare forward and inverse solutions if enabled
   if (mjENABLED(mjENBL_FWDINV)) {
-    mj_compareFwdInv(m, d);
+    mjSTAGE(mj_compareFwdInv(m, d));
   }
 
   // integrate with Euler, implicit or discrete; RK4 defaults to Euler
   if (m->opt.integrator == mjINT_DISCRETE) {
-    mj_discrete(m, d);
+    status = mji_join(status, mj_discrete(m, d));
   } else if (m->opt.integrator == mjINT_IMPLICIT || m->opt.integrator == mjINT_IMPLICITFAST) {
-    mj_implicit(m, d);
+    status = mji_join(status, mj_implicit(m, d));
   } else {
-    mj_Euler(m, d);
+    status = mji_join(status, mj_Euler(m, d));
   }
 
   d->timer[mjTIMER_STEP].number--;
   TM_END(mjTIMER_STEP);
+  return mji_report(d, status);
 }

@@ -165,39 +165,58 @@ above separation of ``mj_step`` into :ref:`mj_step1` and :ref:`mj_step2` is suff
 the intermediate results of the computation.
 
 To make the above discussion clearer, we provide the internal implementation of :ref:`mj_step`, :ref:`mj_step1` and
-:ref:`mj_step2`, omitting some code that computes timing diagnostics. The main simulation function is
+:ref:`mj_step2`, omitting some code that computes timing diagnostics. The stages that can raise a :ref:`simulation
+warning<siSimWarning>` return an :ref:`mjtStatus`, and the functions that call them do so through the internal macro
+``mjSTAGE``, which keeps the first warning a stage reported and, under :ref:`onwarn<option-onwarn>` :at-val:`stop`,
+returns from the calling function at that stage:
 
 .. code-block:: C
 
-   void mj_step(const mjModel* m, mjData* d) {
+   #define mjSTAGE(call) {                                    \
+     status = status ? status : (call);                       \
+     if (status && m->opt.onwarn == mjONWARN_STOP) {          \
+       return d->status = status;                             \
+     }                                                        \
+   }
+
+The main simulation function is
+
+.. code-block:: C
+
+   mjtStatus mj_step(const mjModel* m, mjData* d) {
+     mjtStatus status = mjSTATUS_OK;
+
      // common to all integrators
-     mj_checkPos(m, d);
-     mj_checkVel(m, d);
-     mj_forward(m, d);
-     mj_checkAcc(m, d);
+     mjSTAGE(mj_checkPos(m, d));
+     mjSTAGE(mj_checkVel(m, d));
+     mjSTAGE(mj_forward(m, d));
+     mjSTAGE(mj_checkAcc(m, d));
 
      // use selected integrator
      switch ((mjtIntegrator) m->opt.integrator) {
      case mjINT_EULER:
-       mj_Euler(m, d);
+       mjSTAGE(mj_Euler(m, d));
        break;
 
      case mjINT_RK4:
-       mj_RungeKutta(m, d, 4);
+       mjSTAGE(mj_RungeKutta(m, d, 4));
        break;
 
      case mjINT_IMPLICIT:
      case mjINT_IMPLICITFAST:
-       mj_implicit(m, d);
+       mjSTAGE(mj_implicit(m, d));
        break;
 
      default:
        mjERROR("invalid integrator");
      }
+
+     return d->status = status;
    }
 
-The checking functions reset the simulation automatically if any numerical values have become invalid or too large.
-The control callback (if any) is called from within the forward dynamics function.
+Under the default :ref:`onwarn<option-onwarn>` setting, the checking functions reset the simulation if any numerical
+values have become invalid or too large; the other settings are described under :ref:`simulation
+warnings<siSimWarning>`. The control callback (if any) is called from within the forward dynamics function.
 
 Next we show the implementation of the two-part stepping approach, although the specifics will make sense only after
 we explain the :ref:`forward dynamics <siForward>` later. Note that the control callback is now called directly, since
@@ -206,10 +225,12 @@ we have essentially unpacked the forward dynamics function. Note also that we al
 
 .. code-block:: C
 
-   void mj_step1(const mjModel* m, mjData* d) {
-     mj_checkPos(m, d);
-     mj_checkVel(m, d);
-     mj_fwdPosition(m, d);
+   mjtStatus mj_step1(const mjModel* m, mjData* d) {
+     mjtStatus status = mjSTATUS_OK;
+
+     mjSTAGE(mj_checkPos(m, d));
+     mjSTAGE(mj_checkVel(m, d));
+     mjSTAGE(mj_fwdPosition(m, d));
      mj_sensorPos(m, d);
      mj_energyPos(m, d);
      mj_fwdVelocity(m, d);
@@ -219,20 +240,27 @@ we have essentially unpacked the forward dynamics function. Note also that we al
      // if we had a callback we would be using mj_step, but call it anyway
      if (mjcb_control)
        mjcb_control(m, d);
+
+     return d->status = status;
    }
 
-   void mj_step2(const mjModel* m, mjData* d) {
-     mj_fwdActuation(m, d);
-     mj_fwdAcceleration(m, d);
-     mj_fwdConstraint(m, d);
+   mjtStatus mj_step2(const mjModel* m, mjData* d) {
+     mjtStatus status = mjSTATUS_OK;
+
+     mjSTAGE(mj_fwdActuation(m, d));
+     mjSTAGE(mj_fwdAcceleration(m, d));
+     mjSTAGE(mj_fwdConstraint(m, d));
      mj_sensorAcc(m, d);
-     mj_checkAcc(m, d);
+     mjSTAGE(mj_checkAcc(m, d));
 
      // integrate with Euler or implicit; RK4 defaults to Euler
-     if (m->opt.integrator == mjINT_IMPLICIT || m->opt.integrator == mjINT_IMPLICITFAST)
-       mj_implicit(m, d);
-     else
-       mj_Euler(m, d);
+     if (m->opt.integrator == mjINT_IMPLICIT || m->opt.integrator == mjINT_IMPLICITFAST) {
+       mjSTAGE(mj_implicit(m, d));
+     } else {
+       mjSTAGE(mj_Euler(m, d));
+     }
+
+     return d->status = status;
    }
 
 .. _siStateControl:
@@ -452,10 +480,12 @@ skip arguments (mjSTAGE_NONE, 0), where the latter function is implemented as
 
 .. code-block:: C
 
-   void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
+   mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
+     mjtStatus status = mjSTATUS_OK;
+
      // position-dependent
      if (skipstage < mjSTAGE_POS) {
-       mj_fwdPosition(m, d);
+       mjSTAGE(mj_fwdPosition(m, d));
        if (!skipsensor)
          mj_sensorPos(m, d);
        if (mjENABLED(mjENBL_ENERGY))
@@ -474,11 +504,13 @@ skip arguments (mjSTAGE_NONE, 0), where the latter function is implemented as
      // acceleration-dependent
      if (mjcb_control)
        mjcb_control(m, d);
-     mj_fwdActuation(m, d);
-     mj_fwdAcceleration(m, d);
-     mj_fwdConstraint(m, d);
+     mjSTAGE(mj_fwdActuation(m, d));
+     mjSTAGE(mj_fwdAcceleration(m, d));
+     mjSTAGE(mj_fwdConstraint(m, d));
      if (!skipsensor)
        mj_sensorAcc(m, d);
+
+     return d->status = status;
    }
 
 Note that this is the same sequence of calls as in :ref:`mj_step1` and :ref:`mj_step2` above, except that checking of
@@ -895,11 +927,72 @@ and :ref:`mj_stackAllocByte` is provided for allocation of arbitrary number of b
 Errors, warnings, logging
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-MuJoCo has a unified logging system for errors, warnings and informational messages. All log output is routed
-through a single callback of type :ref:`mjfLogHandler`, which receives a structured :ref:`mjLogMessage`
-containing the severity level, message text, and optional source location. Errors are fatal and terminate the
-program by default. Warnings indicate problematic but non-fatal conditions. Informational messages provide
-optional diagnostic output.
+MuJoCo reports problems through three distinct mechanisms, in decreasing order of severity:
+
+- **Errors** are fatal by contract: the engine cannot continue. Unless a handler intercepts control, the process
+  terminates.
+- **Simulation warnings** are recoverable runtime events that leave the physics impaired: divergence, dropped
+  contacts or constraints, zeroed controls, clamped inertia pivots. They are counted in ``mjData.warning``, reported
+  by pipeline functions in ``mjData.status``, and the engine's response is selected by the
+  :ref:`onwarn<option-onwarn>` option.
+- **Log messages** are stateless text with a severity :ref:`level<mjtLogLevel>`, routed through a single
+  configurable handler. Here "warning" is a severity label, not an event.
+
+The first two are engine events; log messages are how they are reported: an error emits one error-level message
+before terminating, and each simulation warning emits one warning-level message when first triggered.
+
+.. _siErrors:
+
+Errors
+^^^^^^
+
+Errors are raised by :ref:`mju_error` when the engine encounters a condition it cannot recover from: invalid
+inputs, mis-sized models, exhausted stack memory, or internal inconsistencies. The error contract is that control
+does not return to the failing code path: the :ref:`default handler<siDefaultHandler>` terminates the process with
+``exit(EXIT_FAILURE)``, and a custom handler that intercepts errors must not return — it should ``longjmp`` to a
+previously established recovery point or otherwise transfer control before returning. This is how the model
+compiler and the Python bindings convert errors into exceptions. MuJoCo is written with the assumption that error
+handlers will not return; if they do, the behavior of the software is undefined.
+
+.. _siSimWarning:
+
+Simulation warnings
+^^^^^^^^^^^^^^^^^^^
+
+When the simulator detects a condition that is not a terminal error but leaves the physics impaired — a
+*simulation warning* — it applies a documented response and reports the event. There are several warning types,
+indexed by the enum type :ref:`mjtWarning`: divergence (invalid or unacceptably large values in ``qpos``, ``qvel``,
+``qacc`` or ``ctrl``), insufficient memory for contacts or constraints, and near-singular inertia. Simulation
+warnings are counted events with defined recovery, not merely messages: bad controls are zeroed, contacts and
+constraints that do not fit in memory are dropped, near-singular inertia pivots are clamped, and — under the
+default :ref:`onwarn<option-onwarn>` setting — a diverged state is reset. The :ref:`onwarn<option-onwarn>` option
+selects among three responses: :at-val:`auto` applies these recoveries and continues, :at-val:`continue` records
+the warning without resetting, and :at-val:`stop` ends the top-level call at the first warning. The stopped call does
+not roll back: ``mjData`` is left partially updated for inspection, with the stages after the warning not run, and the
+outputs of the call, including the derivatives computed by :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD`, are not
+valid.
+
+Simulation warnings are reported in three ways. First, the pipeline functions that can raise one return an
+:ref:`mjtStatus`: ``mjSTATUS_OK`` (0) means that no simulation warning was recorded, and a positive value names the
+first warning raised during the call. The same value is recorded in ``mjData.status`` as the call returns, for code that
+sees only the data, such as a callback or a trajectory recorder; it describes the most recent call to return, not a call
+still in progress. The macro :ref:`mjOK` tests the field. Second, the array ``mjData.warning`` accumulates per-type
+:ref:`statistics<siDiagnostics>`. Third, when a warning of a given type is first triggered, a warning-level :ref:`log
+message<siLogMessages>` is emitted. All this is done by the function :ref:`mj_warning`, which the engine calls when it
+detects one. It is not an interface for user code, and is deprecated as one: called from outside the engine it counts
+and prints the warning but does not reach the call in progress. To report a condition from a callback, emit a :ref:`log
+message<siLogMessages>` with :ref:`mju_warning`. To treat a warning as an error, check the result: ``if (mj_step(m, d))
+mju_error(...);``.
+
+.. _siLogMessages:
+
+Log messages
+^^^^^^^^^^^^
+
+All of MuJoCo's text output — errors, warnings and informational messages — is routed through a single callback of
+type :ref:`mjfLogHandler`, which receives a structured :ref:`mjLogMessage` containing the severity level, message
+text, and optional source location. The following subsections describe the transport: installing a handler, the
+default handler and its configuration, opt-in informational messages, and integration with frameworks.
 
 .. _siLogHandler:
 
@@ -933,12 +1026,8 @@ the default handler). The previous handler can be used in two ways:
   to preserve existing behavior. Conversely, handlers intended to intercept and recover from errors (e.g., via
   ``longjmp``) should not chain to the previous handler.
 
-When the handler is called with ``level == mjLOG_ERROR``, the error is always fatal: the :ref:`default handler
-<siDefaultHandler>` terminates the process with ``exit(EXIT_FAILURE)`` (unless a legacy error handler is installed).
-Handlers that wish to recover from errors (e.g., to throw a C++ exception or convert to a Python exception) must not
-return — they should ``longjmp`` to a previously established recovery point or otherwise transfer control before
-returning. This is how the compiler and Python bindings handle errors. MuJoCo is written with the assumption that
-error handlers will not return; if they do, the behavior of the software is undefined.
+When the handler is called with ``level == mjLOG_ERROR``, the :ref:`error contract<siErrors>` applies: the handler
+must transfer control and not return.
 
 .. warning::
    Log handlers must not call :ref:`mju_error` from within the callback; this will cause infinite recursion.
@@ -1082,14 +1171,11 @@ Diagnostics
 MuJoCo has several built-in diagnostics mechanisms that can be used to fine-tune the model. Their outputs are grouped
 in the diagnostics section at the beginning of mjData.
 
-When the simulator encounters a situation that is not a terminal error but is nevertheless suspicious and likely to
-result in inaccurate numerical results, it triggers a warning. There are several possible warning types, indexed by
-the enum type :ref:`mjtWarning`. The array ``mjData.warning`` contains one :ref:`mjWarningStat` data structure per
-warning type, indicating how many times each warning type has been triggered since the last reset and any information
-about the warning (usually the index of the problematic model element). The counters are cleared upon reset. When a
-warning of a given type is first triggered, the warning text is also printed by mju_warning as documented in
-:ref:`error and memory <siError>` above. All this is done by the function :ref:`mj_warning` which the simulator calls
-internally when it encounters a warning. The user can also call this function directly to emulate a warning.
+The first diagnostic is the :ref:`simulation warning<siSimWarning>` statistics: the array ``mjData.warning``
+contains one :ref:`mjWarningStat` data structure per warning type, indicating how many times each warning type has
+been triggered since the last reset and any information about the warning (usually the index of the problematic
+model element); the counters are cleared upon reset. The warning events themselves, their recovery and the
+:ref:`onwarn<option-onwarn>` policy are described in :ref:`Simulation warnings<siSimWarning>`.
 
 When a model needs to be optimized for high-speed simulation, it is important to know where in the pipeline the CPU
 time is spent. This can in turn suggest which parts of the model to simplify or how to design the user application.

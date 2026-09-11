@@ -169,7 +169,9 @@ The search is recursive, and the list includes the filename itself.
 Main simulation
 ^^^^^^^^^^^^^^^
 
-These are the main entry points to the simulator. Most users will only need to call :ref:`mj_step`, which computes
+These are the main entry points to the simulator. Each records its :ref:`mjtStatus` in ``mjData.status``, naming the
+first :ref:`simulation warning<siSimWarning>` raised during the call (0 if none); the response to warnings is
+controlled by the :ref:`onwarn<option-onwarn>` option. Most users will only need to call :ref:`mj_step`, which computes
 everything and advanced the simulation state by one time step. Controls and applied forces must either be set in advance
 (in ``mjData.{ctrl, qfrc_applied, xfrc_applied}``), or a control callback :ref:`mjcb_control` must be installed which
 will be called just before the controls and applied forces are needed. Alternatively, one can use :ref:`mj_step1` and
@@ -2166,7 +2168,12 @@ Free memory, using free() by default.
 
 .. mujoco-include:: mj_warning
 
-High-level warning function: count warnings in mjData, print only the first.
+High-level warning function: count warnings in mjData, print only the first; return the status.
+
+Deprecated: this is the engine's own mechanism for raising a simulation warning, not an
+interface for user code. Calling it from outside the engine, in particular from a callback,
+does not reach the call in progress. To report a condition from user code, emit a log
+message with mju_warning instead.
 
 .. _mju_writeLog:
 

@@ -1337,6 +1337,7 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
   // clear solver diagnostics
   memset(d->warning, 0, mjNWARNING*sizeof(mjWarningStat));
   memset(d->timer, 0, mjNTIMER*sizeof(mjTimerStat));
+  d->status = 0;
   memset(d->solver, 0, mjNSOLVER*mjNISLAND*sizeof(mjSolverStat));
   mju_zeroInt(d->solver_niter, mjNISLAND);
   mju_zeroInt(d->solver_nnz, mjNISLAND);
@@ -1487,7 +1488,7 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
 
     // if any trees initialized as sleeping call entire mj_forward, put them to sleep
     else {
-      mj_forward(m, d);
+      (void)mj_forward(m, d);
 
       // mark asleep-init trees as ready to sleep
       for (int i=0; i < m->ntree; i++) {

@@ -69,21 +69,22 @@ static void saveStats(const mjModel* m, mjData* d, int island, int iter,
 
 
 // finalize dual solver: map to joint space
-static void dualFinish(const mjModel* m, mjData* d) {
+static mjNODISCARD mjtStatus dualFinish(const mjModel* m, mjData* d) {
   // map constraint force to joint space
   mj_mulJacTVec(m, d, d->qfrc_constraint, d->efc_force);
 
   // compute constrained acceleration in joint space, in the solve metric: under the
   // effective metric, qacc_smooth and the constraint response both live in Mtilde
   // (mjd_effSolve is the plain M solve when the metric is inactive)
-  mjd_effSolve(m, d, d->qacc, d->qfrc_constraint);
+  mjtStatus status = mjd_effSolve(m, d, d->qacc, d->qfrc_constraint);
   mju_addTo(d->qacc, d->qacc_smooth, m->nv);
+  return status;
 }
 
 
 // PGS: map efc_force to joint space
-void mj_dualFinish(const mjModel* m, mjData* d) {
-  dualFinish(m, d);
+mjtStatus mj_dualFinish(const mjModel* m, mjData* d) {
+  return dualFinish(m, d);
 }
 
 

@@ -18,6 +18,7 @@
 #include <mujoco/mjdata.h>
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmodel.h>
+#include "engine/engine_core_util.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +38,7 @@ MJAPI int mj_floodFill(int* island, int nr, const int* rownnz, const int* rowadr
 
 // discover islands:
 //   nisland, island_dofadr, dof_island, dof_islandnext, island_efcadr, efc_island, efc_islandnext
-MJAPI void mj_island(const mjModel* m, mjData* d);
+MJAPI mjNODISCARD mjtStatus mj_island(const mjModel* m, mjData* d);
 
 #ifdef __cplusplus
 }

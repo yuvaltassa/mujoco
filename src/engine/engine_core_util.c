@@ -1219,8 +1219,12 @@ mjtNum mj_actuatorArmature(const mjModel* m, mjtObj type, int id) {
 }
 
 
-// count warnings, print only the first time
-void mj_warning(mjData* d, int warning, int info) {
+// status values of simulation warnings follow mjtWarning
+_Static_assert(mjSTATUS_INERTIA == mjWARN_INERTIA + 1 && mjSTATUS_BADCTRL == mjWARN_BADCTRL + 1,
+               "mjtStatus warning values must be mjtWarning + 1");
+
+// count warnings, print only the first time; return the status of the warning
+mjtStatus mj_warning(mjData* d, int warning, int info) {
   // check type
   if (warning < 0 || warning >= mjNWARNING) {
     mjERROR("invalid warning type %d", warning);
@@ -1236,6 +1240,10 @@ void mj_warning(mjData* d, int warning, int info) {
 
   // increase counter
   d->warning[warning].number++;
+
+  // the status of this warning, for the calling pipeline function to keep if it is the first
+  // one that call ran into
+  return (mjtStatus)(warning + 1);
 }
 
 

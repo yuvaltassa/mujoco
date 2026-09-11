@@ -19,6 +19,7 @@
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mjtype.h>
+#include "engine/engine_core_util.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,7 +34,7 @@ MJAPI extern mjfCollision mjCOLLISIONFUNC[mjNGEOMTYPES][mjNGEOMTYPES];
 MJAPI int mj_maxContact(const mjModel* m, int g1, int g2, int has_margin);
 
 // collision detection entry point
-MJAPI void mj_collision(const mjModel* m, mjData* d);
+MJAPI mjNODISCARD mjtStatus mj_collision(const mjModel* m, mjData* d);
 
 // apply the Separating Axis Theorem for rotated AABBs
 MJAPI int mj_collideOBB(const mjtNum aabb1[6], const mjtNum aabb2[6],
@@ -45,16 +46,16 @@ MJAPI int mj_collideOBB(const mjtNum aabb1[6], const mjtNum aabb2[6],
 MJAPI int mj_isElemActive(const mjModel* m, int f, int e);
 
 // test active element self-collisions with SAP
-void mj_collideFlexSAP(const mjModel* m, mjData* d, int f);
+mjNODISCARD mjtStatus mj_collideFlexSAP(const mjModel* m, mjData* d, int f);
 
 // test a geom and an elem for collision, add to contact list
-void mj_collideGeomElem(const mjModel* m, mjData* d, int g, int f, int e);
+mjNODISCARD mjtStatus mj_collideGeomElem(const mjModel* m, mjData* d, int g, int f, int e);
 
 // test two elems for collision, add to contact list
-void mj_collideElems(const mjModel* m, mjData* d, int f1, int e1, int f2, int e2);
+mjNODISCARD mjtStatus mj_collideElems(const mjModel* m, mjData* d, int f1, int e1, int f2, int e2);
 
 // test element and vertex for collision, add to contact list
-void mj_collideElemVert(const mjModel* m, mjData* d, int f, int e, int v);
+mjNODISCARD mjtStatus mj_collideElemVert(const mjModel* m, mjData* d, int f, int e, int v);
 
 
 #ifdef __cplusplus

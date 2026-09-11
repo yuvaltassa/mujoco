@@ -186,25 +186,25 @@ MJAPI void mju_getXMLDependencies(const char* filename, mjStringVec* dependencie
 //---------------------------------- Main simulation -----------------------------------------------
 
 // Advance simulation, use control callback to obtain external force and control.
-MJAPI void mj_step(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_step(const mjModel* m, mjData* d);
 
 // Advance simulation in two steps: before external force and control is set by user.
-MJAPI void mj_step1(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_step1(const mjModel* m, mjData* d);
 
 // Advance simulation in two steps: after external force and control is set by user.
-MJAPI void mj_step2(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_step2(const mjModel* m, mjData* d);
 
 // Forward dynamics: same as mj_step but do not integrate in time.
-MJAPI void mj_forward(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_forward(const mjModel* m, mjData* d);
 
 // Inverse dynamics: qacc must be set before calling.
-MJAPI void mj_inverse(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_inverse(const mjModel* m, mjData* d);
 
 // Forward dynamics with skip; skipstage is mjtStage.
-MJAPI void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
+MJAPI mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
 
 // Inverse dynamics with skip; skipstage is mjtStage.
-MJAPI void mj_inverseSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
+MJAPI mjtStatus mj_inverseSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
 
 
 //---------------------------------- Initialization ------------------------------------------------
@@ -361,31 +361,31 @@ MJAPI void mj_printFormattedScene(const mjvScene* s, const char* filename,
 MJAPI void mj_fwdKinematics(const mjModel* m, mjData* d);
 
 // Run position-dependent computations.
-MJAPI void mj_fwdPosition(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdPosition(const mjModel* m, mjData* d);
 
 // Run velocity-dependent computations.
 MJAPI void mj_fwdVelocity(const mjModel* m, mjData* d);
 
 // Compute actuator force qfrc_actuator.
-MJAPI void mj_fwdActuation(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdActuation(const mjModel* m, mjData* d);
 
 // Add up all non-constraint forces, compute qacc_smooth.
-MJAPI void mj_fwdAcceleration(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d);
 
 // Run selected constraint solver.
-MJAPI void mj_fwdConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d);
 
 // Euler integrator, semi-implicit in velocity.
-MJAPI void mj_Euler(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_Euler(const mjModel* m, mjData* d);
 
 // Runge-Kutta explicit order-N integrator.
-MJAPI void mj_RungeKutta(const mjModel* m, mjData* d, int N);
+MJAPI mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N);
 
 // Implicit-in-velocity integrators.
-MJAPI void mj_implicit(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_implicit(const mjModel* m, mjData* d);
 
 // Run position-dependent computations in inverse dynamics.
-MJAPI void mj_invPosition(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_invPosition(const mjModel* m, mjData* d);
 
 // Run velocity-dependent computations in inverse dynamics.
 MJAPI void mj_invVelocity(const mjModel* m, mjData* d);
@@ -394,7 +394,7 @@ MJAPI void mj_invVelocity(const mjModel* m, mjData* d);
 MJAPI void mj_invConstraint(const mjModel* m, mjData* d);
 
 // Compare forward and inverse dynamics, save results in fwdinv.
-MJAPI void mj_compareFwdInv(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d);
 
 
 //---------------------------------- Sub components ------------------------------------------------
@@ -415,13 +415,13 @@ MJAPI void mj_energyPos(const mjModel* m, mjData* d);
 MJAPI void mj_energyVel(const mjModel* m, mjData* d);
 
 // Check qpos, reset if any element is too big or nan.
-MJAPI void mj_checkPos(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_checkPos(const mjModel* m, mjData* d);
 
 // Check qvel, reset if any element is too big or nan.
-MJAPI void mj_checkVel(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_checkVel(const mjModel* m, mjData* d);
 
 // Check qacc, reset if any element is too big or nan.
-MJAPI void mj_checkAcc(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_checkAcc(const mjModel* m, mjData* d);
 
 // Run forward kinematics.
 MJAPI void mj_kinematics(const mjModel* m, mjData* d);
@@ -448,7 +448,7 @@ MJAPI void mj_crb(const mjModel* m, mjData* d);
 MJAPI void mj_makeM(const mjModel* m, mjData* d);
 
 // Compute sparse L'*D*L factorizaton of inertia matrix.
-MJAPI void mj_factorM(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_factorM(const mjModel* m, mjData* d);
 
 // Solve linear system M * x = y using factorization:  x = inv(L'*D*L)*y
 MJAPI void mj_solveM(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y, int n);
@@ -478,16 +478,16 @@ MJAPI void mj_rnePostConstraint(const mjModel* m, mjData* d);
 MJAPI int mj_maxContact(const mjModel* m, int g1, int g2, int has_margin);
 
 // Run collision detection.
-MJAPI void mj_collision(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_collision(const mjModel* m, mjData* d);
 
 // Construct constraints.
-MJAPI void mj_makeConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_makeConstraint(const mjModel* m, mjData* d);
 
 // Find constraint islands.
-MJAPI void mj_island(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_island(const mjModel* m, mjData* d);
 
 // Compute inverse constraint inertia efc_AR.
-MJAPI void mj_projectConstraint(const mjModel* m, mjData* d);
+MJAPI mjtStatus mj_projectConstraint(const mjModel* m, mjData* d);
 
 // Compute efc_vel, efc_aref.
 MJAPI void mj_referenceConstraint(const mjModel* m, mjData* d);
@@ -1022,8 +1022,12 @@ MJAPI void* mju_malloc(size_t size);
 // Free memory, using free() by default.
 MJAPI void mju_free(void* ptr);
 
-// High-level warning function: count warnings in mjData, print only the first.
-MJAPI void mj_warning(mjData* d, int warning, int info);
+// High-level warning function: count warnings in mjData, print only the first; return the status.
+// Deprecated: this is the engine's own mechanism for raising a simulation warning, not an
+// interface for user code. Calling it from outside the engine, in particular from a callback,
+// does not reach the call in progress. To report a condition from user code, emit a log
+// message with mju_warning instead.
+MJAPI mjtStatus mj_warning(mjData* d, int warning, int info);
 
 // Write [datetime, type: message] to MUJOCO_LOG.TXT.
 MJAPI void mju_writeLog(const char* type, const char* msg);
@@ -1491,8 +1495,8 @@ MJAPI void mjc_gradient(const mjModel* m, const mjData* d, const mjSDF* s, mjtNu
 //      D: (nsensordata x 2*nv+na)
 //      C: (nsensordata x nu)
 // Nullable: A, B, C, D
-MJAPI void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
-                            mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D);
+MJAPI mjtStatus mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
+                                 mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D);
 
 // Finite differenced Jacobians of (force, sensors) = mj_inverse(state, acceleration)
 //   All outputs are optional. Output dimensions (transposed w.r.t Control Theory convention):
@@ -1510,10 +1514,10 @@ MJAPI void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg
 //     optionally computes mass matrix Jacobian DmDq
 //     flg_actuation specifies whether to subtract qfrc_actuator from qfrc_inverse
 // Nullable: DfDq, DfDv, DfDa, DsDq, DsDv, DsDa, DmDq
-MJAPI void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuation,
-                         mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
-                         mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
-                         mjtNum *DmDq);
+MJAPI mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuation,
+                              mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
+                              mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
+                              mjtNum *DmDq);
 
 // Derivatives of mju_subQuat.
 // Nullable: Da, Db

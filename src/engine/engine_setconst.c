@@ -886,7 +886,7 @@ static void set0(mjModel* m, mjData* d) {
   // run remaining computations
   mj_tendon(m, d);
   mj_makeM(m, d);
-  mj_factorM(m, d);
+  (void)mj_factorM(m, d);
   mj_flex(m, d);
   mj_transmission(m, d);
 
@@ -1562,9 +1562,9 @@ void mj_setConst(mjModel* m, mjData* d) {
 
 //----------------------------- actuator length range computation ----------------------------------
 
-// evaluate actuator length, advance special dynamics
-static mjtNum evalAct(const mjModel* m, mjData* d, int index, int side,
-                      const mjLROpt* opt) {
+// evaluate actuator length, advance special dynamics; return the status of the step
+static mjNODISCARD mjtStatus evalAct(const mjModel* m, mjData* d, int index, int side,
+                                     const mjLROpt* opt, mjtNum* len) {
   int nv = m->nv;
   int out = m->actuator_outadr[index];
 
@@ -1572,7 +1572,10 @@ static mjtNum evalAct(const mjModel* m, mjData* d, int index, int side,
   mju_scl(d->qvel, d->qvel, mju_exp(-m->opt.timestep/mjMAX(0.01, opt->timeconst)), nv);
 
   // step1: compute inertia and actuator moments
-  mj_step1(m, d);
+  mjtStatus status = mj_step1(m, d);
+  if (mji_stop(m, status)) {
+    return status;
+  }
 
   // dense actuator_moment row
   mj_markStack(d);
@@ -1592,12 +1595,13 @@ static mjtNum evalAct(const mjModel* m, mjData* d, int index, int side,
   }
 
   // step2: apply force
-  mj_step2(m, d);
+  status = mji_join(status, mj_step2(m, d));
 
   mj_freeStack(d);
 
   // return actuator length
-  return d->actuator_length[out];
+  *len = d->actuator_length[out];
+  return status;
 }
 
 
@@ -1670,7 +1674,15 @@ int mj_setLengthRange(mjModel* m, mjData* d, int index,
     int updated = 0;
     while (d->time < opt->inttotal) {
       // advance and get length
-      mjtNum len = evalAct(m, d, index, side, opt);
+      mjtNum len;
+      mjtStatus status = evalAct(m, d, index, side, opt, &len);
+
+      // stop: the step did not advance, so the simulation cannot proceed
+      if (mji_stop(m, status)) {
+        snprintf(error, error_sz, "Lengthrange simulation stopped at a warning in actuator %d: %s",
+                 index, mju_warningText(status - 1, d->warning[status - 1].lastinfo));
+        return 0;
+      }
 
       // reset: cannot proceed
       if (d->time == 0) {

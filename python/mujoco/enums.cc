@@ -132,6 +132,11 @@ void DefEnum(py::module_& m) {
   // Bit shifts
   e.def(py::self << std::int64_t());
   e.def(py::self >> std::int64_t());
+
+  // a status is falsy when there is nothing to report, as it is in C
+  if constexpr (std::is_same_v<typename Trait::type, ::mjtStatus>) {
+    e.def("__bool__", [](::mjtStatus status) { return status != mjSTATUS_OK; });
+  }
 }
 
 template <typename Tuple>

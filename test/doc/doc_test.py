@@ -14,6 +14,7 @@
 # ==============================================================================
 """Tests that the API reference documentation is complete and up to date."""
 
+import glob
 import os
 import re
 
@@ -372,6 +373,76 @@ class DocTest(googletest.TestCase):
     )
     unknown = sorted(xmacro_fields - set(fields))
     self.assertEqual(unknown, [], 'X macro entries that are not mjData fields')
+
+  def test_reporting_functions(self):
+    """Checks that every pipeline function that can report a simulation warning returns one.
+
+    A function can report a simulation warning if it raises one, through mj_warning or
+    mj_addContact, or calls a function that can. The rule is a property of the call graph,
+    recomputed here from the engine sources, so a new warning site in a void function changes
+    its signature. The converse is checked as well, which keeps the recomputed graph honest: a
+    function returning mjtStatus that cannot report one must be listed in `quiet`, the
+    published signatures that have outlived their last warning site and return mjSTATUS_OK.
+    """
+    bodies = {}
+    for path in sorted(glob.glob(_get_path('src', 'engine', '*.c'))):
+      with open(path, encoding='utf-8') as f:
+        src = f.read()
+      for match in re.finditer(
+          r'^(?:(?:static|inline|mjNODISCARD)\s+)*[\w\*]+\s+(\w+)\s*\([^;{]*\)\s*\{', src, re.M
+      ):
+        start, depth, i = match.end(), 1, match.end()
+        while depth and i < len(src):
+          depth += {'{': 1, '}': -1}.get(src[i], 0)
+          i += 1
+        bodies[match.group(1)] = src[start:i]
+    calls = {
+        name: set(re.findall(r'\b(\w+)\s*\(', body)) & set(bodies)
+        for name, body in bodies.items()
+    }
+    reaches = {
+        name for name, body in bodies.items()
+        if re.search(r'\bmj_warning\s*\(|\bmj_addContact\s*\(', body)
+    } - {'mj_warning'}
+    changed = True
+    while changed:
+      changed = False
+      for name, callees in calls.items():
+        if name not in reaches and callees & reaches:
+          reaches.add(name)
+          changed = True
+
+    with open(_get_path('include', 'mujoco', 'mujoco.h'), encoding='utf-8') as f:
+      header = f.read()
+    sections = re.split(r'\n//-{20,} *(.*?) *-{5,}\n', header)
+    # mj_addContact keeps its documented 0/1; its callers translate a full buffer
+    exempt = {'mj_addContact'}
+    # reporting functions whose last warning site was refactored away: a published
+    # signature outlives its warnings, and the function returns mjSTATUS_OK
+    quiet = set()
+    wrong = []
+    count = 0
+    for i in range(1, len(sections), 2):
+      if sections[i] not in ('Main simulation', 'Components', 'Sub components', 'Derivatives'):
+        continue
+      for match in re.finditer(
+          r'MJAPI\s+([\w\* ]+?)\b(mj\w*)\s*\(([^)]*)\);', sections[i + 1]
+      ):
+        rtype, name, params = match.group(1).strip(), match.group(2), match.group(3)
+        if name in exempt or not re.search(r'\bmjData\s*\*\s*d\b', params):
+          continue
+        if 'const mjData' in params:
+          continue
+        count += 1
+        if name in reaches and rtype != 'mjtStatus':
+          wrong.append(f'{name} can report a simulation warning but returns {rtype}')
+        elif name in reaches and name in quiet:
+          wrong.append(f'{name} can report a simulation warning again: remove it from quiet')
+        elif name not in reaches and rtype == 'mjtStatus' and name not in quiet:
+          wrong.append(f'{name} returns mjtStatus but cannot report a simulation warning: if '
+                       'its signature is published, list it in quiet, else make it void')
+    self.assertGreater(count, 40)
+    self.assertEqual(wrong, [], 'pipeline functions whose return does not match what they report')
 
   def test_element_constraints_diamond_inheritance(self):
     con = mjcf_schema.Constraint(

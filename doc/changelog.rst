@@ -10,6 +10,27 @@ Engine
 - The :ref:`mjWARN_INERTIA <mjtWarning>` warning is now also raised by the modified-inertia factorizations of the
   :at:`implicitfast` and damped-:at:`Euler` integrators (previously silent) and of the :at:`implicit` integrator
   (previously a fatal error).
+- Added the :ref:`onwarn<option-onwarn>` option, selecting the engine's response to
+  :ref:`simulation warnings<siSimWarning>`: :at-val:`auto` (default) applies the per-warning automatic recovery as
+  before, :at-val:`continue` records the warning without resetting the state, which is what disabling the removed
+  :at:`autoreset` flag used to do (see below), and the new :at-val:`stop` mode stops the top-level call at the first
+  warning, leaving the state available for inspection.
+- The pipeline functions that can raise a simulation warning (:ref:`mj_step`, :ref:`mj_forward` and related) now
+  return an :ref:`mjtStatus`: 0 when no simulation warning was recorded, otherwise the first warning raised. The
+  same value is recorded in the new ``mjData.status``, and the new macro :ref:`mjOK` tests it.
+- Python: these functions return the status, and ``data.status`` records it; ``mj_step(m, d, nstep)`` returns the
+  first warning of the ``nstep`` steps.
+
+.. admonition:: Breaking API changes
+   :class: attention
+
+   - Removed the ``autoreset`` :ref:`flag<option-flag>`, subsumed by :ref:`onwarn<option-onwarn>`: replace
+     :at-val:`autoreset="disable"` with :at-val:`onwarn="continue"` (the enabled default corresponds to
+     :at-val:`onwarn="auto"`). ``mjDSBL_AUTORESET`` is removed from ``mjtDisableBit`` and the subsequent enum
+     values are renumbered.
+   - The pipeline functions that can raise a simulation warning return :ref:`mjtStatus` instead of ``void``.
+     Calls that ignore the result are unaffected; code that stores one of these functions in a pointer to a
+     function returning ``void`` must change the pointer type.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

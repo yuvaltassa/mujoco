@@ -18,20 +18,21 @@
 #include <mujoco/mjdata.h>
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmodel.h>
+#include "engine/engine_core_util.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // inverse dynamics
-MJAPI void mj_inverse(const mjModel* m, mjData* d);
+MJAPI mjNODISCARD mjtStatus mj_inverse(const mjModel* m, mjData* d);
 
 // Inverse dynamics with skip; skipstage is mjtStage.
-MJAPI void mj_inverseSkip(const mjModel* m, mjData* d,
-                          int skipstage, int skipsensor);
+MJAPI mjNODISCARD mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
+                                           int skipstage, int skipsensor);
 
 // position-dependent computations
-MJAPI void mj_invPosition(const mjModel* m, mjData* d);
+MJAPI mjNODISCARD mjtStatus mj_invPosition(const mjModel* m, mjData* d);
 
 // velocity-dependent computations
 MJAPI void mj_invVelocity(const mjModel* m, mjData* d);
@@ -40,7 +41,7 @@ MJAPI void mj_invVelocity(const mjModel* m, mjData* d);
 MJAPI void mj_invConstraint(const mjModel* m, mjData* d);
 
 // compare forward and inverse dynamics, without changing results of forward dynamics
-MJAPI void mj_compareFwdInv(const mjModel* m, mjData* d);
+MJAPI mjNODISCARD mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d);
 
 #ifdef __cplusplus
 }

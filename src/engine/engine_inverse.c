@@ -36,9 +36,10 @@
 #include "engine/engine_util_sparse.h"
 
 // position-dependent computations
-void mj_invPosition(const mjModel* m, mjData* d) {
+mjtStatus mj_invPosition(const mjModel* m, mjData* d) {
   TM_START1;
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
 
   // clear flag for lazy evaluation
   d->flg_energypos = 0;
@@ -50,19 +51,19 @@ void mj_invPosition(const mjModel* m, mjData* d) {
   mj_tendon(m, d);
   TM_END(mjTIMER_POS_KINEMATICS);
 
-  mj_makeM(m, d);      // timed internally (POS_INERTIA)
-  mj_factorM(m, d);    // timed internally (POS_INERTIA)
+  mj_makeM(m, d);  // timed internally (POS_INERTIA)
+  mjSTAGE(mj_factorM(m, d));  // timed internally (POS_INERTIA)
 
-  mj_collision(m, d);  // timed internally (POS_COLLISION)
+  mjSTAGE(mj_collision(m, d));  // timed internally (POS_COLLISION)
 
   TM_RESTART;
-  mj_makeConstraint(m, d);
+  mjSTAGE(mj_makeConstraint(m, d));
   TM_END(mjTIMER_POS_MAKE);
 
   // compute exact diagonal if enabled
   if (mjENABLED(mjENBL_DIAGEXACT)) {
     TM_RESTART;
-    mj_projectConstraint(m, d);
+    mjSTAGE(mj_projectConstraint(m, d));
     TM_END(mjTIMER_POS_PROJECT);
   }
 
@@ -74,6 +75,7 @@ void mj_invPosition(const mjModel* m, mjData* d) {
   mjd_effBuild(m, d, mj_isMetric(m), /*flg_factor=*/0);
 
   TM_END1(mjTIMER_POSITION);
+  return mji_report(d, status);
 }
 
 
@@ -220,9 +222,10 @@ void mj_invConstraint(const mjModel* m, mjData* d) {
 
 
 // inverse dynamics with skip; skipstage is mjtStage
-void mj_inverseSkip(const mjModel* m, mjData* d,
-                    int skipstage, int skipsensor) {
+mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
+                         int skipstage, int skipsensor) {
   TM_START;
+  mjtStatus status = mjSTATUS_OK;
   mj_markStack(d);
   mjtNum* qacc;
   int nv = m->nv;
@@ -232,7 +235,7 @@ void mj_inverseSkip(const mjModel* m, mjData* d,
 
   // position-dependent
   if (skipstage < mjSTAGE_POS) {
-    mj_invPosition(m, d);
+    mjSTAGE_(mj_invPosition(m, d), mj_freeStack(d));
     if (!skipsensor) {
       mj_sensorPos(m, d);
     }
@@ -320,26 +323,30 @@ void mj_inverseSkip(const mjModel* m, mjData* d,
 
   mj_freeStack(d);
   TM_END(mjTIMER_INVERSE);
+  return mji_report(d, status);
 }
 
 
 // inverse dynamics
-void mj_inverse(const mjModel* m, mjData* d) {
-  mj_inverseSkip(m, d, mjSTAGE_NONE, 0);
+mjtStatus mj_inverse(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
+  status = mji_join(status, mj_inverseSkip(m, d, mjSTAGE_NONE, 0));
+  return mji_report(d, status);
 }
 
 
 // compare forward and inverse dynamics, without changing results of forward
 //    fwdinv[0] = norm(qfrc_constraint(forward) - qfrc_constraint(inverse))
 //    fwdinv[1] = norm(qfrc_applied(forward) - qfrc_inverse)
-void mj_compareFwdInv(const mjModel* m, mjData* d) {
+mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   int nv = m->nv, nefc = d->nefc;
   mjtNum *qforce, *dif, *save_qfrc_constraint, *save_efc_force;
 
   // clear result, return if no constraints
   d->solver_fwdinv[0] = d->solver_fwdinv[1] = 0;
   if (!nefc) {
-    return;
+    return mji_report(d, status);
   }
 
   // allocate
@@ -358,8 +365,8 @@ void mj_compareFwdInv(const mjModel* m, mjData* d) {
   mju_copy(save_qfrc_constraint, d->qfrc_constraint, nv);
   mju_copy(save_efc_force, d->efc_force, nefc);
 
-  // run inverse dynamics, do not update position and velocity,
-  mj_inverseSkip(m, d, mjSTAGE_VEL, 1);  // 1: do not recompute sensors and energy
+  // run inverse dynamics, do not update position and velocity, do not recompute sensors and energy
+  mjSTAGE_(mj_inverseSkip(m, d, mjSTAGE_VEL, 1), mj_freeStack(d));
 
   // compute statistics
   mju_sub(dif, save_qfrc_constraint, d->qfrc_constraint, nv);
@@ -372,4 +379,5 @@ void mj_compareFwdInv(const mjModel* m, mjData* d) {
   mju_copy(d->efc_force, save_efc_force, nefc);
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
