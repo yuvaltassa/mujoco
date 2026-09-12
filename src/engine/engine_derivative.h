@@ -47,6 +47,7 @@ MJAPI void mjd_rne_vel_dense(const mjModel* m, mjData* d);
 mjtBool mj_isFreeBody(const mjModel* m, int body);
 
 // 6x6 block B = d qfrc_bias / d qvel for the free joint of a rigid subtree
+//   requires valid d->crb, computed by mj_crb
 MJAPI void mjd_freeBias_vel(const mjModel* m, const mjData* d, int jnt, mjtNum B[36]);
 
 // 6x6 block A = M - h * (d qfrc_smooth / d qvel) for the free joint of a rigid subtree

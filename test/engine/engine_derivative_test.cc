@@ -288,6 +288,58 @@ TEST_F(DerivativeTest, FreeBiasVelFixedDescendants) {
   }
 }
 
+// fixed-body fusion preserves the bias derivative of a massless free root
+TEST_F(DerivativeTest, FreeBiasVelFusedInertia) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="false" alignfree="false"/>
+    <default><geom contype="0" conaffinity="0"/></default>
+    <worldbody>
+      <body pos=".1 -.2 .3" euler="20 -30 40">
+        <freejoint/>
+        <body pos=".2 -.1 .3" euler="30 20 -10">
+          <geom type="box" size=".2 .1 .1" mass="1" pos=".03 .01 -.02"/>
+          <body pos="-.1 .2 .1" euler="10 -20 30">
+            <geom type="box" size=".1 .1 .2" mass=".5"/>
+          </body>
+        </body>
+        <body pos="-.1 .3 -.2" euler="-20 10 40">
+          <geom type="box" size=".1 .2 .3" mass="2" pos=".04 -.02 .03"/>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  std::string fused_xml = xml;
+  fused_xml.replace(fused_xml.find("false"), 5, "true");
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  MjModelPtr fused =
+      LoadModelFromString(fused_xml.c_str(), error, sizeof(error));
+  ASSERT_THAT(fused.get(), NotNull()) << error;
+  ASSERT_EQ(model->nbody, 5);
+  ASSERT_EQ(fused->nbody, 2);
+  ASSERT_EQ(model->body_mass[1], 0);
+  MjDataPtr data = MakeData(model);
+  MjDataPtr fused_data = MakeData(fused);
+
+  mjtNum qvel[6] = {0.4, -0.3, 0.2, 5, -3, 2};
+  mju_copy(data->qvel, qvel, 6);
+  mju_copy(fused_data->qvel, qvel, 6);
+  mj_forward(model.get(), data.get());
+  mj_forward(fused.get(), fused_data.get());
+
+  mjtNum B[36], B_fused[36];
+  mjd_freeBias_vel(model.get(), data.get(), /*jnt=*/0, B);
+  mjd_freeBias_vel(fused.get(), fused_data.get(), /*jnt=*/0, B_fused);
+  EXPECT_GT(mju_norm(B, 36), 1);
+
+  // fusing diagonalizes the inertia at compiler precision (about 1e-6 here)
+  EXPECT_THAT(AsVector(B, 36),
+              Pointwise(DoubleNear(1e-5), AsVector(B_fused, 36)));
+}
+
 // a jointed descendant must still exclude the free root from the local six-DOF
 // solve
 TEST_F(DerivativeTest, FreeMhatRejectsArticulatedSubtree) {
