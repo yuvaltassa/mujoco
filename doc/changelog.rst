@@ -37,6 +37,8 @@ Bug fixes
   constraints, and the tendon coloring of :ref:`mjv_updateScene`, accessed the discarded rows. The tendon coloring also
   crashed right after :ref:`mj_resetData` for models with :ref:`sleep-initialized<body-sleep>` trees and active limits.
   :ref:`mj_printData` no longer crashes on models with tendons when constraints are disabled.
+- :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD` now raise an error when :ref:`sleeping<Sleeping>` is enabled.
+  Previously, their repeated evaluations changed the sleep state, leading to internal errors or wrong derivatives.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

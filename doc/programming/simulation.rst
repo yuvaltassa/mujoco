@@ -1404,6 +1404,10 @@ Notes
 **RK4 integrator**
   The RK4 integrator is not currently supported, due to the subtleties of waking inside the sub-steps.
 
+**Finite-differenced derivatives**
+  :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD` are not supported, since their repeated evaluations change the
+  sleep state.
+
 
 .. _siCoordinate:
 
