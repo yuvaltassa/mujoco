@@ -11,6 +11,11 @@ Engine
   :at:`implicitfast` and damped-:at:`Euler` integrators (previously silent) and of the :at:`implicit` integrator
   (previously a fatal error).
 
+Bug fixes
+^^^^^^^^^
+- :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD` now raise an error when :ref:`sleeping<Sleeping>` is enabled.
+  Previously, their repeated evaluations changed the sleep state, leading to internal errors or wrong derivatives.
+
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
 
