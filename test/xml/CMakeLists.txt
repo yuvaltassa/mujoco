@@ -43,3 +43,5 @@ mujoco_test(
   ENVIRONMENT
   "MUJOCO_PLUGIN_DIR=$<TARGET_FILE_DIR:elasticity>"
 )
+
+mujoco_test(xml_models_test)
