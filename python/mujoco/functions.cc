@@ -1686,7 +1686,9 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
       [](MjDataWrapper& d, int ncon, int nefc, int nJ) {
         raw::MjData* data = d.get();
 
-        auto cleanup = [](raw::MjData* data, int nJ) {
+        // discard all contacts and constraint rows: like mj_clearEfc, clear the
+        // arena pointers and every count that sizes or indexes them
+        auto cleanup = [](raw::MjData* data) {
 #ifdef ADDRESS_SANITIZER
         ASAN_POISON_MEMORY_REGION(
             static_cast<char*>(data->arena),
@@ -1694,8 +1696,12 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
 #endif
           data->parena = 0;
           data->ncon = 0;
-          data->nefc = 0;
-          if (nJ > -1) data->nJ = 0;
+          data->ne = data->nf = data->nl = data->nefc = 0;
+          data->nisland = data->nidof = 0;
+          data->nJ = data->nY = data->nA = 0;
+          data->efm_active = 0;
+          data->nefmT = data->nefmA = data->nefmK = data->nefmL = 0;
+          data->nefmdof = data->nefmcon = 0;
           data->contact = static_cast<raw::MjContact*>(data->arena);
 #define X(type, name, nr, nc) data->name = nullptr;
           MJDATA_ARENA_POINTERS_SOLVER
@@ -1710,15 +1716,16 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
         const char* error_msg_fmt =
             "Insufficient arena memory, currently allocated memory=\"%s\". "
             "Increase using <size memory=\"X\"/>.";
-        cleanup(data, nJ);
+        if (nJ < 0) nJ = data->nJ;  // by default, keep the current size
+        cleanup(data);
         data->ncon = ncon;
         data->nefc = nefc;
-        if (nJ > -1) data->nJ = nJ;
+        data->nJ = nJ;
         data->contact =
             static_cast<raw::MjContact*>(InterceptMjErrors(::mj_arenaAllocByte)(
                 data, ncon * sizeof(raw::MjContact), alignof(raw::MjContact)));
         if (!data->contact) {
-          cleanup(data, nJ);
+          cleanup(data);
           std::snprintf(error_msg, sizeof(error_msg), error_msg_fmt,
                         mju_writeNumBytes(data->narena));
           throw FatalError(error_msg);
@@ -1732,7 +1739,7 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
   data->name = static_cast<type*>(InterceptMjErrors(::mj_arenaAllocByte)( \
       data, sizeof(type) * (nr) * (nc), alignof(type)));                  \
   if (!data->name) {                                                      \
-    cleanup(data, nJ);                                                    \
+    cleanup(data);                                                        \
     std::snprintf(error_msg, sizeof(error_msg), error_msg_fmt,            \
                   mju_writeNumBytes(data->narena));                       \
     throw FatalError(error_msg);                                          \
