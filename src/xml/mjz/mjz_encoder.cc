@@ -257,7 +257,6 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
   {
     const mjsMesh* mesh = mjs_asMesh(mjs_firstElement(spec, mjOBJ_MESH));
     while (mesh != nullptr) {
-      if (!mesh->file) continue;
       process(mesh->element, mesh->file, /*use_meshdir=*/true, "mesh");
       mesh = mjs_asMesh(mjs_nextElement(spec, mesh->element));
     }
@@ -266,7 +265,6 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
   {
     const mjsHField* hf = mjs_asHField(mjs_firstElement(spec, mjOBJ_HFIELD));
     while (hf != nullptr) {
-      if (!hf->file) continue;
       process(hf->element, hf->file, /*use_meshdir=*/true, "hfield");
       hf = mjs_asHField(mjs_nextElement(spec, hf->element));
     }
@@ -275,7 +273,6 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
   {
     const mjsSkin* skin = mjs_asSkin(mjs_firstElement(spec, mjOBJ_SKIN));
     while (skin != nullptr) {
-      if (!skin->file) continue;
       process(skin->element, skin->file, /*use_meshdir=*/true, "skin");
       skin = mjs_asSkin(mjs_nextElement(spec, skin->element));
     }
@@ -285,7 +282,6 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
   {
     const mjsTexture* tex = mjs_asTexture(mjs_firstElement(spec, mjOBJ_TEXTURE));
     while (tex != nullptr) {
-      if (!tex->file) continue;
       process(tex->element, tex->file, /*use_meshdir=*/false, "texture");
       if (tex->cubefiles) {
         for (const mjString& file : *tex->cubefiles) {
