@@ -30,6 +30,9 @@ Bug fixes
 - Fixed flex stretch forces ignoring the :ref:`spring<option-flag-spring>` and :ref:`damper<option-flag-damper>`
   disable flags. Stretch :ref:`damping<flexcomp-elasticity-damping>` is now added to ``qfrc_damper`` rather than
   ``qfrc_spring``.
+- Fixed flex elasticity under the ``discrete`` integrator ignoring the :ref:`spring<option-flag-spring>` and
+  :ref:`damper<option-flag-damper>` disable flags: the effective metric kept the disabled stiffness and damping,
+  which acted as spurious damping and inertia.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
