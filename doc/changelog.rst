@@ -23,6 +23,12 @@ Engine
   :at:`implicitfast` and damped-:at:`Euler` integrators (previously silent) and of the :at:`implicit` integrator
   (previously a fatal error).
 
+Bug fixes
+^^^^^^^^^
+- Flexes with ``strain`` :ref:`equality constraints<flexcomp-edge-equality>` no longer fail under the :at:`implicit` and
+  :at:`implicitfast` integrators with the flex elasticity error: the constraint data they store in
+  ``mjModel.flex_stiffness`` was mistaken for elasticity.
+
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
 
