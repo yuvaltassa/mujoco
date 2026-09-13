@@ -28,6 +28,9 @@ Bug fixes
 - Tendon :ref:`actuatorfrclimited<tendon-spatial-actuatorfrclimited>` now defaults to "auto" as documented.
   Previously the default was "false" and :at:`actuatorfrcrange` was silently ignored unless :at:`actuatorfrclimited`
   was set explicitly.
+- Fixed flex stretch forces ignoring the :ref:`spring<option-flag-spring>` and :ref:`damper<option-flag-damper>`
+  disable flags. Stretch :ref:`damping<flexcomp-elasticity-damping>` is now added to ``qfrc_damper`` rather than
+  ``qfrc_spring``.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
