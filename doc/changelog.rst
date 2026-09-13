@@ -23,6 +23,12 @@ Engine
   :at:`implicitfast` and damped-:at:`Euler` integrators (previously silent) and of the :at:`implicit` integrator
   (previously a fatal error).
 
+Bug fixes
+^^^^^^^^^
+- :ref:`.mjz <MJZArchives>` archives written on Windows stored asset paths with ``\`` separators, so assets in a
+  :ref:`meshdir<compiler-meshdir>`, :ref:`texturedir<compiler-texturedir>` or subdirectory could not be loaded. The
+  encoder now always writes ``/``, and archives written by earlier versions load correctly.
+
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
 

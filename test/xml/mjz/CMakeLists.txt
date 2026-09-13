@@ -14,6 +14,8 @@
 
 mujoco_test(
   mjz_decoder_test
+  ADDITIONAL_LINK_LIBRARIES
+  miniz
 )
 
 mujoco_test(

@@ -82,7 +82,9 @@ class ZipArchiveProvider : public mjpResourceProvider {
       }
       const int size = static_cast<int>(stat.m_uncomp_size);
       if (size == 0) { continue; }
-      files_[stat.m_filename] = FileInfo{i, size, {}};
+      // Index entries by their reduced name, as lookups are; this also maps the '\' separators
+      // of archives written by older Windows builds to '/'.
+      files_[mujoco::user::FilePath(stat.m_filename).Str()] = FileInfo{i, size, {}};
     }
 
     // Look for the root XML model in the archive. We try the following
