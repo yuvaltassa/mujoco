@@ -21,6 +21,7 @@
 #include <cstring>
 #include <filesystem>  // NOLINT
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gmock/gmock.h>
@@ -195,6 +196,44 @@ TEST_F(MjzEncoderTest, RootFileInArchiveIsNamedModelXml) {
   std::free(resource.data);
   mj_deleteModel(model);
   mj_deleteSpec(spec);
+}
+
+TEST_F(MjzEncoderTest, ArchiveEntryNamesUseForwardSlashes) {
+  // one asset path joined with meshdir, one with a subdirectory in the file
+  const std::pair<std::string, std::string> cases[] = {
+      {"meshdir_test", "assets/box.obj"},
+      {"subdir_mesh", "meshes/box.obj"},
+  };
+  for (const auto& [dir, entry] : cases) {
+    SCOPED_TRACE(dir);
+    std::string xml_path =
+        GetTestDataFilePath("xml/mjz/testdata/" + dir + "/model.xml");
+
+    char error[1024] = {0};
+    mjSpec* spec = mj_parseXML(xml_path.c_str(), nullptr, error, sizeof(error));
+    ASSERT_THAT(spec, testing::NotNull()) << error;
+    mjModel* model = mj_compile(spec, nullptr);
+    ASSERT_THAT(model, testing::NotNull()) << mjs_getError(spec);
+
+    const mjpEncoder* enc = mjp_findEncoder("model.mjz", nullptr);
+    ASSERT_THAT(enc, testing::NotNull());
+
+    mjResource resource = {};
+    resource.name = const_cast<char*>("model.mjz");
+    int nbytes = enc->encode(spec, model, nullptr, &resource);
+    ASSERT_GT(nbytes, 0);
+
+    mz_zip_archive zip;
+    std::memset(&zip, 0, sizeof(zip));
+    ASSERT_TRUE(mz_zip_reader_init_mem(&zip, resource.data, nbytes, 0));
+    EXPECT_GE(mz_zip_reader_locate_file(&zip, entry.c_str(), nullptr, 0), 0)
+        << "Expected '" << entry << "' to exist in the archive";
+
+    mz_zip_reader_end(&zip);
+    std::free(resource.data);
+    mj_deleteModel(model);
+    mj_deleteSpec(spec);
+  }
 }
 
 TEST_F(MjzEncoderTest, RoundTrip) {

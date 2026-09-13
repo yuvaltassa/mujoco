@@ -28,6 +28,9 @@ Bug fixes
 - Tendon :ref:`actuatorfrclimited<tendon-spatial-actuatorfrclimited>` now defaults to "auto" as documented.
   Previously the default was "false" and :at:`actuatorfrcrange` was silently ignored unless :at:`actuatorfrclimited`
   was set explicitly.
+- :ref:`.mjz <MJZArchives>` archives written on Windows stored asset paths with ``\`` separators, so assets in a
+  :ref:`meshdir<compiler-meshdir>`, :ref:`texturedir<compiler-texturedir>` or subdirectory could not be loaded. The
+  encoder now always writes ``/``, and archives written by earlier versions load correctly.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

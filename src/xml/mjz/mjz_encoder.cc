@@ -106,7 +106,7 @@ std::string RemoveLeadingDotDot(const fs::path& p) {
     skipping  = false;
     result   /= component;
   }
-  return result.string();
+  return result.generic_string();
 }
 
 
@@ -223,7 +223,7 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
         // ../../b/c__.obj -> b/c__.obj
         // Also remove any leading '/'.
         const fs::path localized = RemoveLeadingDotDot(normalized.relative_path());
-        // path relative to the root XML in the archive
+        // path relative to the root XML in the archive, named with '/' separators on every platform
         fs::path archive_path = root_dir / localized;
 
         // If this file was already archived, we may still need to add a rewrite if raw_file was
@@ -235,21 +235,21 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
           return;
         }
 
-        if (localized != raw_path) { xml_rewrites[rewrite_key] = archive_path.string(); }
+        if (localized != raw_path) { xml_rewrites[rewrite_key] = archive_path.generic_string(); }
 
         // Collision renaming: if this archive path is already in use, try again with an incremented
         // suffix.
         fs::path parent    = archive_path.parent_path();
         fs::path stem      = archive_path.stem();
         fs::path extension = archive_path.extension();
-        for (int i = 0; archive_entries.contains(archive_path.string()); ++i) {
+        for (int i = 0; archive_entries.contains(archive_path.generic_string()); ++i) {
           std::string new_name      = stem.string() + "_" + std::to_string(i) + extension.string();
           archive_path              = parent / new_name;
-          xml_rewrites[rewrite_key] = archive_path.string();
+          xml_rewrites[rewrite_key] = archive_path.generic_string();
         }
 
-        archived_paths[full_path] = archive_path.string();
-        archive_entries[archive_path.string()] =
+        archived_paths[full_path] = archive_path.generic_string();
+        archive_entries[archive_path.generic_string()] =
             AssetEntry{archive_path, owning_spec_dir, full_spec_path};
       };
 
@@ -363,8 +363,8 @@ mjtSize MjzEncode(const mjSpec*  spec,
                                        sizeof(error));
     if (!res) {
       mju_warning("MJZ encoder: failed to open resource '%s' (dir='%s'): %s",
-                  entry.disk_path.c_str(),
-                  entry.source_dir.c_str(),
+                  entry.disk_path.string().c_str(),
+                  entry.source_dir.string().c_str(),
                   error);
       continue;
     }
