@@ -23,6 +23,11 @@ Engine
   :at:`implicitfast` and damped-:at:`Euler` integrators (previously silent) and of the :at:`implicit` integrator
   (previously a fatal error).
 
+Bug fixes
+^^^^^^^^^
+- Fixed roundoff error in flex stretch :ref:`damping<flexcomp-elasticity-damping>` that did not vanish at zero
+  velocity and, in single precision, could be a sizable fraction of the stretch force.
+
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
 
