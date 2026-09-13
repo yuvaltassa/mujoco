@@ -720,6 +720,49 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     self.assertEmpty(self.data.contact)
     self.assertEmpty(self.data.efc_id)
 
+  def test_realloc_con_efc_failure_clears_counts(self):
+    xml = r"""
+<mujoco>
+  <option solver="PGS" integrator="discrete"/>
+  <worldbody>
+    <geom type="plane" size="1 1 .1"/>
+    <body pos="0 0 .099">
+      <joint name="hinge" range="0 1" margin=".01" frictionloss="1"/>
+      <geom size=".1"/>
+    </body>
+  </worldbody>
+  <equality>
+    <joint joint1="hinge"/>
+  </equality>
+</mujoco>
+"""
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+
+    # counts that size or index the rows and their arena arrays
+    counts = (
+        'ncon',
+        'ne',
+        'nf',
+        'nl',
+        'nefc',
+        'nJ',
+        'nY',
+        'nA',
+        'nisland',
+        'nidof',
+        'efm_active',
+    )
+    for count in counts:
+      self.assertGreater(getattr(data, count), 0, count)
+
+    # the failed reallocation discards all rows: no count may outlive them
+    with self.assertRaises(mujoco.FatalError):
+      mujoco._functions._realloc_con_efc(data, 100000000, 100000000)
+    for count in counts:
+      self.assertEqual(getattr(data, count), 0, count)
+
   def test_realloc_island(self):
     # Test allocation on fresh data (on its own)
     nisland = 2

@@ -23,6 +23,13 @@ Engine
   :at:`implicitfast` and damped-:at:`Euler` integrators (previously silent) and of the :at:`implicit` integrator
   (previously a fatal error).
 
+Bug fixes
+^^^^^^^^^
+- Fixed crashes after ``mjx.get_data_into`` and :doc:`MuJoCo Warp <mjwarp/index>`'s ``get_data_into``: resizing the
+  contacts and constraints of the target :ref:`mjData` cleared its constraint and island arrays but kept their previous
+  counts, also when the resize failed for lack of arena memory. Calls such as :ref:`mj_printData` could then crash, and
+  MuJoCo Warp could leave the island arrays unallocated.
+
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
 
