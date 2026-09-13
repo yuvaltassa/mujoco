@@ -1153,10 +1153,10 @@ static void warmstart(const mjModel* m, mjData* d) {
 }
 
 
-// mju_dispatch callback: solve one island
+// mju_dispatch callback: solve one island, Newton writes its first clamped Hessian pivot to arg
 static void solveIslandTask(const mjModel* m, mjData* d, void* arg, int thread_id, int island) {
   if (m->opt.solver == mjSOL_NEWTON) {
-    mj_solNewton_island(m, d, island, m->opt.iterations);
+    ((int*)arg)[island] = mj_solNewton_island(m, d, island, m->opt.iterations);
   } else if (m->opt.solver == mjSOL_CG) {
     mj_solCG_island(m, d, island, m->opt.iterations);
   } else {
@@ -1261,7 +1261,7 @@ static void fwdConstraint(const mjModel* m, mjData* d, mjtSolver solver, int flg
       break;
 
     case mjSOL_CG:
-    case mjSOL_NEWTON:
+    case mjSOL_NEWTON: {
       // copy inputs to islands (vel+acc deps, pos-dependent already copied in mj_island)
       nidof = d->nidof;
       mju_gather(d->ifrc_smooth,     d->qfrc_smooth,     d->map_idof2dof, nidof);
@@ -1271,13 +1271,25 @@ static void fwdConstraint(const mjModel* m, mjData* d, mjtSolver solver, int flg
       mju_gather(d->iefc_force,      d->efc_force,       d->map_iefc2efc, nefc);
       mju_gather(d->iefc_aref,       d->efc_aref,        d->map_iefc2efc, nefc);
 
-      mju_dispatch(m, d, solveIslandTask, NULL, nisland);
+      // Newton records each island's first clamped Hessian pivot; warn after the join, since
+      // the island tasks may run in parallel
+      mj_markStack(d);
+      int* clamped = mjSTACKALLOC(d, nisland, int);
+      mju_fillInt(clamped, -1, nisland);
+      mju_dispatch(m, d, solveIslandTask, clamped, nisland);
+      for (int island=0; island < nisland; island++) {
+        if (clamped[island] >= 0) {
+          mj_warning(d, mjWARN_INERTIA, clamped[island]);
+        }
+      }
+      mj_freeStack(d);
 
       // copy back solver outputs (scatter dofs since ni <= nv)
       mju_scatter(d->qacc,            d->iacc,            d->map_idof2dof, nidof);
       mju_scatter(d->qfrc_constraint, d->ifrc_constraint, d->map_idof2dof, nidof);
       mju_gather(d->efc_force, d->iefc_force, d->map_efc2iefc, nefc);
       break;
+    }
     }
 
     // run noslip solver per island if enabled
@@ -1299,9 +1311,13 @@ static void fwdConstraint(const mjModel* m, mjData* d, mjtSolver solver, int flg
       mj_solCG(m, d, m->opt.iterations);
       break;
 
-    case mjSOL_NEWTON:                  // Newton
-      mj_solNewton(m, d, m->opt.iterations);
+    case mjSOL_NEWTON: {                // Newton
+      int clamped = mj_solNewton(m, d, m->opt.iterations);
+      if (clamped >= 0) {
+        mj_warning(d, mjWARN_INERTIA, clamped);
+      }
       break;
+    }
     }
 
     // run noslip solver if enabled
