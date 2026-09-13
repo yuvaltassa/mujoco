@@ -1051,8 +1051,16 @@ void mj_passive(const mjModel* m, mjData* d) {
     mju_zero(d->qfrc_passive,  nv);
   }
 
-  // both spring and damping disabled: skip all passive forces
+  // both spring and damping disabled: skip all passive forces but passive flex contact, which
+  // like all contact is disabled by the contact flag
   if (mjDISABLED(mjDSBL_SPRING) && mjDISABLED(mjDSBL_DAMPER)) {
+    if (mj_contactPassive(m, d)) {
+      if (sleep_filter) {
+        mju_addInd(d->qfrc_passive, d->qfrc_spring, d->qfrc_damper, dof_awake_ind, nv);
+      } else {
+        mju_add(d->qfrc_passive, d->qfrc_spring, d->qfrc_damper, nv);
+      }
+    }
     return;
   }
 

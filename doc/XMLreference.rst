@@ -586,7 +586,8 @@ from its default.
 .. _option-flag-contact:
 
 :at:`contact`: :at-val:`[disable, enable], "enable"`
-   This flag disables collision detection and all standard computations related to contact constraints.
+   This flag disables collision detection and all standard computations related to contact constraints and
+   :ref:`passive flex contact<flex-contact-passive>`.
 
 .. _option-flag-spring:
 
@@ -594,7 +595,8 @@ from its default.
    This flag disables passive joint, tendon and flex springs. If passive :ref:`damper <option-flag-damper>` forces are
    also disabled, **all** passive forces are disabled, including gravity compensation, fluid forces, forces computed by
    the :ref:`mjcb_passive` callback, and forces computed by :ref:`plugins <exPlugin>` when passed the
-   :ref:`mjPLUGIN_PASSIVE<mjtPluginCapabilityBit>` capability flag.
+   :ref:`mjPLUGIN_PASSIVE<mjtPluginCapabilityBit>` capability flag. :ref:`Passive flex contact<flex-contact-passive>` is
+   the exception: like all contact, it is disabled by the :ref:`contact <option-flag-contact>` flag.
 
 .. _option-flag-damper:
 
@@ -602,7 +604,8 @@ from its default.
    This flag disables passive joint, tendon and flex dampers. If passive :ref:`spring <option-flag-spring>` forces are
    also disabled, **all** passive forces are disabled, including gravity compensation, fluid forces, forces computed by
    the :ref:`mjcb_passive` callback, and forces computed by :ref:`plugins <exPlugin>` when passed the
-   :ref:`mjPLUGIN_PASSIVE<mjtPluginCapabilityBit>` capability flag.
+   :ref:`mjPLUGIN_PASSIVE<mjtPluginCapabilityBit>` capability flag. :ref:`Passive flex contact<flex-contact-passive>` is
+   the exception: like all contact, it is disabled by the :ref:`contact <option-flag-contact>` flag.
 
 .. _option-flag-gravity:
 

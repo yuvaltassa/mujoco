@@ -36,9 +36,11 @@ Bug fixes
 - Fixed flex elasticity under the ``discrete`` integrator ignoring the :ref:`spring<option-flag-spring>` and
   :ref:`damper<option-flag-damper>` disable flags: the effective metric kept the disabled stiffness and damping,
   which acted as spurious damping and inertia.
-- Fixed fluid forces and passive flex contact under the ``discrete`` integrator when both the
-  :ref:`spring<option-flag-spring>` and :ref:`damper<option-flag-damper>` flags are disabled: the forces were skipped,
-  but the effective metric kept their terms, which acted as spurious inertia and damping.
+- Fixed fluid forces under the ``discrete`` integrator when both the :ref:`spring<option-flag-spring>` and
+  :ref:`damper<option-flag-damper>` flags are disabled: the forces were skipped, but the effective metric kept their
+  terms, which acted as spurious inertia.
+- Passive flex :ref:`contact<flex-contact-passive>` is now disabled by the :ref:`contact<option-flag-contact>` flag
+  rather than together with the spring and damper forces.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

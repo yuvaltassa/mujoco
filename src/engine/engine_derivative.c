@@ -4219,10 +4219,11 @@ void mjd_effMulAddIsland(const mjModel* m, const mjData* d, mjtNum* res, const m
 // publish passive flex contact as the metric's rank-1 contact class, one packed row per pair
 // ([nnz, conid, colind...] / [scale, force, val...], see engine_derivative.h): matrix-free
 // contact costs O(nnz) per pair where the stiffness CSR cost O(nnz^2), and the CSR's sparsity no
-// longer grows with the contact set
+// longer grows with the contact set. Like the force (mj_contactPassive), only the contact flag
+// disables it
 static void effContactBuild(const mjModel* m, mjData* d, mjtNum scale) {
   d->nefmcon = 0;
-  if (!d->ncon || !flexPassiveContact_any(m)) {
+  if (mjDISABLED(mjDSBL_CONTACT) || !d->ncon || !flexPassiveContact_any(m)) {
     return;
   }
   int nv = m->nv, issparse = mj_isSparse(m);
@@ -4396,8 +4397,8 @@ void mjd_effBuild(const mjModel* m, mjData* d, int active, int flg_factor) {
   }
 
   // the tendon and actuator diagonals join the qH backbone: force the diagonal machinery on.
-  // Fluid drag and passive flex contact enter only while their forces are applied: mj_passive
-  // skips them, like every passive force, when both the spring and damper forces are disabled
+  // Fluid drag enters only while its force is applied: mj_passive skips it, like every passive
+  // force but passive flex contact, when both the spring and damper forces are disabled
   int passive = !(mjDISABLED(mjDSBL_SPRING) && mjDISABLED(mjDSBL_DAMPER));
   int any_fluid = passive && (m->opt.viscosity > 0 || m->opt.density > 0);
   d->efm_diag = (any_diag || d->nefmT || any_act || any_fluid) ? EFMALLOC(mjtNum, nv) : NULL;
@@ -4431,9 +4432,7 @@ void mjd_effBuild(const mjModel* m, mjData* d, int active, int flg_factor) {
   }
 
   // passive flex contact is a rank-1 class, not CSR entries (see effContactBuild)
-  if (passive) {
-    effContactBuild(m, d, h*h);
-  }
+  effContactBuild(m, d, h*h);
   if (d->nefmK) {
     d->efm_K_colind = EFMALLOC(int, d->nefmK);
     d->efm_K_val    = EFMALLOC(mjtNum, d->nefmK);

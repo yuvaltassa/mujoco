@@ -4459,12 +4459,14 @@ TEST_F(ForwardTest, DiscreteFlexDisableFlags) {
   }
 }
 
-// the fluid drag and passive flex contact terms of the discrete integrator's
-// effective metric follow the spring and damper disable flags, as the forces
-// do: mj_passive skips both, like every passive force, only when both flags
-// are disabled. Neither model has springs, dampers, other metric terms or
-// constraints, so disabling either flag alone must leave the step unchanged,
-// and disabling both must reduce the smooth acceleration to M^-1 * qfrc_smooth.
+// the fluid drag term of the discrete integrator's effective metric follows the
+// spring and damper disable flags, as the force does: mj_passive skips it, like
+// every passive force but passive flex contact, only when both flags are
+// disabled. Passive flex contact, force and metric rows alike, is disabled by
+// the contact flag instead. Neither model has springs, dampers, other metric
+// terms or constraints, so flags that keep the passive force must leave the
+// step unchanged, and flags that remove it must reduce the smooth acceleration
+// to M^-1 * qfrc_smooth.
 TEST_F(ForwardTest, DiscretePassiveDisableFlags) {
   static constexpr char fluid[] = R"(
   <mujoco>
@@ -4497,9 +4499,22 @@ TEST_F(ForwardTest, DiscretePassiveDisableFlags) {
   </mujoco>
   )";
 
-  for (const char* xml : {fluid, contact}) {
+  // the flags that keep each model's passive force, and the flags that remove
+  // it
+  struct Case {
+    const char* xml;
+    std::vector<int> keep;
+    int off;
+  };
+  const Case cases[] = {
+      {fluid, {mjDSBL_SPRING, mjDSBL_DAMPER}, mjDSBL_SPRING | mjDSBL_DAMPER},
+      {contact,
+       {mjDSBL_SPRING, mjDSBL_DAMPER, mjDSBL_SPRING | mjDSBL_DAMPER},
+       mjDSBL_CONTACT},
+  };
+  for (const Case& c : cases) {
     char error[1024];
-    MjModelPtr m = LoadModelFromString(xml, error, sizeof(error));
+    MjModelPtr m = LoadModelFromString(c.xml, error, sizeof(error));
     ASSERT_THAT(m.get(), NotNull()) << error;
     MjDataPtr d = MakeData(m);
     int nv = m->nv;
@@ -4518,11 +4533,12 @@ TEST_F(ForwardTest, DiscretePassiveDisableFlags) {
     qacc(0);
     EXPECT_GT(mju_norm(d->qfrc_passive, nv), 0.1)
         << "test should exercise a nontrivial passive force";
-    EXPECT_EQ(qacc(mjDSBL_SPRING), qacc(0));
-    EXPECT_EQ(qacc(mjDSBL_DAMPER), qacc(0));
+    for (int flags : c.keep) {
+      EXPECT_EQ(qacc(flags), qacc(0)) << "disableflags " << flags;
+    }
 
-    // both flags disabled: no passive force, and the metric reduces to M
-    qacc(mjDSBL_SPRING | mjDSBL_DAMPER);
+    // no passive force, and the metric reduces to M
+    qacc(c.off);
     ASSERT_EQ(d->nefc, 0);
     std::vector<mjtNum> expected(nv), diff(nv);
     mj_solveM(m.get(), d.get(), expected.data(), d->qfrc_smooth, 1);
