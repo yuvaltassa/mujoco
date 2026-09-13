@@ -546,6 +546,8 @@ static vector<unsigned char> RenderFilament(const mjModel*   m,
     request.draw_mode = mjDRAW_MODE_DEPTH;
   } else if (rnd_flags[mjRND_WIREFRAME] > 0) {
     request.draw_mode = mjDRAW_MODE_WIREFRAME;
+  } else if (opt.flags[mjVIS_ISLAND]) {
+    request.draw_mode = mjDRAW_MODE_ISLANDS;
   }
   if (rnd_flags[mjRND_SHADOW] >= 0) { request.enable_shadows = rnd_flags[mjRND_SHADOW]; }
   if (rnd_flags[mjRND_REFLECTION] >= 0) {

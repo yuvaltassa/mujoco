@@ -98,6 +98,14 @@ if echo "$RENDER_LOG" | grep -q "Failed to open filament asset"; then
 fi
 if [ -f "$OUT_PNG" ]; then
   echo "Filament render produced an output image"
+
+  # Test island coloring (expect a different image with --island=1)
+  ISLAND_PNG="${TEST_TMPDIR}/render_island.png"
+  "$TARGET_BINARY" "$MODEL" "$ISLAND_PNG" --width=64 --height=48 --island=1 ||
+    die "Filament render failed with --island=1"
+  if cmp -s "$OUT_PNG" "$ISLAND_PNG"; then
+    die "Expected --island=1 to change the Filament render"
+  fi
 else
   echo "Skipping render output check (no render context available)"
 fi
