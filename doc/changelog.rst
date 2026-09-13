@@ -34,6 +34,8 @@ Bug fixes
 - :ref:`.mjz <MJZArchives>` archives of models whose :ref:`meshdir<compiler-meshdir>` or
   :ref:`texturedir<compiler-texturedir>` was absolute, started with ``..`` or used a resource provider looked for their
   assets outside the archive. The encoder now stores these directories inside the archive.
+- :ref:`.mjz <MJZArchives>` archives could not load assets when a file path, :ref:`meshdir<compiler-meshdir>` or
+  :ref:`texturedir<compiler-texturedir>` contained a repeated separator, as in ``sub//box.obj``.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

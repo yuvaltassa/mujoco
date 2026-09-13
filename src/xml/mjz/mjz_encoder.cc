@@ -176,6 +176,14 @@ void ApplyRewrites(std::string& xml, const RewriteMap& rewrites) {
 }
 
 
+// Rewrite the attribute value in key to path if the texts differ; fs::path equality would ignore
+// repeated separators ("sub//box.obj" == "sub/box.obj"), which the decoder's lookups keep.
+void AddRewrite(RewriteMap& rewrites, const RewriteKey& key, const fs::path& path) {
+  std::string value = path.generic_string();
+  if (value != key.file) { rewrites[key] = std::move(value); }
+}
+
+
 // collect all referenced asset files from the spec
 //
 // returns a map from unique archive entry names to AssetEntry structs
@@ -238,9 +246,9 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
         const fs::path localized = LocalizePath(raw_path);
 
         // If this file was already archived, we may still need to add a rewrite if raw_file was
-        // sanitized or collision-renamed for the first occurrence.
+        // sanitized or collision-renamed for the first occurrence, or is spelled differently here.
         if (auto it = archived_paths.find({root_dir, full_path}); it != archived_paths.end()) {
-          if (it->second != raw_path) { xml_rewrites[rewrite_key] = it->second.generic_string(); }
+          AddRewrite(xml_rewrites, rewrite_key, it->second);
           return;
         }
 
@@ -255,7 +263,7 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
           file                 = parent / new_name;
         }
 
-        if (file != raw_path) { xml_rewrites[rewrite_key] = file.generic_string(); }
+        AddRewrite(xml_rewrites, rewrite_key, file);
 
         // path relative to the root XML in the archive, named with '/' separators on every platform
         const fs::path archive_path           = root_dir / file;
@@ -303,12 +311,8 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
     }
   }
 
-  if (mesh_dir != *root_meshdir) {
-    xml_rewrites[{"compiler", *root_meshdir, ""}] = mesh_dir.generic_string();
-  }
-  if (texture_dir != *root_texturedir) {
-    xml_rewrites[{"compiler", *root_texturedir, ""}] = texture_dir.generic_string();
-  }
+  AddRewrite(xml_rewrites, {"compiler", *root_meshdir, ""}, mesh_dir);
+  AddRewrite(xml_rewrites, {"compiler", *root_texturedir, ""}, texture_dir);
 
   return archive_entries;
 }

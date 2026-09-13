@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>  // NOLINT
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1051,6 +1052,69 @@ TEST_F(MjzEncoderTest, RoundTripWithMeshdirOutsideArchive) {
     mj_deleteModel(model);
     mj_deleteSpec(spec);
   }
+}
+
+TEST_F(MjzEncoderTest, RoundTripWithRepeatedSeparators) {
+  // compiler attributes and assets that refer to sub/box.obj and sub/tex.png
+  // with a repeated separator, which archive entry names drop
+  const std::pair<std::string, std::string> cases[] = {
+      {"", R"(<mesh name="box" file="sub//box.obj"/>)"},
+      // a later reference to an archived file
+      {"", R"(<mesh name="box" file="sub/box.obj"/>)"
+           R"(<mesh name="box_again" file="sub//box.obj"/>)"},
+      {R"(meshdir="sub//")", R"(<mesh name="box" file="box.obj"/>)"},
+      {R"(texturedir="sub//")",
+       R"(<texture name="tex" type="2d" file="tex.png"/>)"},
+  };
+  const fs::path srcdir =
+      fs::path(testing::TempDir()) / "repeated_separators_src";
+  const fs::path tmpdir =
+      fs::path(testing::TempDir()) / "repeated_separators_out";
+  fs::remove_all(srcdir);
+  fs::create_directories(srcdir / "sub");
+  fs::copy_file(GetTestDataFilePath("xml/mjz/testdata/disk_mesh/box.obj"),
+                srcdir / "sub" / "box.obj");
+  fs::copy_file(GetTestDataFilePath("xml/testdata/hfield.png"),
+                srcdir / "sub" / "tex.png");
+  const std::string xml_path = (srcdir / "model.xml").string();
+  for (const auto& [compiler, assets] : cases) {
+    const std::string xml = "<mujoco><compiler " + compiler + "/><asset>" +
+                            assets + "</asset></mujoco>";
+    SCOPED_TRACE(xml);
+    std::ofstream(xml_path) << xml;
+
+    char error[1024] = {0};
+    mjSpec* spec = mj_parseXML(xml_path.c_str(), nullptr, error, sizeof(error));
+    ASSERT_THAT(spec, testing::NotNull()) << error;
+
+    mjModel* model = mj_compile(spec, nullptr);
+    ASSERT_THAT(model, testing::NotNull()) << mjs_getError(spec);
+
+    fs::create_directories(tmpdir);
+    const std::string out_path = (tmpdir / "model.mjz").string();
+    int nbytes = mj_encode(spec, model, out_path.c_str(), nullptr, nullptr,
+                           error, sizeof(error));
+    ASSERT_GT(nbytes, 0) << error;
+
+    mjVFS decode_vfs;
+    mj_defaultVFS(&decode_vfs);
+    mjSpec* decoded =
+        mj_parse(out_path.c_str(), nullptr, &decode_vfs, error, sizeof(error));
+    ASSERT_THAT(decoded, testing::NotNull()) << error;
+
+    mjModel* decoded_model = mj_compile(decoded, &decode_vfs);
+    ASSERT_THAT(decoded_model, testing::NotNull()) << mjs_getError(decoded);
+    EXPECT_EQ(decoded_model->nmesh, model->nmesh);
+    EXPECT_EQ(decoded_model->ntex, model->ntex);
+
+    fs::remove_all(tmpdir);
+    mj_deleteVFS(&decode_vfs);
+    mj_deleteModel(decoded_model);
+    mj_deleteSpec(decoded);
+    mj_deleteModel(model);
+    mj_deleteSpec(spec);
+  }
+  fs::remove_all(srcdir);
 }
 
 class MjzEncoderParameterizedTest
