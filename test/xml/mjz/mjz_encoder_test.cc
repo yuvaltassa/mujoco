@@ -539,6 +539,50 @@ TEST_F(MjzEncoderTest, RoundTripWithMeshdir) {
   mj_deleteSpec(spec);
 }
 
+TEST_F(MjzEncoderTest, RoundTripRewrittenFilesUnderMeshdir) {
+  // under meshdir="assets", the file of "outside" and "outside_again" is
+  // rewritten, and the file of "inside" collides with it and is renamed
+  std::string xml_path =
+      GetTestDataFilePath("xml/mjz/testdata/meshdir_rewrite_test/model.xml");
+
+  char error[1024] = {0};
+  mjSpec* spec = mj_parseXML(xml_path.c_str(), nullptr, error, sizeof(error));
+  ASSERT_THAT(spec, testing::NotNull()) << error;
+
+  mjModel* model = mj_compile(spec, nullptr);
+  ASSERT_THAT(model, testing::NotNull()) << mjs_getError(spec);
+
+  fs::path tmpdir = fs::path(testing::TempDir()) / "meshdir_rewrite_test_out";
+  fs::create_directories(tmpdir);
+  const std::string out_path = (tmpdir / "model.mjz").string();
+
+  int nbytes = mj_encode(spec, model, out_path.c_str(), nullptr, nullptr, error,
+                         sizeof(error));
+  ASSERT_GT(nbytes, 0) << error;
+
+  mjVFS decode_vfs;
+  mj_defaultVFS(&decode_vfs);
+  mjSpec* decoded =
+      mj_parse(out_path.c_str(), nullptr, &decode_vfs, error, sizeof(error));
+  ASSERT_THAT(decoded, testing::NotNull()) << error;
+
+  mjModel* decoded_model = mj_compile(decoded, &decode_vfs);
+  ASSERT_THAT(decoded_model, testing::NotNull()) << mjs_getError(decoded);
+
+  // mesh.obj and assets/mesh.obj have different vertex counts
+  ASSERT_EQ(decoded_model->nmesh, model->nmesh);
+  for (int i = 0; i < model->nmesh; ++i) {
+    EXPECT_EQ(decoded_model->mesh_vertnum[i], model->mesh_vertnum[i]);
+  }
+
+  fs::remove_all(tmpdir);
+  mj_deleteVFS(&decode_vfs);
+  mj_deleteModel(decoded_model);
+  mj_deleteSpec(decoded);
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
 TEST_F(MjzEncoderTest, RoundTripWithInclude) {
   std::string xml_path =
       GetTestDataFilePath("xml/mjz/testdata/include_test/parent.xml");
@@ -994,7 +1038,8 @@ TEST_P(MjzEncoderParameterizedTest, WriteReadCompare) {
   }
 
   // Make paths identical to avoid failure in CompareModel due to localization.
-  // For example, we might localize "../../y" to "y", which changes the paths.
+  // For example, we might localize "../../y" to "y", which changes the paths
+  // and the addresses of the paths that follow it.
   char* old_m_paths = m->paths;
   char* old_mtemp_paths = mtemp->paths;
   int old_m_npaths = m->npaths;
@@ -1011,6 +1056,19 @@ TEST_P(MjzEncoderParameterizedTest, WriteReadCompare) {
 
   m->npaths = dummy_len;
   mtemp->npaths = dummy_len;
+
+  // point asset paths at the dummy, keeping -1 (no path)
+  auto reset_pathadr = [](int* pathadr, mjtSize n) {
+    for (int i = 0; i < n; ++i) {
+      if (pathadr[i] > 0) pathadr[i] = 0;
+    }
+  };
+  for (mjModel* model : {m, mtemp}) {
+    reset_pathadr(model->mesh_pathadr, model->nmesh);
+    reset_pathadr(model->skin_pathadr, model->nskin);
+    reset_pathadr(model->hfield_pathadr, model->nhfield);
+    reset_pathadr(model->tex_pathadr, model->ntex);
+  }
 
   std::string field = "";
   mjtNum result = CompareModel(m, mtemp, field);
