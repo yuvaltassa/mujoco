@@ -1766,8 +1766,28 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
         }
         MJDATA_ARENA_POINTERS_ISLAND
 #undef X
+
+#undef MJ_M
+#define MJ_M(x) d.model().get()->x
+#undef MJ_D
+#define MJ_D(x) data->x
+        // Reclaim the island block only if no other arena array follows it; a
+        // forward pass allocates the dual and effective-metric arrays after it.
         if (min_ptr && data->arena) {
-          parena_start = min_ptr - static_cast<char*>(data->arena);
+          bool followed = false;
+#define X(type, name, nr, nc)                                                   \
+          if (data->name && (nr) * (nc) > 0 &&                                  \
+              reinterpret_cast<char*>(data->name) >= min_ptr) {                 \
+            followed = true;                                                    \
+          }
+          MJDATA_ARENA_POINTERS_CONTACT
+          MJDATA_ARENA_POINTERS_SOLVER
+          MJDATA_ARENA_POINTERS_DUAL
+          MJDATA_ARENA_POINTERS_EFM
+#undef X
+          if (!followed) {
+            parena_start = min_ptr - static_cast<char*>(data->arena);
+          }
         }
 
         auto cleanup = [](raw::MjData* data, size_t target_parena) {
@@ -1795,10 +1815,6 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
         data->nisland = nisland;
         data->nidof = nidof;
 
-#undef MJ_M
-#define MJ_M(x) d.model().get()->x
-#undef MJ_D
-#define MJ_D(x) data->x
 #define X(type, name, nr, nc)                                                   \
         data->name = static_cast<type*>(InterceptMjErrors(::mj_arenaAllocByte)( \
             data, sizeof(type) * (nr) * (nc), alignof(type)));                  \

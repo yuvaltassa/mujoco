@@ -763,6 +763,55 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     self.assertEqual(self.data.nisland, 0)
     self.assertEqual(self.data.nidof, 0)
 
+  def test_realloc_island_keeps_dual_and_metric_arrays(self):
+    # a forward pass allocates the dual (PGS) and effective-metric (discrete)
+    # arrays after the island arrays; the margin activates the joint limit
+    xml = """
+<mujoco>
+  <option solver="PGS" integrator="discrete"/>
+  <worldbody>
+    <body>
+      <joint range="0 1" margin=".01"/>
+      <geom size=".1"/>
+    </body>
+  </worldbody>
+</mujoco>
+"""
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    for count in ('nisland', 'nY', 'nA', 'efm_active'):
+      self.assertGreater(getattr(data, count), 0, count)
+
+    def span(name):
+      array = getattr(data, name)
+      start = array.__array_interface__['data'][0]
+      return start, start + array.nbytes
+
+    later = {
+        name: span(name)
+        for name in dir(data)
+        if name.startswith(('efc_Y', 'efc_AR', 'efm_')) and name != 'efm_active'
+    }
+
+    # grow the islands: the new island arrays must not overlap the later ones
+    mujoco._functions._realloc_island(
+        data, nisland=data.nisland + 1, nidof=data.nidof
+    )
+    island = (
+        'tree_island island_ntree island_itreeadr map_itree2tree dof_island '
+        'island_nv island_idofadr island_dofadr map_dof2idof map_idof2dof '
+        'ifrc_smooth iacc_smooth iacc efc_island island_ne island_nf '
+        'island_nefc island_iefcadr map_efc2iefc map_iefc2efc iefc_type '
+        'iefc_id iefc_frictionloss iefc_D iefc_R iefc_aref iefc_state '
+        'iefc_force ifrc_constraint'
+    ).split()
+    for name in island:
+      start, end = span(name)
+      for other, (other_start, other_end) in later.items():
+        overlap = start < other_end and other_start < end
+        self.assertFalse(overlap, f'{name} overlaps {other}')
+
   def test_mj_struct_list_equality(self):
     model2 = mujoco.MjModel.from_xml_string(TEST_XML)
     data2 = mujoco.MjData(model2)
