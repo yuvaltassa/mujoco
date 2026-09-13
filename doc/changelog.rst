@@ -27,6 +27,9 @@ Bug fixes
 ^^^^^^^^^
 - Fixed roundoff error in flex stretch :ref:`damping<flexcomp-elasticity-damping>` that did not vanish at zero
   velocity and, in single precision, could be a sizable fraction of the stretch force.
+- Fixed flex stretch forces ignoring the :ref:`spring<option-flag-spring>` and :ref:`damper<option-flag-damper>`
+  disable flags. Stretch :ref:`damping<flexcomp-elasticity-damping>` is now added to ``qfrc_damper`` rather than
+  ``qfrc_spring``.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
