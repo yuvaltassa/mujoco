@@ -931,7 +931,9 @@ TEST_P(MjzEncoderParameterizedTest, WriteReadCompare) {
   mjModel* m = mj_compile(s, nullptr);
   ASSERT_THAT(m, NotNull()) << mjs_getError(s);
 
-  const std::string tmp_path = testing::TempDir() + "/mjz_roundtrip.mjz";
+  // one archive per case: on Linux, ctest runs the cases as parallel processes
+  const std::string tmp_path = testing::TempDir() + "/mjz_roundtrip_" +
+                               SanitizePathForTestName(xml) + ".mjz";
   int nbytes = mj_encode(s, m, tmp_path.c_str(), nullptr, nullptr, error.data(),
                          error.size());
   ASSERT_GT(nbytes, 0) << error.data();
