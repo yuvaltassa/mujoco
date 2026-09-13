@@ -57,6 +57,29 @@ static void inline GradSquaredLengths(mjtNum gradient[6][2][3],
   }
 }
 
+// add the stretch force of an element to the vertex forces frc: with the edge tensions
+// T = metric*elongation, the force on the two vertices of edge b is -T_b*gradient_b
+static void inline AddStretchForce(mjtNum* frc,
+                                   const int* vert,
+                                   const mjtNum elongation[6],
+                                   const mjtNum metric[36],
+                                   mjtNum gradient[6][2][3],
+                                   const int edge[6][2],
+                                   int nedge) {
+  for (int ed2 = 0; ed2 < nedge; ed2++) {
+    mjtNum tension = 0;
+    for (int ed1 = 0; ed1 < nedge; ed1++) {
+      tension += elongation[ed1] * metric[nedge*ed1 + ed2];
+    }
+    for (int i = 0; i < 2; i++) {
+      mjtNum* frc_i = frc + 3*vert[edge[ed2][i]];
+      for (int x = 0; x < 3; x++) {
+        frc_i[x] -= tension * gradient[ed2][i][x];
+      }
+    }
+  }
+}
+
 
 // passive forces for interpolated flex (stretch + bending)
 static void mj_flexPassiveInterp(const mjModel* m, mjData* d, int f,
@@ -591,7 +614,6 @@ static void mj_flexPassiveStretch(const mjModel* m, mjData* d, int f,
 
   int dim = m->flex_dim[f];
   int nedge = (dim == 2) ? 3 : 6;
-  int nvert = (dim == 2) ? 3 : 4;
   const int* elem = m->flex_elem + m->flex_elemdataadr[f];
   const int* edgeelem = m->flex_elemedge + m->flex_elemedgeadr[f];
   mjtNum* xpos = d->flexvert_xpos + 3*m->flex_vertadr[f];
@@ -631,27 +653,7 @@ static void mj_flexPassiveStretch(const mjModel* m, mjData* d, int f,
         int idx = edgeelem[t * nedge + e];
         elongation[e] = deformed[idx]*deformed[idx] - reference[idx]*reference[idx];
       }
-
-      // compute local force
-      mjtNum force[12] = {0};
-      for (int ed1 = 0; ed1 < nedge; ed1++) {
-        for (int ed2 = 0; ed2 < nedge; ed2++) {
-          for (int i = 0; i < 2; i++) {
-            for (int x = 0; x < 3; x++) {
-              force[3 * edges[dim-2][ed2][i] + x] -=
-                  elongation[ed1] * gradient[ed2][i][x] *
-                  metric[nedge * ed1 + ed2];
-            }
-          }
-        }
-      }
-
-      // insert into global force
-      for (int i = 0; i < nvert; i++) {
-        for (int x = 0; x < 3; x++) {
-          frc[3*vert[i]+x] += force[3*i+x];
-        }
-      }
+      AddStretchForce(frc, vert, elongation, metric, gradient, edges[dim-2], nedge);
     }
 
     // damper force: generalized Rayleigh damping as described in Section 5.2 of
@@ -666,21 +668,7 @@ static void mj_flexPassiveStretch(const mjModel* m, mjData* d, int f,
         mjtNum dL = vel[idx] * m->opt.timestep;
         elongation[e] = dL*(2*deformed[idx] - dL) * kD;
       }
-
-      // same contraction as the spring force, grouped by edge: tension T = M*elongation,
-      // force -T_b*gradient_b on the two vertices of edge b
-      for (int ed2 = 0; ed2 < nedge; ed2++) {
-        mjtNum tension = 0;
-        for (int ed1 = 0; ed1 < nedge; ed1++) {
-          tension += elongation[ed1] * metric[nedge*ed1 + ed2];
-        }
-        for (int i = 0; i < 2; i++) {
-          mjtNum* dmp_i = dmp + 3*vert[edges[dim-2][ed2][i]];
-          for (int x = 0; x < 3; x++) {
-            dmp_i[x] -= tension * gradient[ed2][i][x];
-          }
-        }
-      }
+      AddStretchForce(dmp, vert, elongation, metric, gradient, edges[dim-2], nedge);
     }
   }
 

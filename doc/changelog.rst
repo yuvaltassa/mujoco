@@ -22,6 +22,8 @@ Engine
 - The :ref:`mjWARN_INERTIA <mjtWarning>` warning is now also raised by the modified-inertia factorizations of the
   :at:`implicitfast` and damped-:at:`Euler` integrators (previously silent) and of the :at:`implicit` integrator
   (previously a fatal error).
+- Flex stretch elasticity is computed with fewer operations, making :ref:`mj_passive` up to twice as fast for models
+  with flex elasticity. Results change at the level of floating-point roundoff.
 
 Bug fixes
 ^^^^^^^^^
