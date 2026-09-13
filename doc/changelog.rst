@@ -34,6 +34,9 @@ Bug fixes
 - Assets that the :ref:`.mjz <MJZArchives>` encoder renames (files outside the model directory, with special characters
   or URI prefixes, or with colliding names) could not be loaded from the archive when the model had a
   :ref:`meshdir<compiler-meshdir>` or :ref:`texturedir<compiler-texturedir>`.
+- :ref:`.mjz <MJZArchives>` archives of models whose :ref:`meshdir<compiler-meshdir>` or
+  :ref:`texturedir<compiler-texturedir>` was absolute, started with ``..`` or used a resource provider looked for their
+  assets outside the archive. The encoder now stores these directories inside the archive.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

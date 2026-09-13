@@ -998,6 +998,61 @@ TEST_F(MjzEncoderTest, RoundTripStripsUriWithSpecialChars) {
   mj_deleteSpec(spec);
 }
 
+TEST_F(MjzEncoderTest, RoundTripWithMeshdirOutsideArchive) {
+  EnsureFakeProviderRegistered();
+
+  // meshdirs that leave the model directory, are absolute, or use a resource
+  // provider; the archive is decoded after these sources are removed
+  const fs::path srcdir = fs::path(testing::TempDir()) / "meshdir_outside_src";
+  const fs::path tmpdir = fs::path(testing::TempDir()) / "meshdir_outside_out";
+  const std::string meshdirs[] = {
+      "../meshdir_outside_src/assets",
+      fs::absolute(srcdir / "assets").string(),
+      "testmjzenc:assets",
+  };
+  for (const std::string& meshdir : meshdirs) {
+    SCOPED_TRACE(meshdir);
+    fs::remove_all(srcdir);
+    fs::copy(GetTestDataFilePath("xml/mjz/testdata/meshdir_test"), srcdir,
+             fs::copy_options::recursive);
+    g_fake_data.assign(kBoxObj, kBoxObj + std::strlen(kBoxObj));
+
+    char error[1024] = {0};
+    const std::string xml_path = (srcdir / "model.xml").string();
+    mjSpec* spec = mj_parseXML(xml_path.c_str(), nullptr, error, sizeof(error));
+    ASSERT_THAT(spec, testing::NotNull()) << error;
+    mjs_setString(spec->compiler.meshdir, meshdir.c_str());
+
+    mjModel* model = mj_compile(spec, nullptr);
+    ASSERT_THAT(model, testing::NotNull()) << mjs_getError(spec);
+
+    fs::create_directories(tmpdir);
+    const std::string out_path = (tmpdir / "model.mjz").string();
+    int nbytes = mj_encode(spec, model, out_path.c_str(), nullptr, nullptr,
+                           error, sizeof(error));
+    ASSERT_GT(nbytes, 0) << error;
+    fs::remove_all(srcdir);
+    g_fake_data.clear();
+
+    mjVFS decode_vfs;
+    mj_defaultVFS(&decode_vfs);
+    mjSpec* decoded =
+        mj_parse(out_path.c_str(), nullptr, &decode_vfs, error, sizeof(error));
+    ASSERT_THAT(decoded, testing::NotNull()) << error;
+
+    mjModel* decoded_model = mj_compile(decoded, &decode_vfs);
+    ASSERT_THAT(decoded_model, testing::NotNull()) << mjs_getError(decoded);
+    EXPECT_EQ(decoded_model->nmesh, model->nmesh);
+
+    fs::remove_all(tmpdir);
+    mj_deleteVFS(&decode_vfs);
+    mj_deleteModel(decoded_model);
+    mj_deleteSpec(decoded);
+    mj_deleteModel(model);
+    mj_deleteSpec(spec);
+  }
+}
+
 class MjzEncoderParameterizedTest
     : public MujocoTest,
       public ::testing::WithParamInterface<std::string> {};
