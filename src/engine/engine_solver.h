@@ -29,8 +29,8 @@ void mj_solNoSlip(const mjModel* m, mjData* d, int maxiter);
 // CG solver
 void mj_solCG(const mjModel* m, mjData* d, int maxiter);
 
-// Newton solver
-void mj_solNewton(const mjModel* m, mjData* d, int maxiter);
+// Newton solver; return first dof whose Hessian pivot was clamped, -1 if none
+int mj_solNewton(const mjModel* m, mjData* d, int maxiter);
 
 
 //------------------------------ per-island solvers ------------------------------------------------
@@ -44,8 +44,8 @@ void mj_solNoSlip_island(const mjModel* m, mjData* d, int island, int maxiter);
 // CG solver
 void mj_solCG_island(const mjModel* m, mjData* d, int island, int maxiter);
 
-// Newton entry point
-void mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter);
+// Newton solver; return first dof whose Hessian pivot was clamped, -1 if none
+int mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter);
 
 // map efc_force to joint space (used after dual island dispatch)
 void mj_dualFinish(const mjModel* m, mjData* d);

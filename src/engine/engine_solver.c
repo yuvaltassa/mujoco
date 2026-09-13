@@ -1097,6 +1097,7 @@ typedef struct {
   int nactive;            // number of active constraints
   int ncone;              // number of contacts in cone state
   int nupdate;            // number of Cholesky updates
+  int clamped;            // first dof whose Hessian pivot was clamped, -1 if none
 
   // cone fold gate (elliptic sparse)
   int* pathcost;          // reverse-etree path costs of L rows               (nv x 1)
@@ -1138,6 +1139,7 @@ static void PrimalPointers(const mjModel* m, const mjData* d, mjPrimalContext* c
   ctx->contact = d->contact;
   ctx->island = island;
   ctx->cone_fold = -1;
+  ctx->clamped = -1;
 
   // set sizes and pointers (monolithic)
   if (island < 0) {
@@ -2460,12 +2462,39 @@ static void MakeHessian(mjData* d, mjPrimalContext* ctx) {
 }
 
 
+// record the dof of the first clamped pivot of factor L: H = M + J'*D*J is SPD, but rounding can
+// lose a pivot when the inertia is too ill-conditioned for mjtNum (e.g. single precision)
+static void HessianClamped(const mjData* d, mjPrimalContext* ctx, const mjtNum* L) {
+  if (ctx->clamped >= 0) {
+    return;
+  }
+
+  // clamped pivots are sqrt(mjMINVAL); sparse factorization is reverse-order, dense is forward
+  int nv = ctx->nv, r;
+  mjtNum clamp = mju_sqrt(mjMINVAL);
+  if (ctx->is_sparse) {
+    r = nv-1;
+    while (r > 0 && L[ctx->L_rowadr[r] + ctx->L_rownnz[r] - 1] > clamp) {
+      r--;
+    }
+  } else {
+    r = 0;
+    while (r < nv-1 && L[r*(nv+1)] > clamp) {
+      r++;
+    }
+  }
+
+  // island-local to global dof
+  ctx->clamped = ctx->island < 0 ? r : d->map_idof2dof[d->island_idofadr[ctx->island] + r];
+}
+
+
 // forward declaration of HessianCone (for readability)
 static void HessianCone(mjData* d, mjPrimalContext* ctx);
 
 // factorize Hessian: L = chol(H), maybe (re)compute H given efc_state
 static void FactorizeHessian(mjData* d, mjPrimalContext* ctx, int flg_recompute) {
-  int nv = ctx->nv, nefc = ctx->nefc;
+  int nv = ctx->nv, nefc = ctx->nefc, rank;
 
   // maybe compute constraint inertia
   if (flg_recompute) {
@@ -2503,16 +2532,11 @@ static void FactorizeHessian(mjData* d, mjPrimalContext* ctx, int flg_recompute)
     }
 
     // numeric sparse factorization: L = chol(H) using pre-computed sparsity pattern
-    int rank = mju_cholFactorNumeric(
+    rank = mju_cholFactorNumeric(
         ctx->L, nv, mjMINVAL,
         ctx->L_rownnz, ctx->L_rowadr, ctx->L_colind,
         ctx->LT_rownnz, ctx->LT_rowadr, ctx->LT_colind, ctx->LT_map,
         ctx->H, ctx->H_rownnz, ctx->H_rowadr, ctx->H_colind, ctx->cholscratch);
-
-    // rank-deficient; SHOULD NOT OCCUR
-    if (rank != nv) {
-      mjERROR("rank-deficient sparse Hessian");
-    }
   }
 
   // dense
@@ -2531,7 +2555,12 @@ static void FactorizeHessian(mjData* d, mjPrimalContext* ctx, int flg_recompute)
     }
 
     // factorize H
-    mju_cholFactor(ctx->L, nv, mjMINVAL);
+    rank = mju_cholFactor(ctx->L, nv, mjMINVAL);
+  }
+
+  // record a clamped pivot
+  if (rank < nv) {
+    HessianClamped(d, ctx, ctx->L);
   }
 
   // add cones to factor if present
@@ -2611,8 +2640,8 @@ static void HessianConeFolded(mjData* d, mjPrimalContext* ctx) {
                             ctx->L_rownnz, ctx->L_rowadr, ctx->L_colind,
                             ctx->LT_rownnz, ctx->LT_rowadr, ctx->LT_colind, ctx->LT_map,
                             Hcone, ctx->H_rownnz, ctx->H_rowadr, ctx->H_colind,
-                            ctx->cholscratch) != nv) {
-    mjERROR("rank-deficient cone Hessian");
+                            ctx->cholscratch) < nv) {
+    HessianClamped(d, ctx, ctx->Lcone);
   }
 }
 
@@ -2794,7 +2823,7 @@ static void HessianIncremental(mjData* d, mjPrimalContext* ctx, const int* oldst
 
 
 // driver
-static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, int flg_Newton) {
+static int mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, int flg_Newton) {
   int iter = 0;
   mjtNum alpha, beta;
   mjPrimalContext ctx;
@@ -3024,6 +3053,7 @@ static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, i
   }
 
   mj_freeStack(d);
+  return ctx.clamped;
 }
 
 
@@ -3040,12 +3070,12 @@ void mj_solCG_island(const mjModel* m, mjData* d, int island, int maxiter) {
 
 
 // Newton entry point
-void mj_solNewton(const mjModel* m, mjData* d, int maxiter) {
-  mj_solPrimal(m, d, /*island=*/-1, maxiter, /*flg_Newton=*/1);
+int mj_solNewton(const mjModel* m, mjData* d, int maxiter) {
+  return mj_solPrimal(m, d, /*island=*/-1, maxiter, /*flg_Newton=*/1);
 }
 
 
 // Newton entry point (one island)
-void mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter) {
-  mj_solPrimal(m, d, island, maxiter, /*flg_Newton=*/1);
+int mj_solNewton_island(const mjModel* m, mjData* d, int island, int maxiter) {
+  return mj_solPrimal(m, d, island, maxiter, /*flg_Newton=*/1);
 }
