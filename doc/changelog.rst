@@ -31,6 +31,9 @@ Bug fixes
 - :ref:`.mjz <MJZArchives>` archives written on Windows stored asset paths with ``\`` separators, so assets in a
   :ref:`meshdir<compiler-meshdir>`, :ref:`texturedir<compiler-texturedir>` or subdirectory could not be loaded. The
   encoder now always writes ``/``, and archives written by earlier versions load correctly.
+- Assets that the :ref:`.mjz <MJZArchives>` encoder renames (files outside the model directory, with special characters
+  or URI prefixes, or with colliding names) could not be loaded from the archive when the model had a
+  :ref:`meshdir<compiler-meshdir>` or :ref:`texturedir<compiler-texturedir>`.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

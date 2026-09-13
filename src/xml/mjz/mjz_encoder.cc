@@ -18,6 +18,7 @@
 #include <cstring>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <stack>
 #include <string>
 #include <string_view>
@@ -164,11 +165,8 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
   const mjString* root_meshdir    = spec->compiler.meshdir;
   const mjString* root_texturedir = spec->compiler.texturedir;
 
-  struct PathHash {
-    std::size_t operator()(const fs::path& p) const { return fs::hash_value(p); }
-  };
-  // maps full disk paths to their archive paths
-  std::unordered_map<fs::path, std::string, PathHash> archived_paths;
+  // maps (root dir, full disk path) to the archived file's path relative to the root dir
+  std::map<std::pair<fs::path, fs::path>, fs::path> archived_paths;
   // all asset entries, keyed by the final archive path
   std::unordered_map<std::string, AssetEntry> archive_entries;
 
@@ -193,6 +191,7 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
         const fs::path owning_spec_dir{owning_spec->modelfiledir ? *owning_spec->modelfiledir : ""};
         const fs::path raw_path{*raw_file};
         const fs::path prefix_dir{use_meshdir ? *comp->meshdir : *comp->texturedir};
+        // the decoder resolves file attributes against the root spec's meshdir or texturedir
         const fs::path root_dir = fs::path(use_meshdir ? *root_meshdir : *root_texturedir);
 
         const char* ch     = std::strchr(raw_file->c_str(), ':');
@@ -223,32 +222,30 @@ std::unordered_map<std::string, AssetEntry> CollectAssets(const mjSpec* spec,
         // ../../b/c__.obj -> b/c__.obj
         // Also remove any leading '/'.
         const fs::path localized = RemoveLeadingDotDot(normalized.relative_path());
-        // path relative to the root XML in the archive, named with '/' separators on every platform
-        fs::path archive_path = root_dir / localized;
 
         // If this file was already archived, we may still need to add a rewrite if raw_file was
         // sanitized or collision-renamed for the first occurrence.
-        if (auto it = archived_paths.find(full_path); it != archived_paths.end()) {
-          if (archive_path != it->second || localized != raw_path) {
-            xml_rewrites[rewrite_key] = it->second;
-          }
+        if (auto it = archived_paths.find({root_dir, full_path}); it != archived_paths.end()) {
+          if (it->second != raw_path) { xml_rewrites[rewrite_key] = it->second.generic_string(); }
           return;
         }
 
-        if (localized != raw_path) { xml_rewrites[rewrite_key] = archive_path.generic_string(); }
-
         // Collision renaming: if this archive path is already in use, try again with an incremented
         // suffix.
-        fs::path parent    = archive_path.parent_path();
-        fs::path stem      = archive_path.stem();
-        fs::path extension = archive_path.extension();
-        for (int i = 0; archive_entries.contains(archive_path.generic_string()); ++i) {
-          std::string new_name      = stem.string() + "_" + std::to_string(i) + extension.string();
-          archive_path              = parent / new_name;
-          xml_rewrites[rewrite_key] = archive_path.generic_string();
+        fs::path file      = localized;
+        fs::path parent    = file.parent_path();
+        fs::path stem      = file.stem();
+        fs::path extension = file.extension();
+        for (int i = 0; archive_entries.contains((root_dir / file).generic_string()); ++i) {
+          std::string new_name = stem.string() + "_" + std::to_string(i) + extension.string();
+          file                 = parent / new_name;
         }
 
-        archived_paths[full_path] = archive_path.generic_string();
+        if (file != raw_path) { xml_rewrites[rewrite_key] = file.generic_string(); }
+
+        // path relative to the root XML in the archive, named with '/' separators on every platform
+        const fs::path archive_path           = root_dir / file;
+        archived_paths[{root_dir, full_path}] = file;
         archive_entries[archive_path.generic_string()] =
             AssetEntry{archive_path, owning_spec_dir, full_spec_path};
       };
