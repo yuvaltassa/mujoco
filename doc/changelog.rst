@@ -41,6 +41,9 @@ Bug fixes
   terms, which acted as spurious inertia.
 - Passive flex :ref:`contact<flex-contact-passive>` is now disabled by the :ref:`contact<option-flag-contact>` flag
   rather than together with the spring and damper forces.
+- Flexes with ``strain`` :ref:`equality constraints<flexcomp-edge-equality>` no longer fail under the :at:`implicit` and
+  :at:`implicitfast` integrators with the flex elasticity error: the constraint data they store in
+  ``mjModel.flex_stiffness`` was mistaken for elasticity.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
