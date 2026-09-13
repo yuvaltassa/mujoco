@@ -71,8 +71,10 @@ static inline void mj_clearEfc(mjData* d) {
 #define X(type, name, nr, nc) d->name = NULL;
   MJDATA_ARENA_POINTERS
 #undef X
-  d->nefc = 0;
-  d->nisland = 0;
+
+  // sizes of the cleared arrays, including the per-type row counts consumers loop over
+  d->ne = d->nf = d->nl = d->nefc = 0;
+  d->nisland = d->nidof = 0;
   d->nJ = d->nY = d->nA = 0;
 
   // deactivate the effective metric: its arena pointers were cleared above, so the
