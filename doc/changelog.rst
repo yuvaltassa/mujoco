@@ -28,6 +28,11 @@ Bug fixes
 - Tendon :ref:`actuatorfrclimited<tendon-spatial-actuatorfrclimited>` now defaults to "auto" as documented.
   Previously the default was "false" and :at:`actuatorfrcrange` was silently ignored unless :at:`actuatorfrclimited`
   was set explicitly.
+- Fixed crashes after an arena overflow (:ref:`mjWARN_CNSTRFULL<mjtWarning>`) that occurred once the constraint rows
+  were created, e.g., when the dual solver's inverse constraint inertia did not fit: stepping models with equality
+  constraints, and the tendon coloring of :ref:`mjv_updateScene`, accessed the discarded rows. The tendon coloring also
+  crashed right after :ref:`mj_resetData` for models with :ref:`sleep-initialized<body-sleep>` trees and active limits.
+  :ref:`mj_printData` no longer crashes on models with tendons when constraints are disabled.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
