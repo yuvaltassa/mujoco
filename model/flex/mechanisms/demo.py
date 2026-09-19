@@ -35,14 +35,14 @@ BEAMS = ("soft", "stiff", "damped")
 
 
 def control(name, data):
-  """Smoothly start a slow periodic drive after one second of settling."""
+  """Smoothly start a periodic drive after one second of settling."""
   t = max(0.0, data.time - 1.0)
   ramp = min(t, 1.0)
   ramp = ramp * ramp * (3.0 - 2.0 * ramp)
   if name == "slidercrank":
     data.ctrl[0] = 2 * np.pi / 3 * (t - .5 * (1 - np.exp(-2 * t)))
   elif name == "dipper":
-    data.ctrl[0] = .07 * ramp * np.sin(2 * np.pi * t / 2)
+    data.ctrl[0] = .07 * ramp * np.sin(2 * np.pi * t)
 
 
 def deformation(name, data):

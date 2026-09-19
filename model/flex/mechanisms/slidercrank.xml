@@ -38,7 +38,7 @@
       </body>
     </body>
     <body name="slider" pos=".58 0 .7">
-      <joint name="slide" type="slide" axis="1 0 0" range="-.5 .08" damping=".2"/>
+      <joint name="slide" type="slide" axis="1 0 0" range="-.5 .08" damping="30"/>
       <geom type="box" size=".065 .11 .06" mass="1" material="load"/>
       <body name="right_fitting">
         <joint axis="0 1 0"/>
