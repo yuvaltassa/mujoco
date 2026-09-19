@@ -1,0 +1,47 @@
+<mujoco model="force_transfer_fourbar">
+  <compiler angle="radian" />
+  <option gravity="0 0 0" timestep=".0005" integrator="implicitfast" jacobian="dense" solver="Newton" iterations="100" tolerance="1e-12">
+    <flag contact="disable" island="disable" energy="enable" diagexact="enable" />
+  </option>
+  <default>
+    <joint limited="false" damping="0" armature="0" />
+    <geom contype="0" conaffinity="0" />
+    <site size=".008" />
+  </default>
+  <worldbody>
+    <body name="frame" pos="0 0 .15" quat="0.70710678118654757 0.70710678118654746 0 0">
+      <geom type="capsule" fromto="0 0 0 0.29999999999999999 0 0" size=".009" rgba=".35 .35 .35 1" />
+      <body name="crank" pos="0 0 0" quat="0.70710678118654757 0 0 0.70710678118654746">
+        <joint name="input" axis="0 0 1" pos="0 0 0" />
+        <inertial pos="0.050000000000000003 0 0" mass="0.3" diaginertia="5.4e-06 0.00025270000000000007 0.00025270000000000007" />
+        <geom type="capsule" fromto="0 0 0 0.10000000000000001 0 0" size="0.006" rgba=".85 .35 .2 1" />
+        <site name="input_tip" pos="0.10000000000000001 0 0" />
+      </body>
+      <body name="rocker" pos="0.29999999999999999 0 0" quat="0.57821789266207979 0 0 0.81588238650275058">
+        <joint name="output" axis="0 0 1" pos="0 0 0" />
+        <inertial pos="0.10000000000000001 0 0" mass="0.4" diaginertia="7.2000000000000005e-06 0.0013369333333333336 0.0013369333333333336" />
+        <geom type="capsule" fromto="0 0 0 0.20000000000000001 0 0" size="0.006" rgba=".2 .7 .4 1" />
+        <site name="output_tip" pos="0.20000000000000001 0 0" />
+      </body>
+    </body>
+    <light pos=".2 -1 1" dir="0 1 -1" />
+  </worldbody>
+  <equality>
+    <tendon tendon1="rod" name="loop" solref="0.009488472193020818 1" solimp="0.9921930164592978 0.9921930164592978 .001" />
+  </equality>
+  <tendon>
+    <spatial name="rod" width=".004" rgba=".8 .7 .15 1">
+      <site site="input_tip" />
+      <site site="output_tip" />
+    </spatial>
+  </tendon>
+  <actuator>
+    <position name="drive" joint="input" kp="500" kv="5" />
+  </actuator>
+  <custom>
+    <numeric name="reference" data="1.5707963267948966 1.9085072020178422 0.36271348012230697 0 0.25" />
+  </custom>
+  <visual>
+    <headlight ambient=".5 .5 .5" />
+  </visual>
+</mujoco>

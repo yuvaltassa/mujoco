@@ -22,7 +22,7 @@ def build(precision, jobs):
                   for p in deps.glob('*-src')]
   subprocess.run(configure, check=True)
   subprocess.run(['cmake', '--build', str(out), '--target', 'mujoco', '-j', str(jobs)], check=True)
-  for name in ['runner', 'grasp_runner']:
+  for name in ['runner', 'grasp_runner', 'fourbar_runner']:
     executable = 'linkage_runner' if name == 'runner' else name
     command = [os.environ.get('CXX', 'c++'), '-O2', '-std=c++17', '-I' + str(ROOT/'include'),
                str(ROOT/'experiments/linkage_lab'/(name+'.cc')), '-L' + str(out/'lib'),

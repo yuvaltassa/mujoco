@@ -1,5 +1,7 @@
 # Linkage lab
 
+Latest: [four-bar force-transfer study](PHASE3.md) compares calibrated connect, shadow weld, planar row prototypes, and massless tendon elimination under load. It also isolates an actuator-damping/timestep effect that can dominate a closure comparison.
+
 **Follow-up:** [Exact-diagonal investigation and actual grasp tests](PHASE2.md) explains the precision failure, isolates torque scaling, and adds 220 grasp runs with a comparison movie.
 
 First experiment, 19 September 2026: the original Menagerie Robotiq 2F-85, without an object, under prescribed translational base acceleration. Compare joint-cut connects and body-cut shadow welds, independently switching the approximate/exact constraint-inertia diagonal.
@@ -97,6 +99,6 @@ The derived XML models retain Menagerie's license in `repro/ROBOTIQ_LICENSE`. Th
 
 For an exact stationary holonomic constraint, `P = lambdaᵀ J v = 0` applies to all equivalent connect, weld, and tendon-distance formulations. That identity supplies no inherent energy-conservation advantage to one representation. With soft constraints, the measured signed and absolute equality work are diagnostics, not necessarily a conservative stored energy. MuJoCo's `data.energy` does not include a general equality potential; the time-dependent accelerated-frame potential here is not a closed energy budget. We make no energy-conservation claim from this driven experiment.
 
-The next discriminating comparison is small-load endpoint compliance and decay calibration, followed by base rotation and grasp-and-shake with matched contact geometry. Preserve the current armature as one control and vary it separately. The massless tendon option belongs in a small passive linkage test first: compare a bilateral rod-length equality with a sequence of decreasing rod mass, then test energy and momentum convergence. It is not mechanically equivalent to deleting a massive, colliding Robotiq link.
+The next discriminating comparison is small-load endpoint compliance and decay calibration, followed by base rotation and grasp-and-shake with matched contact geometry. Preserve the current armature as one control and vary it separately. The [force-transfer study](PHASE3.md) now compares a bilateral rod-length equality with decreasing rod mass under load, with passive energy checks as secondary controls. It is not mechanically equivalent to deleting a massive, colliding Robotiq link.
 
 This experiment does not resolve every Robotiq issue. [MuJoCo #906](https://github.com/google-deepmind/mujoco/issues/906) motivates the armature and base-motion controls. [#786](https://github.com/google-deepmind/mujoco/issues/786) also involved contact configuration and collision bugs. [Menagerie #240](https://github.com/google-deepmind/mujoco_menagerie/pull/240) corrected v4 inertial frames, a different model error. A closure rewrite cannot replace those corrections or identify friction and hardware parameters without measurements.
