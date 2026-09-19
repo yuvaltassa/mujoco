@@ -17,7 +17,7 @@
 
 Run with a current MuJoCo Python build. Recording also requires imageio[ffmpeg].
 The XML files can be opened directly in simulate; use actuator sliders to drive
-fourbar.xml and dipper.xml. All flexible coordinates remain passive.
+slidercrank.xml and dipper.xml. All flexible coordinates remain passive.
 """
 
 import argparse
@@ -30,7 +30,8 @@ import mujoco
 import numpy as np
 
 
-MODELS = ("cantilever", "fourbar", "dipper")
+MODELS = ("cantilever", "slidercrank", "dipper")
+BEAMS = ("soft", "stiff", "damped")
 
 
 def control(name, data):
@@ -38,21 +39,24 @@ def control(name, data):
   t = max(0.0, data.time - 1.0)
   ramp = min(t, 1.0)
   ramp = ramp * ramp * (3.0 - 2.0 * ramp)
-  if name == "fourbar":
-    data.ctrl[0] = .45 * ramp * np.sin(2 * np.pi * t / 6)
+  if name == "slidercrank":
+    data.ctrl[0] = 2 * np.pi / 3 * (t - .5 * (1 - np.exp(-2 * t)))
   elif name == "dipper":
-    data.ctrl[0] = .07 * ramp * np.sin(2 * np.pi * t / 8)
+    data.ctrl[0] = .07 * ramp * np.sin(2 * np.pi * t / 2)
 
 
 def deformation(name, data):
   """Measure bending independently of the driven rigid motion, in meters."""
-  payload = data.body("payload").xpos
   if name == "cantilever":
-    return .85 - payload[2]
-  if name == "fourbar":
-    chord = (data.body("left_fitting").xpos +
-             data.body("right_fitting").xpos) / 2
-    return np.linalg.norm(payload - chord)
+    return max(.85 - data.body(case + "_tip").xpos[2]
+               for case in BEAMS)
+  if name == "slidercrank":
+    start = data.body("left_fitting").xpos
+    end = data.body("right_fitting").xpos
+    midpoint = np.mean([data.body(f"rod_6_{j}_{k}").xpos
+                        for j in range(2) for k in range(2)], axis=0)
+    return np.linalg.norm(midpoint - (start + end) / 2)
+  payload = data.body("tip_fitting").xpos
   support = data.body("fulcrum")
   local_tip = support.xmat.reshape(3, 3).T @ (payload - support.xpos)
   return np.linalg.norm(local_tip - [1.2, 0, 0])
@@ -96,7 +100,11 @@ def run(name, seconds=10, output=None, timestep=None, stiffness=1):
         mujoco.mj_forward(model, data)
         bend = deformation(name, data)
         peak_deformation = max(peak_deformation, float(bend))
-        samples.append([data.time, *data.body("payload").xpos, bend])
+        payload_name = {"cantilever": "soft_tip", "slidercrank": "slider"}.get(name, "payload")
+        row = [data.time, *data.body(payload_name).xpos, bend]
+        if name == "cantilever":
+          row.extend(.85 - data.body(case + "_tip").xpos[2] for case in BEAMS)
+        samples.append(row)
         if renderer is not None:
           renderer.update_scene(data, camera="overview")
           frame = renderer.render()
@@ -123,13 +131,14 @@ def run(name, seconds=10, output=None, timestep=None, stiffness=1):
       step_wall_s=step_wall, realtime_factor=data.time / step_wall,
       max_attachment_component_m=peak_attachment,
       max_deformation_m=peak_deformation,
-      final_deformation_m=float(samples[-1, -1]),
+      final_deformation_m=float(samples[-1, 4]),
       payload_travel_m=np.ptp(samples[:, 1:4], axis=0).tolist(),
       warnings=data.warning.number.tolist())
   if output is not None:
     (output / (name + ".json")).write_text(json.dumps(metrics, indent=2) + "\n")
     np.savetxt(output / (name + ".csv"), samples, delimiter=",",
-               header="time,x,y,z,deformation", comments="")
+               header="time,x,y,z,deformation" +
+               (",soft,stiff,damped" if name == "cantilever" else ""), comments="")
   return metrics, samples
 
 

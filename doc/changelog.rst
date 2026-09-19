@@ -19,8 +19,8 @@ General
 
 Models
 ^^^^^^
-- Added fast-flex examples of a loaded cantilever, an elastic four-bar linkage, and a cylinder-driven dipper arm,
-  with a script for driving the mechanisms and recording their motion.
+- Added fast-flex examples of a cantilever material comparison, an elastic slider-crank, and a tendon-loaded dipper arm,
+  with scripts for recording motion and comparing cantilever deflection to beam theory.
 
 Engine
 ^^^^^^

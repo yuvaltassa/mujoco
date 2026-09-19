@@ -1,34 +1,69 @@
 # Elastic mechanisms
 
-Three mechanisms inspired by [Miles Macklin's Reduced Elastic Links experiments](https://reports.mmacklin.com/newton-reduced/reduced_elastic_links_implementation.html), implemented with MuJoCo's multicell trilinear flexes. The geometry and MJCF are original; no Newton source or external mesh assets are required.
+Mechanisms inspired by [Miles Macklin's Reduced Elastic Links experiments](https://reports.mmacklin.com/newton-reduced/reduced_elastic_links_implementation.html), implemented with MuJoCo's multicell trilinear flexes. The geometry and MJCF are original; no Newton source or external mesh assets are required.
 
 | Model | Mechanism | Interpolation cells | Total DOFs |
 | --- | --- | --- | --- |
-| `cantilever.xml` | A clamped beam released under a 0.3 kg tip load | 16 × 1 × 1 | 198 |
-| `fourbar.xml` | Two hinged rigid arms joined by a flexible coupler carrying a central load | 8 × 1 × 1 | 118 |
-| `dipper.xml` | An interior-supported flexible arm, raised and lowered by a telescoping cylinder | 12 × 1 × 1 | 171 |
+| `cantilever.xml` | Three beams with different stiffness or damping and directly attached tip masses | 16 × 1 × 1 per beam | 594 |
+| `slidercrank.xml` | A crank wheel drives a sliding piston through a flexible connecting rod | 12 × 1 × 1 | 160 |
+| `dipper.xml` | A cylinder-driven flexible arm with a freely swinging tendon-suspended payload | 12 × 1 × 1 | 177 |
 
-Open an XML file directly in `simulate` and select the `overview` camera. The cantilever moves under gravity without controls. Use the `drive` actuator slider for the four-bar, or `cylinder` for the dipper. Their zero controls are useful starting poses.
-
-For the slow demonstration trajectories and optional recording, use Python bindings built from current MuJoCo:
+Open an XML file directly in `simulate` and select the `overview` camera. The cantilevers move under gravity without controls. Use the `crank` actuator slider for the slider-crank, or `cylinder` for the dipper. The script provides continuous crank rotation and a 0.5 Hz dipper drive (a two-second period, four times the original demonstration frequency):
 
 ```sh
 python model/flex/mechanisms/demo.py
-python model/flex/mechanisms/demo.py --model dipper --output /path/to/previews
+python model/flex/mechanisms/demo.py --model dipper --seconds 12 --output /path/to/previews
 ```
 
-Recording additionally requires `imageio[ffmpeg]`. It produces a ten-second MP4, selected PNG frames, a CSV trajectory and JSON measurements for each model. Rendering is excluded from the reported simulation step timing.
+Use Python bindings built from current MuJoCo. Recording additionally requires `imageio[ffmpeg]`; it produces MP4s, selected PNG frames, CSV trajectories and JSON measurements. Rendering is excluded from simulation step timing. The cantilever CSV includes a separate tip-deflection column for each beam.
 
-## Construction
+## Cantilever comparison
 
-The fine tetrahedral grid provides the visible flex surface; `cellcount` independently controls the coarser deformation grid. The cantilever pins the four control nodes of its root cross-section. The moving mechanisms instead use world-frame control nodes, which support the discrete integrator's sparse Newton solve.
+All three beams have the same 0.9 m length, 0.07 × 0.055 m cross-section, 0.12 kg beam mass and 0.2 kg tip mass. Each tip mass is centered on the end cross-section, without a hanging link or eccentric load. Their material parameters are:
 
-Four point equalities attach each selected cross-section to a rigid fitting. The fitting can then carry an ordinary hinge, as at the ends of the four-bar and the dipper fulcrum. These constraints clamp the section to the fitting; the hinge supplies its rotational freedom. In the dipper, a base hinge, actuated prismatic rod and tip point connection form the cylinder. The flex DOFs are never directly actuated.
+| Color / beam | Young's modulus | Stiffness-proportional Rayleigh damping coefficient |
+| --- | --- | --- |
+| Teal / soft | 8 MPa | 0.002 s |
+| Orange / stiff | 16 MPa | 0.002 s |
+| Violet / damped | 8 MPa | 0.04 s |
 
-Orange denotes flexible material, silver denotes fittings, and brass denotes pivots. Colors are constant, not strain measurements. Contact is disabled so these examples isolate elastic loading and mechanism motion.
+The two soft beams have the same static equilibrium, but different transient decay. The stiff beam bends less and oscillates faster. Node joint damping is zero so it does not obscure the specified material damping.
 
-## Validation and scope
+Generate response plots and a separate small-load theory comparison with:
 
-Ten-second trajectories were checked in double and single precision, at 1 ms and 0.5 ms timesteps, without warnings. At the default timestep, the largest absolute Cartesian attachment-error component was below 0.15 mm. Halving the timestep changed the sampled payload paths by less than 0.7 mm in double precision. A tenfold Young's modulus increase reduced peak deformation by approximately tenfold in all three examples.
+```sh
+python model/flex/mechanisms/compare_beams.py --output /path/to/previews
+```
 
-These are mechanism demonstrations, not calibrated material benchmarks. Bending compliance depends appreciably on the interpolation grid. For example, at one-tenth gravity, the cantilever's settled tip sag was 5.75, 9.79 and 11.91 mm with 8, 16 and 32 longitudinal cells, respectively. An Euler–Bernoulli reference including the tip load and uniformly distributed beam weight gives 8.47 mm. Thus timestep stability does not establish spatial convergence or agreement with beam theory; retain this distinction when changing geometry, resolution or material parameters.
+This also requires `matplotlib`. The Euler–Bernoulli reference includes the tip weight and uniformly distributed beam self-weight:
+
+```text
+I = b h³ / 12
+δ_tip = m_tip g L³ / (3 E I) + m_beam g L³ / (8 E I)
+```
+
+See [MIT 1.050 Solid Mechanics, Fall 2004, Problem Set 11, page 2](https://ocw.mit.edu/courses/1-050-solid-mechanics-fall-2004/fd4eff39aec922b8c07660006f40686e_pset04_11.pdf) for the end-load and distributed-load solutions. The check uses one-tenth gravity to keep deflections small, and temporarily increases damping to reach equilibrium. Damping does not change the static force balance.
+
+| Beam | Theory at 0.1g | Simulated, 16 cells | Difference |
+| --- | --- | --- | --- |
+| Soft | 7.522 mm | 8.758 mm | +16.4% |
+| Stiff | 3.761 mm | 4.381 mm | +16.5% |
+| Damped | 7.522 mm | 8.758 mm | +16.4% |
+
+The agreement in relative stiffness is good, but the absolute bending compliance remains discrepant and resolution-dependent. These are mechanism demonstrations, not calibrated beam benchmarks. The comparison preserves the material inputs rather than fitting Young's modulus to the theoretical answer. The large-amplitude gravity-release animation is not used as the small-deflection validation.
+
+## Attachments and suspension
+
+The fine tetrahedral grid supplies the visible surface; `cellcount` controls the coarser deformation grid. The cantilevers pin the four nodes of their root cross-sections. The moving mechanisms use world-frame flex nodes, which support the discrete integrator's sparse Newton solve.
+
+Four point equalities clamp each attached cross-section to a rigid fitting. The fitting can carry an ordinary hinge, as at the connecting rod ends and dipper fulcrum. In the dipper, a base hinge, actuated prismatic rod and tip point connection form the drive cylinder. The flex DOFs are passive.
+
+The dipper's 0.5 kg payload is a separate free body. A 0.42 m spatial tendon with only an upper length limit connects its top to the arm's tip fitting: it transmits tension and permits slack, without a rigid suspension link or payload pose controller. In the twelve-second demo it swings through approximately 19° from vertical; maximum tendon extension is below 0.04 mm. Disabling that tendon causes the payload to fall freely.
+
+Colors are constant, not strain measurements. Contact is disabled to isolate elastic loading and mechanism motion. The suspended payload remains above the ground throughout the demonstration.
+
+## Validation
+
+Twelve-second trajectories were checked in double and single precision, at 1 ms and 0.5 ms timesteps, without warnings. The three-beam scene uses a larger iteration budget to converge its combined solve in single precision. Maximum Cartesian attachment-error components stay below 0.15 mm, and XML save/reload checks pass.
+
+The lightly damped cantilever phase is timestep-sensitive: its soft-beam tip differs by about 4.2 mm at twelve seconds between the two timesteps. The corresponding final-position differences for the dipper and slider-crank are below 0.5 mm. These checks establish stable trajectories, not full spatial or temporal convergence.

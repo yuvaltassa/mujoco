@@ -13,35 +13,72 @@
      limitations under the License.
 -->
 
-<mujoco model="Elastic cantilever">
+<mujoco model="Cantilever comparison">
   <include file="scene.xml"/>
-  <statistic center=".35 0 .6" extent="1.6"/>
+  <option iterations="1000"/>
+  <statistic center=".4 0 .5" extent="2"/>
+  <default>
+    <joint damping="0"/>
+  </default>
   <worldbody>
-    <camera name="overview" pos="1.05 -1.9 1.25" xyaxes="0.94308193 0.33256047 -0 -0.10914792 0.30952396 0.94460661"/>
-    <geom type="box" pos="-.08 0 .07" size=".20 .23 .07"/>
-    <geom type="box" pos="-.08 0 .49" size=".055 .075 .35"/>
-    <body name="clamp" pos="0 0 .85">
+    <camera name="overview" pos="1.65 -2.35 2.35" xyaxes="0.88287239 0.46961297 -0 -0.26306772 0.49456731 0.82837102"/>
+    <geom type="box" pos="-.08 0 .08" size=".21 .8 .08"/>
+    <geom type="box" pos="-.08 0 .48" size=".055 .72 .32"/>
+    <body name="soft_clamp" pos="0 -0.5 .85">
       <geom type="box" size=".045 .065 .065" material="silver"/>
-      <geom class="bolt" pos="0 -.02 0"/>
-      <!-- Pin the root cross-section; the tip fitting is connected below. -->
-      <flexcomp name="beam" type="grid" count="49 3 3" spacing="0.01875 0.035 0.0275" pos="0.45 0 0" dim="3" dof="trilinear" cellcount="16 1 1" mass="0.12" radius=".001" rgba=".95 .38 .12 1">
-        <elasticity young="10000000.0" poisson=".25" damping=".015"/>
+      <geom class="bolt"/>
+      <flexcomp name="soft" type="grid" count="49 3 3" spacing=".01875 .035 .0275" pos=".45 0 0" dim="3" dof="trilinear" cellcount="16 1 1" mass=".12" radius=".001" rgba=".2 .75 .7 1">
+        <elasticity young="8e+06" poisson=".25" damping="0.002"/>
         <contact selfcollide="none" internal="false" contype="0" conaffinity="0"/>
         <pin id="0 1 2 3"/>
       </flexcomp>
     </body>
-    <body name="payload" pos=".9 0 .85">
+    <body name="soft_tip" pos=".9 -0.5 .85">
       <freejoint/>
-      <geom type="box" size=".028 .055 .045" mass=".05" material="silver"/>
-      <geom type="capsule" fromto="0 0 -.03 0 0 -.13" size=".012" mass=".01"/>
-      <geom type="box" pos="0 0 -.17" size=".07 .065 .04" mass=".24" material="load"/>
-      <site name="tip" size=".004" rgba="1 .8 .3 1"/>
+      <geom type="box" size=".035 .065 .04" mass=".2" material="load"/>
+      <site name="soft_tip_site" size=".004" rgba=".2 .75 .7 1"/>
+    </body>
+    <body name="stiff_clamp" pos="0 0 .85">
+      <geom type="box" size=".045 .065 .065" material="silver"/>
+      <geom class="bolt"/>
+      <flexcomp name="stiff" type="grid" count="49 3 3" spacing=".01875 .035 .0275" pos=".45 0 0" dim="3" dof="trilinear" cellcount="16 1 1" mass=".12" radius=".001" rgba=".95 .38 .12 1">
+        <elasticity young="1.6e+07" poisson=".25" damping="0.002"/>
+        <contact selfcollide="none" internal="false" contype="0" conaffinity="0"/>
+        <pin id="0 1 2 3"/>
+      </flexcomp>
+    </body>
+    <body name="stiff_tip" pos=".9 0 .85">
+      <freejoint/>
+      <geom type="box" size=".035 .065 .04" mass=".2" material="load"/>
+      <site name="stiff_tip_site" size=".004" rgba=".95 .38 .12 1"/>
+    </body>
+    <body name="damped_clamp" pos="0 0.5 .85">
+      <geom type="box" size=".045 .065 .065" material="silver"/>
+      <geom class="bolt"/>
+      <flexcomp name="damped" type="grid" count="49 3 3" spacing=".01875 .035 .0275" pos=".45 0 0" dim="3" dof="trilinear" cellcount="16 1 1" mass=".12" radius=".001" rgba=".6 .5 .9 1">
+        <elasticity young="8e+06" poisson=".25" damping="0.04"/>
+        <contact selfcollide="none" internal="false" contype="0" conaffinity="0"/>
+        <pin id="0 1 2 3"/>
+      </flexcomp>
+    </body>
+    <body name="damped_tip" pos=".9 0.5 .85">
+      <freejoint/>
+      <geom type="box" size=".035 .065 .04" mass=".2" material="load"/>
+      <site name="damped_tip_site" size=".004" rgba=".6 .5 .9 1"/>
     </body>
   </worldbody>
   <equality>
-    <connect name="beam_16_0_0_attach" body1="beam_16_0_0" body2="payload" anchor="0 0 0"/>
-    <connect name="beam_16_0_1_attach" body1="beam_16_0_1" body2="payload" anchor="0 0 0"/>
-    <connect name="beam_16_1_0_attach" body1="beam_16_1_0" body2="payload" anchor="0 0 0"/>
-    <connect name="beam_16_1_1_attach" body1="beam_16_1_1" body2="payload" anchor="0 0 0"/>
+    <connect name="soft_0_0_attach" body1="soft_16_0_0" body2="soft_tip" anchor="0 0 0"/>
+    <connect name="soft_0_1_attach" body1="soft_16_0_1" body2="soft_tip" anchor="0 0 0"/>
+    <connect name="soft_1_0_attach" body1="soft_16_1_0" body2="soft_tip" anchor="0 0 0"/>
+    <connect name="soft_1_1_attach" body1="soft_16_1_1" body2="soft_tip" anchor="0 0 0"/>
+    <connect name="stiff_0_0_attach" body1="stiff_16_0_0" body2="stiff_tip" anchor="0 0 0"/>
+    <connect name="stiff_0_1_attach" body1="stiff_16_0_1" body2="stiff_tip" anchor="0 0 0"/>
+    <connect name="stiff_1_0_attach" body1="stiff_16_1_0" body2="stiff_tip" anchor="0 0 0"/>
+    <connect name="stiff_1_1_attach" body1="stiff_16_1_1" body2="stiff_tip" anchor="0 0 0"/>
+    <connect name="damped_0_0_attach" body1="damped_16_0_0" body2="damped_tip" anchor="0 0 0"/>
+    <connect name="damped_0_1_attach" body1="damped_16_0_1" body2="damped_tip" anchor="0 0 0"/>
+    <connect name="damped_1_0_attach" body1="damped_16_1_0" body2="damped_tip" anchor="0 0 0"/>
+    <connect name="damped_1_1_attach" body1="damped_16_1_1" body2="damped_tip" anchor="0 0 0"/>
   </equality>
 </mujoco>

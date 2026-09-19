@@ -43,19 +43,21 @@
       <geom class="bolt"/>
       <site name="cylinder_tip" size=".015" rgba=".65 .72 .76 1"/>
     </body>
-    <body name="payload" pos="1.2 0 1.2">
+    <body name="tip_fitting" pos="1.2 0 1.2">
       <freejoint/>
-      <geom type="box" size=".04 .065 .05" mass=".08" material="silver"/>
-      <geom type="capsule" fromto="0 0 -.04 0 0 -.18" size=".014" mass=".02"/>
-      <geom type="box" pos="0 0 -.23" size=".095 .085 .05" mass=".5" material="load"/>
-      <site name="tip" size=".005" rgba="1 .8 .3 1"/>
+      <geom type="box" size=".04 .065 .05" mass=".1" material="silver"/>
+      <site name="hook" size=".005" rgba="1 .8 .3 1" pos="0 0 -.045"/>
     </body>
-    <!-- World-frame flex nodes keep the discrete Newton solve sparse. -->
     <body name="flex_frame" pos="0 0 1.2">
       <flexcomp name="arm_flex" type="grid" count="37 3 3" spacing="0.0444444444 0.0375 0.0325" pos="0.4 0 0" dim="3" dof="trilinear" cellcount="12 1 1" mass="0.35" radius=".001" rgba=".95 .38 .12 1">
         <elasticity young="14000000.0" poisson=".25" damping=".015"/>
         <contact selfcollide="none" internal="false" contype="0" conaffinity="0"/>
       </flexcomp>
+    </body>
+    <body name="payload" pos="1.2 0 .675">
+      <freejoint/>
+      <geom type="box" size=".095 .085 .06" mass=".5" material="load"/>
+      <site name="sling" pos="0 0 .06" size=".01" rgba=".95 .62 .18 1"/>
     </body>
   </worldbody>
   <equality>
@@ -68,11 +70,17 @@
     <connect name="arm_flex_0_0_1_attach" body1="arm_flex_0_0_1" body2="rear_fitting" anchor="0 0 0"/>
     <connect name="arm_flex_0_1_0_attach" body1="arm_flex_0_1_0" body2="rear_fitting" anchor="0 0 0"/>
     <connect name="arm_flex_0_1_1_attach" body1="arm_flex_0_1_1" body2="rear_fitting" anchor="0 0 0"/>
-    <connect name="arm_flex_12_0_0_attach" body1="arm_flex_12_0_0" body2="payload" anchor="0 0 0"/>
-    <connect name="arm_flex_12_0_1_attach" body1="arm_flex_12_0_1" body2="payload" anchor="0 0 0"/>
-    <connect name="arm_flex_12_1_0_attach" body1="arm_flex_12_1_0" body2="payload" anchor="0 0 0"/>
-    <connect name="arm_flex_12_1_1_attach" body1="arm_flex_12_1_1" body2="payload" anchor="0 0 0"/>
+    <connect name="arm_flex_12_0_0_attach" body1="arm_flex_12_0_0" body2="tip_fitting" anchor="0 0 0"/>
+    <connect name="arm_flex_12_0_1_attach" body1="arm_flex_12_0_1" body2="tip_fitting" anchor="0 0 0"/>
+    <connect name="arm_flex_12_1_0_attach" body1="arm_flex_12_1_0" body2="tip_fitting" anchor="0 0 0"/>
+    <connect name="arm_flex_12_1_1_attach" body1="arm_flex_12_1_1" body2="tip_fitting" anchor="0 0 0"/>
   </equality>
+  <tendon>
+    <spatial name="suspension" limited="true" range="0 .42" width=".004" rgba=".93 .83 .55 1" solreflimit=".003 1" solimplimit=".99 .999 .001">
+      <site site="hook"/>
+      <site site="sling"/>
+    </spatial>
+  </tendon>
   <actuator>
     <position name="cylinder" joint="stroke" kp="5000" kv="200" ctrlrange="-.1 .1"/>
   </actuator>
