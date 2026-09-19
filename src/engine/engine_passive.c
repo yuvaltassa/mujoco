@@ -26,6 +26,7 @@
 #include "engine/engine_crossplatform.h"
 #include "engine/engine_inline.h"
 #include "engine/engine_memory.h"
+#include "engine/engine_metric.h"
 #include "engine/engine_plugin.h"
 #include "engine/engine_sleep.h"
 #include "engine/engine_support.h"

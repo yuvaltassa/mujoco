@@ -35,6 +35,7 @@
 #include "engine/engine_derivative.h"
 #include "engine/engine_forward.h"
 #include "engine/engine_memory.h"
+#include "engine/engine_metric.h"
 #include "engine/engine_name.h"
 #include "engine/engine_sensor.h"
 #include "engine/engine_support.h"

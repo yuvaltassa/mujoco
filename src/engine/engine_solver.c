@@ -28,6 +28,7 @@
 #include "engine/engine_derivative.h"
 #include "engine/engine_core_util.h"
 #include "engine/engine_memory.h"
+#include "engine/engine_metric.h"
 #include "engine/engine_macro.h"
 #include "engine/engine_util_blas.h"
 #include "engine/engine_util_errmem.h"
