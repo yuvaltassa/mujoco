@@ -5,6 +5,7 @@ import itertools
 import json
 import hashlib
 import pathlib
+import os
 import subprocess
 
 import numpy as np
@@ -13,6 +14,7 @@ import numpy as np
 def run(runner, models, output, precision, dts, peaks, controls, axes, integrators, contacts):
   output.mkdir(parents=True, exist_ok=True)
   rows = []
+  environment = {key: os.environ.get(key) for key in ['LINKAGE_REGULARIZATION', 'LINKAGE_FLOOR']}
   binaries = [runner, *sorted((runner.parent/'lib').glob('*mujoco*'))]
   binary_digests = {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
                     for p in binaries if p.is_file()}
@@ -30,12 +32,14 @@ def run(runner, models, output, precision, dts, peaks, controls, axes, integrato
     cached = json.loads(meta_path.read_text()) if meta_path.exists() else {}
     if not (path.exists() and cached.get('model_sha256') == model_digest
             and cached.get('command') == command
-            and cached.get('binary_sha256') == binary_digests):
+            and cached.get('binary_sha256') == binary_digests
+            and cached.get('environment') == environment):
       result = subprocess.run(command, text=True, capture_output=True)
       if result.returncode not in (0, 2):
         raise RuntimeError(result.stderr + result.stdout)
       metadata = json.loads(result.stdout.strip().splitlines()[-1])
       metadata['command'] = command
+      metadata['environment'] = environment
       metadata['binary_sha256'] = binary_digests
       metadata['model_sha256'] = model_digest
       metadata['provenance'] = json.loads((models/'provenance.json').read_text()) if (models/'provenance.json').exists() else None

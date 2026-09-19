@@ -1,5 +1,7 @@
 # Linkage lab
 
+**Follow-up:** [Exact-diagonal investigation and actual grasp tests](PHASE2.md) explains the precision failure, isolates torque scaling, and adds 220 grasp runs with a comparison movie.
+
 First experiment, 19 September 2026: the original Menagerie Robotiq 2F-85, without an object, under prescribed translational base acceleration. Compare joint-cut connects and body-cut shadow welds, independently switching the approximate/exact constraint-inertia diagonal.
 
 **Result:** the shadow conversion preserves the intended rigid mechanism, but is not a drop-in numerical improvement in this experiment. Its soft compliance depends strongly on weld scaling and impedance. A separate single-precision problem with `diagexact` appears even at a stationary base and changes dramatically under a rigid coordinate rotation. No engine fix is included here.

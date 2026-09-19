@@ -22,13 +22,15 @@ def build(precision, jobs):
                   for p in deps.glob('*-src')]
   subprocess.run(configure, check=True)
   subprocess.run(['cmake', '--build', str(out), '--target', 'mujoco', '-j', str(jobs)], check=True)
-  command = [os.environ.get('CXX', 'c++'), '-O2', '-std=c++17', '-I' + str(ROOT/'include'),
-             str(ROOT/'experiments/linkage_lab/runner.cc'), '-L' + str(out/'lib'),
-             '-lmujoco', '-Wl,-rpath,' + str(out/'lib'), '-o', str(out/'linkage_runner')]
-  if flags:
-    command.insert(1, flags)
-  subprocess.run(command, check=True)
-  print(out/'linkage_runner')
+  for name in ['runner', 'grasp_runner']:
+    executable = 'linkage_runner' if name == 'runner' else name
+    command = [os.environ.get('CXX', 'c++'), '-O2', '-std=c++17', '-I' + str(ROOT/'include'),
+               str(ROOT/'experiments/linkage_lab'/(name+'.cc')), '-L' + str(out/'lib'),
+               '-lmujoco', '-Wl,-rpath,' + str(out/'lib'), '-o', str(out/executable)]
+    if flags:
+      command.insert(1, flags)
+    subprocess.run(command, check=True)
+    print(out/executable)
 
 
 if __name__ == '__main__':

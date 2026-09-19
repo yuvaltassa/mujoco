@@ -1,5 +1,6 @@
 // Reproducible, contact-free translational shake experiment.
 #include <mujoco/mujoco.h>
+#include "regularization.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -40,6 +41,16 @@ void Audit(mjModel* m, mjData* d) {
   Array(d->efc_J, d->ne*m->nv);
   std::cout << ",\"equality_residual\":";
   Array(d->efc_pos, d->ne);
+  std::cout << ",\"exact_diagonal_raw\":";
+  std::vector<mjtNum> raw_diagonal(d->ne);
+  if (d->efc_Y) {
+    for (int r = 0; r < d->ne; ++r) raw_diagonal[r] = mju_dot(d->efc_Y+r*m->nv, d->efc_Y+r*m->nv, m->nv);
+  }
+  Array(raw_diagonal.data(), d->ne);
+  std::cout << ",\"reference_acceleration\":";
+  Array(d->efc_aref, d->ne);
+  std::cout << ",\"qacc\":";
+  Array(d->qacc, m->nv);
   std::cout << ",\"diagonal\":";
   Array(d->efc_diagA, d->ne);
   std::cout << ",\"regularizer\":";
@@ -86,6 +97,7 @@ int main(int argc, char** argv) {
     if (!m) throw std::runtime_error(error);
     mjData* d = mj_makeData(m);
     if (argc == 3) {
+      LabConfigure(m);
       if (std::string(argv[2]) == "--diagnose") {
         m->opt.enableflags |= mjENBL_DIAGEXACT;
         d->ctrl[0] = 128;
@@ -114,6 +126,7 @@ int main(int argc, char** argv) {
     if (integrator == "discrete") m->opt.integrator = mjINT_DISCRETE;
     else if (integrator == "implicitfast") m->opt.integrator = mjINT_IMPLICITFAST;
     else throw std::runtime_error("supported integrators: implicitfast, discrete");
+    LabConfigure(m);
     d->ctrl[Id(m, mjOBJ_ACTUATOR, "fingers_actuator")] = ctrl;
     int cf[2], cc[2], pad[2], wc[2], ws[2];
     for (int s = 0; s < 2; ++s) {

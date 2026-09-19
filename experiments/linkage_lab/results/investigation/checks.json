@@ -1,0 +1,98 @@
+[
+  {
+    "precision": "double",
+    "model": "connect",
+    "mode": "raw",
+    "diagonal_relative_error": 2.8591729110807275e-16,
+    "max_qacc": 456.63635378574367,
+    "max_generalized_force": 0.20185154371840652
+  },
+  {
+    "precision": "double",
+    "model": "connect",
+    "mode": "floor",
+    "diagonal_relative_error": 2.8591729110807275e-16,
+    "max_qacc": 456.63635378574367,
+    "max_generalized_force": 0.20185154371840652
+  },
+  {
+    "precision": "double",
+    "model": "connect",
+    "mode": "block",
+    "diagonal_relative_error": 2.8591729110807275e-16,
+    "max_qacc": 456.17724323884227,
+    "max_generalized_force": 0.20290317631871613
+  },
+  {
+    "precision": "double",
+    "model": "shadow",
+    "mode": "raw",
+    "diagonal_relative_error": 2.1596706369205908e-16,
+    "max_qacc": 468.7394826869025,
+    "max_generalized_force": 0.19667119275136016
+  },
+  {
+    "precision": "double",
+    "model": "shadow",
+    "mode": "floor",
+    "diagonal_relative_error": 2.1596706369205908e-16,
+    "max_qacc": 468.7394826869034,
+    "max_generalized_force": 0.1966711927513558
+  },
+  {
+    "precision": "double",
+    "model": "shadow",
+    "mode": "block",
+    "diagonal_relative_error": 2.1596706369205908e-16,
+    "max_qacc": 469.5764431600292,
+    "max_generalized_force": 0.15909784028122312
+  },
+  {
+    "precision": "single",
+    "model": "connect",
+    "mode": "raw",
+    "diagonal_relative_error": 7.881516653526781e-08,
+    "max_qacc": 456.128662109375,
+    "max_generalized_force": 0.2019639604033454
+  },
+  {
+    "precision": "single",
+    "model": "connect",
+    "mode": "floor",
+    "diagonal_relative_error": 7.881516653526781e-08,
+    "max_qacc": 456.63568115234375,
+    "max_generalized_force": 0.20186056584918888
+  },
+  {
+    "precision": "single",
+    "model": "connect",
+    "mode": "block",
+    "diagonal_relative_error": 7.881516653526781e-08,
+    "max_qacc": 456.1766052246094,
+    "max_generalized_force": 0.20291240886384285
+  },
+  {
+    "precision": "single",
+    "model": "shadow",
+    "mode": "raw",
+    "diagonal_relative_error": 9.033813118993857e-08,
+    "max_qacc": 466.4886474609375,
+    "max_generalized_force": 0.1996699453225632
+  },
+  {
+    "precision": "single",
+    "model": "shadow",
+    "mode": "floor",
+    "diagonal_relative_error": 9.033813118993857e-08,
+    "max_qacc": 468.74005126953125,
+    "max_generalized_force": 0.1966665963421012
+  },
+  {
+    "precision": "single",
+    "model": "shadow",
+    "mode": "block",
+    "diagonal_relative_error": 9.033813118993857e-08,
+    "max_qacc": 469.5767822265625,
+    "max_generalized_force": 0.15909498905695538
+  }
+]
