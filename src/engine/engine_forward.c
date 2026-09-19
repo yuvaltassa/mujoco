@@ -1982,7 +1982,7 @@ void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) 
   }
 
   mj_fwdActuation(m, d);
-  mjd_effActuation(m, d);
+  mjd_effActuation(m, d, /*flg_factor=*/1);
   if (mj_isMetric(m)) {
     mj_regularizeConstraint(m, d, /*flg_AR=*/1);
     mj_referenceConstraint(m, d);
@@ -2090,7 +2090,7 @@ void mj_step1(const mjModel* m, mjData* d) {
 void mj_step2(const mjModel* m, mjData* d) {
   TM_START;
   mj_fwdActuation(m, d);
-  mjd_effActuation(m, d);
+  mjd_effActuation(m, d, /*flg_factor=*/1);
   if (mj_isMetric(m)) {
     mj_regularizeConstraint(m, d, /*flg_AR=*/1);
     mj_referenceConstraint(m, d);
