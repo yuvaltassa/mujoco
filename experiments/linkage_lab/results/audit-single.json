@@ -1,0 +1,17 @@
+{
+  "precision_bytes": 4,
+  "mass_com_inertia_errors": [
+    0.0,
+    1.0503381497883879e-10,
+    1.781825294949746e-11
+  ],
+  "connect_nv": 8,
+  "shadow_nv": 10,
+  "connect_equality_rank": 5,
+  "shadow_equality_rank": 7,
+  "mobility": 3,
+  "velocity_lift_error": 1.3019732835254516e-08,
+  "kinetic_energy_matrix_error": 8.84423714819782e-11,
+  "colliding_geoms": 14,
+  "scope": "Compiled initial configuration; not a trajectory-equivalence proof."
+}

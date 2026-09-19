@@ -1,0 +1,5 @@
+source_assets/
+generated/
+raw/
+__pycache__/
+results/*.svg
