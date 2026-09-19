@@ -1,6 +1,8 @@
 # Linkage lab
 
-Latest: [four-bar force-transfer study](PHASE3.md) compares calibrated connect, shadow weld, planar row prototypes, and massless tendon elimination under load. It also isolates an actuator-damping/timestep effect that can dominate a closure comparison.
+Latest: [discrete-integrator comparison](PHASE4.md) adds 282 four-bar runs and 80 Robotiq grasps, showing substantially better coarse-step closure while distinguishing stability from force/trajectory accuracy.
+
+[four-bar force-transfer study](PHASE3.md) compares calibrated connect, shadow weld, planar row prototypes, and massless tendon elimination under load. It also isolates an actuator-damping/timestep effect that can dominate a closure comparison.
 
 **Follow-up:** [Exact-diagonal investigation and actual grasp tests](PHASE2.md) explains the precision failure, isolates torque scaling, and adds 220 grasp runs with a comparison movie.
 

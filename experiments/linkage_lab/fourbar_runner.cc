@@ -66,7 +66,8 @@ int main(int argc, char** argv) {
     else
       m->opt.enableflags &= ~mjENBL_DIAGEXACT;
     if (row_mode < 0 || row_mode > 2 || m->opt.jacobian != mjJAC_DENSE ||
-        m->opt.integrator != mjINT_IMPLICITFAST || m->opt.solver != mjSOL_NEWTON ||
+        (m->opt.integrator != mjINT_IMPLICITFAST && m->opt.integrator != mjINT_DISCRETE) ||
+        (m->opt.integrator == mjINT_DISCRETE && row_mode != 0) || m->opt.solver != mjSOL_NEWTON ||
         m->opt.noslip_iterations || !(m->opt.disableflags & mjDSBL_ISLAND))
       throw std::runtime_error("unsupported benchmark options");
     lab_regularization = "floor";
