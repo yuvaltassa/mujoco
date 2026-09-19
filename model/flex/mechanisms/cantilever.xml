@@ -1,0 +1,47 @@
+<!-- Copyright 2026 DeepMind Technologies Limited
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+         http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+
+<mujoco model="Elastic cantilever">
+  <include file="scene.xml"/>
+  <statistic center=".35 0 .6" extent="1.6"/>
+  <worldbody>
+    <camera name="overview" pos="1.05 -1.9 1.25" xyaxes="0.94308193 0.33256047 -0 -0.10914792 0.30952396 0.94460661"/>
+    <geom type="box" pos="-.08 0 .07" size=".20 .23 .07"/>
+    <geom type="box" pos="-.08 0 .49" size=".055 .075 .35"/>
+    <body name="clamp" pos="0 0 .85">
+      <geom type="box" size=".045 .065 .065" material="silver"/>
+      <geom class="bolt" pos="0 -.02 0"/>
+      <!-- Pin the root cross-section; the tip fitting is connected below. -->
+      <flexcomp name="beam" type="grid" count="49 3 3" spacing="0.01875 0.035 0.0275" pos="0.45 0 0" dim="3" dof="trilinear" cellcount="16 1 1" mass="0.12" radius=".001" rgba=".95 .38 .12 1">
+        <elasticity young="10000000.0" poisson=".25" damping=".015"/>
+        <contact selfcollide="none" internal="false" contype="0" conaffinity="0"/>
+        <pin id="0 1 2 3"/>
+      </flexcomp>
+    </body>
+    <body name="payload" pos=".9 0 .85">
+      <freejoint/>
+      <geom type="box" size=".028 .055 .045" mass=".05" material="silver"/>
+      <geom type="capsule" fromto="0 0 -.03 0 0 -.13" size=".012" mass=".01"/>
+      <geom type="box" pos="0 0 -.17" size=".07 .065 .04" mass=".24" material="load"/>
+      <site name="tip" size=".004" rgba="1 .8 .3 1"/>
+    </body>
+  </worldbody>
+  <equality>
+    <connect name="beam_16_0_0_attach" body1="beam_16_0_0" body2="payload" anchor="0 0 0"/>
+    <connect name="beam_16_0_1_attach" body1="beam_16_0_1" body2="payload" anchor="0 0 0"/>
+    <connect name="beam_16_1_0_attach" body1="beam_16_1_0" body2="payload" anchor="0 0 0"/>
+    <connect name="beam_16_1_1_attach" body1="beam_16_1_1" body2="payload" anchor="0 0 0"/>
+  </equality>
+</mujoco>

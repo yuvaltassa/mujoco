@@ -17,6 +17,11 @@ General
    are frictionless. The mode keeps contact multipliers across steps that no state specification covers, so
    ``mj_getState``/``mj_setState`` do not capture its full state and exact replay is not supported.
 
+Models
+^^^^^^
+- Added fast-flex examples of a loaded cantilever, an elastic four-bar linkage, and a cylinder-driven dipper arm,
+  with a script for driving the mechanisms and recording their motion.
+
 Engine
 ^^^^^^
 - The :ref:`mjWARN_INERTIA <mjtWarning>` warning is now also raised by the modified-inertia factorizations of the
