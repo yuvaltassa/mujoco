@@ -39,7 +39,7 @@
 // The flex part is K = (h^2 + h*damping) * (K_bend + K_stretch), the PSD implicit flex stiffness,
 // whose h^2 and h*damping parts enter only when the spring and damper forces are enabled;
 // the diagonal part holds joint damping and stiffness (h*D + h^2*K per dof, clamped PSD). Built
-// once per step on the arena by mjd_effBuild (under integrator=discrete), then consumed
+// once per step on the arena by mj_effBuild (under integrator=discrete), then consumed
 // uniformly: the smooth acceleration, the constraint solver and inverse dynamics all see the
 // same metric.
 
@@ -54,8 +54,8 @@ static void* effAlloc(mjData* d, size_t bytes, size_t align) {
 #define EFMALLOC(type, n) (type*) effAlloc(d, sizeof(type)*(size_t)(n), _Alignof(type))
 
 // yield the next live rank-1 term of the metric; see the declaration for the contract
-int mjd_effRank1Next(const mjModel* m, const mjData* d, mjEffRank1Iter* it,
-                     mjEffRank1* e, int flg_contact) {
+int mj_effRank1Next(const mjModel* m, const mjData* d, mjEffRank1Iter* it,
+                    mjEffRank1* e, int flg_contact) {
   // class 0: one entry per tendon with metric terms
   while (it->cls == 0) {
     if (it->i >= d->nefmT) {
@@ -126,7 +126,7 @@ int mjd_effRank1Next(const mjModel* m, const mjData* d, mjEffRank1Iter* it,
 // res += B*vec, the stiffness part of the metric. The per-dof diagonal classes are applied
 // from efm_diag (scales pre-folded); the stretch (and, when assemblable, bending and interp)
 // part from the per-step CSR; terms not in the CSR fall back to the matrix-free operators.
-void mjd_effMulAdd(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec, int flg_contact) {
+void mj_effMulAdd(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec, int flg_contact) {
   mjtNum h = m->opt.timestep;
   if (d->efm_diag) {
     int nv = m->nv;
@@ -155,7 +155,7 @@ void mjd_effMulAdd(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec, 
   // rank-1 terms (tendon, actuator): res += scale * row' * (row * vec)
   mjEffRank1Iter it = {0};
   mjEffRank1 e;
-  while (mjd_effRank1Next(m, d, &it, &e, /*flg_contact=*/0)) {
+  while (mj_effRank1Next(m, d, &it, &e, /*flg_contact=*/0)) {
     mjtNum dot = 0;
     for (int j=0; j < e.nnz; j++) {
       dot += e.val[j] * vec[e.colind[j]];
@@ -261,7 +261,7 @@ static void effBlockRaw(const mjModel* m, const mjData* d, int i, mjtNum* Bk) {
 // Build and factor the per-vertex 3x3 diagonal blocks of the flex part of (M + K), stored in
 // d->efm_L, 9 numbers per covered vertex: O(n) to build and apply, approximate where the sparse
 // factorization it replaces was exact. Both consumers use the blocks as a preconditioner: the CG
-// constraint solver (Mgrad = Mtilde \ grad) and the qacc_smooth PCG in mjd_effSolve, which
+// constraint solver (Mgrad = Mtilde \ grad) and the qacc_smooth PCG in mj_effSolve, which
 // supplies the accuracy.
 static void effBlocks(const mjModel* m, mjData* d) {
   int nv = m->nv;
@@ -376,9 +376,9 @@ static void effBlockApply(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* 
 // relative residual to opt.tolerance; used for qacc_smooth. Reaching opt.iterations means the
 // metric is too ill-conditioned for the blocks: warn (mjWARN_INERTIA, worst-residual dof) and
 // return x under-converged.
-void mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
+void mj_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
   if (!d->efm_active) {
-    mjd_effPrec(m, d, x, b);
+    mj_effPrec(m, d, x, b);
     return;
   }
 
@@ -418,7 +418,7 @@ void mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
     mjtNum rz = mju_dot(r, z, nv);
     for (int it = 0; it < m->opt.iterations; it++) {
       mju_mulSymVecSparse(Ap, d->M, p, nv, m->M_rownnz, m->M_rowadr, m->M_colind);
-      mjd_effMulAdd(m, d, Ap, p, /*flg_contact=*/1);
+      mj_effMulAdd(m, d, Ap, p, /*flg_contact=*/1);
       mjtNum pAp = mju_dot(p, Ap, nv);
       // curvature breakdown: the metric has no curvature along p, so no further progress is
       // possible and x is the best available. Not a budget failure, so it does not warn.
@@ -458,7 +458,7 @@ void mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
   mj_freeStack(d);
 }
 
-void mjd_effPrec(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
+void mj_effPrec(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
   int nv = m->nv;
 
   // active metric: the prefactored 3x3 blocks are the preconditioner
@@ -478,10 +478,10 @@ void mjd_effPrec(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b) {
 // fold the metric's rank-1 classes and the efc rows (quadratic zone) into a copy of the
 // preconditioner blocks, factored into L (9*nefmdof); only each term's per-vertex 3x3 diagonal
 // survives, as for the elastic part. Returns 0 when nothing is covered, leaving L untouched.
-int mjd_effPrecFold(const mjModel* m, mjData* d, mjtNum* L,
-                    int nefc, const mjtNum* efc_D, int is_sparse,
-                    const mjtNum* J, const int* J_rownnz, const int* J_rowadr,
-                    const int* J_colind) {
+int mj_effPrecFold(const mjModel* m, mjData* d, mjtNum* L,
+                   int nefc, const mjtNum* efc_D, int is_sparse,
+                   const mjtNum* J, const int* J_rownnz, const int* J_rowadr,
+                   const int* J_colind) {
   if (!d->nefmdof) {
     return 0;
   }
@@ -503,7 +503,7 @@ int mjd_effPrecFold(const mjModel* m, mjData* d, mjtNum* L,
   // DIFFERENT vertices is off-diagonal and cannot be represented here; only its self-terms land
   mjEffRank1Iter it = {0};
   mjEffRank1 e;
-  while (mjd_effRank1Next(m, d, &it, &e, /*flg_contact=*/1)) {
+  while (mj_effRank1Next(m, d, &it, &e, /*flg_contact=*/1)) {
     for (int a=0; a < e.nnz; a++) {
       int ia = e.colind[a], k = blk[ia];
       if (k < 0) {
@@ -571,19 +571,19 @@ int mjd_effPrecFold(const mjModel* m, mjData* d, mjtNum* L,
 }
 
 
-// mjd_effPrec against caller-supplied factored blocks instead of the shared d->efm_L
-void mjd_effPrecBlocks(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b,
-                       const mjtNum* L) {
+// mj_effPrec against caller-supplied factored blocks instead of the shared d->efm_L
+void mj_effPrecBlocks(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b,
+                      const mjtNum* L) {
   if (d->efm_active) {
     effBlockApply(m, d, x, b, L);
     return;
   }
-  mjd_effPrec(m, d, x, b);
+  mj_effPrec(m, d, x, b);
 }
 
 
 // can this dof contribute a damping term to the metric diagonal (model-level check;
-// values are velocity-dependent and computed in mjd_effShift)
+// values are velocity-dependent and computed in mj_effShift)
 static int dofDampPossible(const mjModel* m, int i) {
   if (mjDISABLED(mjDSBL_DAMPER)) {
     return 0;
@@ -686,7 +686,7 @@ static void effDiagDamp(const mjModel* m, mjData* d) {
 // here, mirroring the efc value refresh pattern. Called from the velocity stage only,
 // after the derived velocities (ten_velocity, body velocities) it reads are computed;
 // every consumer of the values runs at the actuation stage or later
-void mjd_effShift(const mjModel* m, mjData* d) {
+void mj_effShift(const mjModel* m, mjData* d) {
   if (!d->efm_active) {
     return;
   }
@@ -813,7 +813,7 @@ void mjd_effShift(const mjModel* m, mjData* d) {
 // only awake rows are ever gathered or solved. If flg_factor is 0 the backbone is assembled
 // (efm_sdiag reads its diagonal) but not factored, leaving qH unfactored: inverse dynamics
 // only multiplies by the metric, and needs the factor only for the exact constraint diagonal
-void mjd_effActuation(const mjModel* m, mjData* d, int flg_factor) {
+void mj_effActuation(const mjModel* m, mjData* d, int flg_factor) {
   if (!d->efm_active) {
     return;
   }
@@ -906,8 +906,8 @@ void mjd_effActuation(const mjModel* m, mjData* d, int flg_factor) {
 // island-local metric product res += S*vec: the diagonal classes and the island's tendons,
 // with vectors in island-local dof coordinates. Flex terms never reach the island path:
 // models with flex metric terms force a monolithic solve
-void mjd_effMulAddIsland(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec,
-                         int island) {
+void mj_effMulAddIsland(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec,
+                        int island) {
   int nv = d->island_nv[island];
   int idofadr = d->island_idofadr[island];
   const int* idof2dof = d->map_idof2dof + idofadr;
@@ -939,7 +939,7 @@ void mjd_effMulAddIsland(const mjModel* m, const mjData* d, mjtNum* res, const m
   // merges the support), so the first column decides membership
   mjEffRank1Iter it = {0};
   mjEffRank1 e;
-  while (mjd_effRank1Next(m, d, &it, &e, /*flg_contact=*/1)) {
+  while (mj_effRank1Next(m, d, &it, &e, /*flg_contact=*/1)) {
     if (d->tree_island[m->dof_treeid[e.colind[0]]] != island) {
       continue;
     }
@@ -1032,7 +1032,7 @@ static void effContactBuild(const mjModel* m, mjData* d, mjtNum scale) {
 
 // apply the published rows' forces, res += force * row: the passive stage takes its contact
 // force from the rows the metric build published
-void mjd_effContactForce(const mjData* d, mjtNum* res) {
+void mj_effContactForce(const mjData* d, mjtNum* res) {
   const int* ind = d->efm_con_ind;
   const mjtNum* val = d->efm_con_val;
   for (int adr = 0; adr < d->nefmcon; ) {
@@ -1052,7 +1052,7 @@ void mjd_effContactForce(const mjData* d, mjtNum* res) {
 // build the per-step implicit effective metric on the arena, or deactivate it. The gate
 // decision (integrator=discrete) is the caller's: the metric module has no dependency on
 // the solver configuration beyond what it is told here.
-void mjd_effBuild(const mjModel* m, mjData* d, int active, int flg_factor) {
+void mj_effBuild(const mjModel* m, mjData* d, int active, int flg_factor) {
   int nv = m->nv;
   d->efm_active = 0;
   d->nefmK = 0;
@@ -1081,19 +1081,19 @@ void mjd_effBuild(const mjModel* m, mjData* d, int active, int flg_factor) {
   mju_zero(d->flexelem_krot, m->nflexstiffness);
   mjd_flexInterp_cacheKrot(m, d, d->flexelem_krot);
 
-  // smooth-force shift c = h*K*qvel (values refreshed by mjd_effShift in the velocity stage)
+  // smooth-force shift c = h*K*qvel (values refreshed by mj_effShift in the velocity stage)
   d->efm_c = EFMALLOC(mjtNum, nv);
 
   // per-dof diagonal classes (joint damping/stiffness, joint-transmission actuator damping):
   // position-dependent stiffness assembled here; the velocity-dependent damping part and the
-  // qH backbone factor are refreshed by mjd_effShift in the velocity stage
+  // qH backbone factor are refreshed by mj_effShift in the velocity stage
   d->efm_ck = EFMALLOC(mjtNum, nv);
   int any_diag = effDiagStiff(m, d);
   for (int i=0; !any_diag && i < nv; i++) {
     any_diag = dofDampPossible(m, i);
   }
 
-  // tendons with metric terms: id list here, values (velocity-dependent) in mjd_effShift.
+  // tendons with metric terms: id list here, values (velocity-dependent) in mj_effShift.
   // Sleeping tendons are excluded, matching the passive-force filter; the wake rule
   // (mj_wakeTendon) keeps metric-coupled tendon pairs awake or asleep together. Under the
   // dual solver the class is excluded (mj_effCouplings): an empty list removes its metric
@@ -1115,8 +1115,8 @@ void mjd_effBuild(const mjModel* m, mjData* d, int active, int flg_factor) {
   }
 
   // metric-possible actuators: allocation here, values (ctrl- and state-dependent) in
-  // mjd_effActuation at the actuation stage. Under the dual solver the class is excluded
-  // (mj_effCouplings, as for tendons): no allocation, so mjd_effActuation adds nothing
+  // mj_effActuation at the actuation stage. Under the dual solver the class is excluded
+  // (mj_effCouplings, as for tendons): no allocation, so mj_effActuation adds nothing
   int any_act = 0;
   if (mj_effCouplings(m)) {
     for (int i=0; i < m->nactuator; i++) {

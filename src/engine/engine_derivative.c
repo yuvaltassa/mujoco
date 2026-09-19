@@ -1699,7 +1699,7 @@ void mjd_flexStretch_mul(const mjModel* m, mjData* d, mjtNum* res, const mjtNum*
       // Edge tension for the geometric term, keeping only its TENSILE part. The geometric block is
       // Me_a*[[I,-I],[-I,I]] over the edge's two vertices, which is PSD iff Me_a >= 0; a compressed
       // edge would make K indefinite, and its consumers (the CG constraint solver and the PCG in
-      // mjd_effSolve) both require SPD. The clamp is structural, so no eigendecomposition is
+      // mj_effSolve) both require SPD. The clamp is structural, so no eigendecomposition is
       // needed. mj_flexPassiveStretch keeps the full Me_a: the force is unchanged, only the
       // operator is projected.
       mjtNum Me[6];

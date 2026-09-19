@@ -2599,22 +2599,22 @@ TEST_F(DerivativeTest, FlexStiffAssembleInterp) {
   }
 }
 
-// mjd_effSolve drives (M+K)x = b to opt.tolerance on the relative residual,
+// mj_effSolve drives (M+K)x = b to opt.tolerance on the relative residual,
 // for every metric coverage case. It is a PCG whose preconditioner
-// (mjd_effPrec) is only approximate, so the accuracy comes from the iteration
+// (mj_effPrec) is only approximate, so the accuracy comes from the iteration
 // and not from the preconditioner being exact.
 TEST_F(DerivativeTest, EffSolve) {
-  // relative residual of (M+K)x - b after mjd_effSolve
+  // relative residual of (M+K)x - b after mj_effSolve
   auto solve_residual = [](const mjModel* m, mjData* d) {
     int nv = m->nv;
     std::vector<mjtNum> b(nv), x(nv), r(nv);
     for (int i = 0; i < nv; i++) {
       b[i] = mju_Halton(i, 3) - 0.5;
     }
-    mjd_effSolve(m, d, x.data(), b.data());
+    mj_effSolve(m, d, x.data(), b.data());
     mju_mulSymVecSparse(r.data(), d->M, x.data(), nv, m->M_rownnz, m->M_rowadr,
                         m->M_colind);
-    mjd_effMulAdd(m, d, r.data(), x.data(), /*flg_contact=*/1);
+    mj_effMulAdd(m, d, r.data(), x.data(), /*flg_contact=*/1);
     mju_subFrom(r.data(), b.data(), nv);
     return mju_norm(r.data(), nv) / mju_norm(b.data(), nv);
   };
@@ -2711,7 +2711,7 @@ static const char* const kStretchCloth = R"(
 </mujoco>
 )";
 
-// A metric too ill-conditioned for the 3x3 blocks exhausts mjd_effSolve's
+// A metric too ill-conditioned for the 3x3 blocks exhausts mj_effSolve's
 // iteration budget; it must report that rather than return an under-converged
 // qacc_smooth silently. Forced by conditioning rather than by an unreachable
 // opt.tolerance, which cannot be expressed in single precision: there the
@@ -2747,7 +2747,7 @@ TEST_F(DerivativeTest, EffSolveCapWarns) {
   testing::Mock::VerifyAndClearExpectations(&warning_handler);
 }
 
-// PCG requires a symmetric preconditioner. mjd_effPrec must satisfy
+// PCG requires a symmetric preconditioner. mj_effPrec must satisfy
 // u.P(v) == v.P(u); it did not when the covered and uncovered dofs shared a
 // kinematic tree, which is what the flex-under-a-slider model here exercises.
 TEST_F(DerivativeTest, EffPrecIsSymmetric) {
@@ -2765,8 +2765,8 @@ TEST_F(DerivativeTest, EffPrecIsSymmetric) {
       u[i] = mju_Halton(i + trial * nv, 2) - 0.5;
       v[i] = mju_Halton(i + trial * nv, 5) - 0.5;
     }
-    mjd_effPrec(model.get(), data.get(), Pu.data(), u.data());
-    mjd_effPrec(model.get(), data.get(), Pv.data(), v.data());
+    mj_effPrec(model.get(), data.get(), Pu.data(), u.data());
+    mj_effPrec(model.get(), data.get(), Pv.data(), v.data());
     mjtNum a = mju_dot(v.data(), Pu.data(), nv);
     mjtNum b = mju_dot(u.data(), Pv.data(), nv);
     EXPECT_THAT(a, MjNear(b, 1e-10, 1e-4))

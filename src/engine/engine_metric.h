@@ -25,7 +25,7 @@ extern "C" {
 
 // actuation-stage refresh of the metric: actuator gains, their shift, the backbone (factored
 // if flg_factor)
-void mjd_effActuation(const mjModel* m, mjData* d, int flg_factor);
+void mj_effActuation(const mjModel* m, mjData* d, int flg_factor);
 
 // one rank-1 term of the metric: term = scale * val' * val over the sparse row
 typedef struct {
@@ -46,45 +46,45 @@ typedef struct {
 // exhausted. Producers: tendons, then actuator output rows; zero entries are skipped.
 // A new metric class becomes a new case here, invisible to every consumer.
 // flg_contact selects the passive-contact class, for callers that account for contact separately
-int mjd_effRank1Next(const mjModel* m, const mjData* d, mjEffRank1Iter* it,
-                     mjEffRank1* e, int flg_contact);
+int mj_effRank1Next(const mjModel* m, const mjData* d, mjEffRank1Iter* it,
+                    mjEffRank1* e, int flg_contact);
 
 // island-local metric product res += S*vec, vectors in island-local dof coordinates
-void mjd_effMulAddIsland(const mjModel* m, const mjData* d, mjtNum* res,
-                         const mjtNum* vec, int island);
+void mj_effMulAddIsland(const mjModel* m, const mjData* d, mjtNum* res,
+                        const mjtNum* vec, int island);
 
 // implicit effective metric Mtilde = M + (h^2+h*d)*K: per-step arena object (see mjdata.h efm_*)
 // build (or deactivate, active==0); the gate decision belongs to the caller
-MJAPI void mjd_effBuild(const mjModel* m, mjData* d, int active, int flg_factor);
+MJAPI void mj_effBuild(const mjModel* m, mjData* d, int active, int flg_factor);
 
 // refresh the metric's smooth-force shift c = h*K*qvel (values only, velocity stage)
-MJAPI void mjd_effShift(const mjModel* m, mjData* d);
+MJAPI void mj_effShift(const mjModel* m, mjData* d);
 
 // res += B*vec (the stiffness part of the metric; caller supplies the M part).
 // flg_contact selects the passive-contact class, for callers that account for contact
 // energy separately
-MJAPI void mjd_effMulAdd(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec,
-                         int flg_contact);
+MJAPI void mj_effMulAdd(const mjModel* m, mjData* d, mjtNum* res, const mjtNum* vec,
+                        int flg_contact);
 
-// solve (M + B) x = b by PCG preconditioned with mjd_effPrec, to opt.tolerance on the relative
+// solve (M + B) x = b by PCG preconditioned with mj_effPrec, to opt.tolerance on the relative
 // residual; x = M^-1 b when the metric is inactive. Warns (mjWARN_INERTIA) if the iteration cap
 // is reached before convergence, in which case x is returned under-converged.
-MJAPI void mjd_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b);
+MJAPI void mj_effSolve(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b);
 
 // apply the metric preconditioner: x ~= (M + B)^-1 b, a cheap fixed linear operator, NOT a solve.
 // Exact only when the metric is inactive (x = M^-1 b); otherwise approximate by construction.
-MJAPI void mjd_effPrec(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b);
+MJAPI void mj_effPrec(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b);
 
 // fold the rank-1 classes and the efc rows (quadratic zone) into a copy of the preconditioner
 // blocks L (9*nefmdof), factored; returns 0 if nothing is covered, leaving L untouched
-MJAPI int mjd_effPrecFold(const mjModel* m, mjData* d, mjtNum* L,
-                          int nefc, const mjtNum* efc_D, int is_sparse,
-                          const mjtNum* J, const int* J_rownnz, const int* J_rowadr,
-                          const int* J_colind);
+MJAPI int mj_effPrecFold(const mjModel* m, mjData* d, mjtNum* L,
+                         int nefc, const mjtNum* efc_D, int is_sparse,
+                         const mjtNum* J, const int* J_rownnz, const int* J_rowadr,
+                         const int* J_colind);
 
 // apply the metric preconditioner using caller-supplied factored blocks
-MJAPI void mjd_effPrecBlocks(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b,
-                             const mjtNum* L);
+MJAPI void mj_effPrecBlocks(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* b,
+                            const mjtNum* L);
 
 // A published contact row in mjData.efm_con_ind / efm_con_val is a two-slot header and the entries:
 //
@@ -92,7 +92,7 @@ MJAPI void mjd_effPrecBlocks(const mjModel* m, mjData* d, mjtNum* x, const mjtNu
 //
 // scale is the curvature the metric applies, force the pair's force along the row, conid the
 // contact it came from. Apply the published forces: res += force * row over the rows.
-MJAPI void mjd_effContactForce(const mjData* d, mjtNum* res);
+MJAPI void mj_effContactForce(const mjData* d, mjtNum* res);
 
 
 #ifdef __cplusplus
