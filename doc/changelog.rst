@@ -46,6 +46,13 @@ Bug fixes
   register the forces that tendons apply to bodies (:issue:`832`).
 - :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD` now raise an error when :ref:`sleeping<Sleeping>` is enabled.
   Previously, their repeated evaluations changed the sleep state, leading to internal errors or wrong derivatives.
+- The eigensolver that finds principal axes of inertia in the compiler (for
+  :ref:`fullinertia<body-inertial-fullinertia>`, meshes, bodies with several geoms and
+  :ref:`fusestatic<compiler-fusestatic>`), and :ref:`mju_eig3`, now converge to machine precision whatever the scale of
+  the matrix. Previously the iteration stopped early: the inertia tensor recovered from ``body_iquat`` and
+  ``body_inertia`` was accurate to 1e-6 (``mju_eig3`` to 1e-3 in single precision) and products of inertia below 1e-12
+  were ignored, so small bodies fared worse. Compiled models change accordingly: inertia tensors by up to 1e-6, and the
+  principal axes of bodies and meshes with nearly equal moments of inertia, which are ill-defined, by more.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

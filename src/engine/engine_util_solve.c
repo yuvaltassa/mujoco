@@ -1098,11 +1098,23 @@ void mju_solve3(mjtNum x[3], const mjtNum A[9], const mjtNum b[3]) {
 //--------------------------- eigen decomposition --------------------------------------------------
 
 // eigenvalue decomposition of symmetric 3x3 matrix
-static const mjtNum eigEPS = mjMINVAL * 1000;
+#ifdef mjUSESINGLE
+static const mjtNum eigTOL = 2e-6f;             // off-diagonal tolerance, relative to max element
+#else
+static const mjtNum eigTOL = 4e-15;
+#endif
+static const mjtNum eigEPS = mjMINVAL * 1000;   // eigenvalues closer than this are not reordered
 int mju_eig3(mjtNum eigval[3], mjtNum eigvec[9], mjtNum quat[4], const mjtNum mat[9]) {
   mjtNum D[9], tmp[9];
-  mjtNum tau, t, c;
+  mjtNum tau, t;
   int iter, rk, ck, rotk;
+
+  // off-diagonal tolerance: roundoff level of D, about 16 epsilons of the largest element
+  mjtNum tol = 0;
+  for (int i=0; i < 9; i++) {
+    tol = mju_max(tol, mju_abs(mat[i]));
+  }
+  tol *= eigTOL;
 
   // initialize with unit quaternion
   quat[0] = 1;
@@ -1136,32 +1148,23 @@ int mju_eig3(mjtNum eigval[3], mjtNum eigvec[9], mjtNum quat[4], const mjtNum ma
     }
 
     // terminate if max off-diagonal element too small
-    if (mju_abs(D[3*rk+ck]) < eigEPS) {
+    if (mju_abs(D[3*rk+ck]) <= tol) {
       break;
     }
 
-    // 2x2 symmetric Schur decomposition
+    // 2x2 symmetric Schur decomposition: t = tan(angle)
     tau = (D[4*ck]-D[4*rk])/(2*D[3*rk+ck]);
     if (tau >= 0) {
       t = 1.0/(tau + mju_sqrt(1 + tau*tau));
     } else {
       t = -1.0/(-tau + mju_sqrt(1 + tau*tau));
     }
-    c = 1.0/mju_sqrt(1 + t*t);
 
-    // terminate if cosine too close to 1
-    if (c > 1.0-eigEPS) {
-      break;
-    }
-
-    // express rotation as quaternion
+    // express rotation as quaternion, using h = tan(angle/2): accurate for small angles
+    mjtNum h = t/(1 + mju_sqrt(1 + t*t));
+    tmp[0] = 1/mju_sqrt(1 + h*h);
     tmp[1] = tmp[2] = tmp[3] = 0;
-    tmp[rotk+1] = (tau >= 0 ? -mju_sqrt(0.5-0.5*c) : mju_sqrt(0.5-0.5*c));
-    if (rotk == 1) {
-      tmp[rotk+1] = -tmp[rotk+1];
-    }
-    tmp[0] = mju_sqrt(1.0 - tmp[rotk+1]*tmp[rotk+1]);
-    mju_normalize4(tmp);
+    tmp[rotk+1] = (rotk == 1 ? h : -h) * tmp[0];
 
     // accumulate quaternion rotation
     mju_mulQuat(quat, quat, tmp);
