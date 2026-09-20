@@ -49,6 +49,8 @@ Bug fixes
 - An :ref:`inertial<body-inertial>` element nested in a :ref:`frame<body-frame>` is now transformed by the frame, like
   all other child elements. Previously the frame was silently ignored and the inertial frame was read in body
   coordinates.
+- :ref:`mjs_bodyToFrame` now keeps a body orientation specified with :at:`euler`, :at:`axisangle`, :at:`xyaxes` or
+  :at:`zaxis`. Previously only :at:`quat` was copied to the frame and the other specifiers were silently dropped.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

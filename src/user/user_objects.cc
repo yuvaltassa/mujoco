@@ -2102,6 +2102,7 @@ mjCFrame* mjCBody::ToFrame() {
   mjCFrame* newframe = parent->AddFrame(frame);
   mjuu_copyvec(newframe->spec.pos, spec.pos, 3);
   mjuu_copyvec(newframe->spec.quat, spec.quat, 4);
+  newframe->spec.alt = spec.alt;
   if (parent->name != "world" && mass >= mjMINVAL) {
     if (!parent->explicitinertial) {
       parent->MakeInertialExplicit();
