@@ -46,6 +46,9 @@ Bug fixes
   register the forces that tendons apply to bodies (:issue:`832`).
 - :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD` now raise an error when :ref:`sleeping<Sleeping>` is enabled.
   Previously, their repeated evaluations changed the sleep state, leading to internal errors or wrong derivatives.
+- :ref:`mjs_delete` now deletes a :ref:`frame<body-frame>` together with everything inside it, along with all the
+  elements that reference a deleted element, as it does for a body. Previously, deleting a frame silently did nothing
+  and corrupted memory when the spec was deleted.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

@@ -569,7 +569,68 @@ void mjCModel::RemovePlugins() {
 }
 
 
-mjCModel& mjCModel::operator-=(const mjCBody& subtree) {
+// return the body that owns the frame, nullptr if the frame is not in the tree
+mjCBody* mjCModel::FrameOwner(const mjCFrame& frame, mjCBody* body) {
+  if (body == nullptr) { body = bodies_[0]; }
+
+  if (std::find(body->frames.begin(), body->frames.end(), &frame) != body->frames.end()) {
+    return body;
+  }
+
+  // recursive call to all child bodies
+  for (mjCBody* child : body->bodies) {
+    mjCBody* owner = FrameOwner(frame, child);
+    if (owner) { return owner; }
+  }
+  return nullptr;
+}
+
+
+// move the elements of list that are inside frame to the detached list, return them
+template <class T>
+std::vector<T*> mjCModel::DetachFromFrame(std::vector<T*>& list, const mjCFrame& frame) {
+  auto inside = std::stable_partition(list.begin(), list.end(), [&frame](const T* element) {
+    return !frame.IsAncestor(element->frame);
+  });
+  std::vector<T*> removed(inside, list.end());
+  list.erase(inside, list.end());
+  detached_.insert(detached_.end(), removed.begin(), removed.end());
+  return removed;
+}
+
+
+// remove body from tree
+void mjCModel::RemoveFromTree(const mjCBody& subtree) {
+  mjCBody* world  = bodies_[0];
+  *world         -= subtree;
+}
+
+
+// remove frame from tree, together with the elements inside it
+void mjCModel::RemoveFromTree(const mjCFrame& frame) {
+  mjCBody* body = FrameOwner(frame);
+
+  // the frame is detached by the caller, the elements inside it are detached here
+  body->frames.erase(std::find(body->frames.begin(), body->frames.end(), &frame));
+  std::vector<mjCBody*> bodies = DetachFromFrame(body->bodies, frame);
+  std::vector<mjCGeom*> geoms  = DetachFromFrame(body->geoms, frame);
+  DetachFromFrame(body->frames, frame);
+  DetachFromFrame(body->joints, frame);
+  DetachFromFrame(body->sites, frame);
+  DetachFromFrame(body->cameras, frame);
+  DetachFromFrame(body->lights, frame);
+
+  // delete the plugins created by the removed elements
+  for (mjCBody* child : bodies) { DeleteSubtreePlugin(child); }
+  for (mjCGeom* geom : geoms) {
+    if (geom->plugin.active && geom->plugin.name->empty()) { *this -= geom->plugin.element; }
+  }
+}
+
+
+// remove subtree from the tree, then remove all elements that reference it
+template <class T>
+mjCModel& mjCModel::RemoveSubtree(const T& subtree) {
   mjCModel oldmodel(*this);
 
   // create global lists in the old model if not compiled
@@ -582,9 +643,8 @@ mjCModel& mjCModel::operator-=(const mjCBody& subtree) {
   StoreKeyframes(this);
   DeleteAll(keys_);
 
-  // remove body from tree
-  mjCBody* world  = bodies_[0];
-  *world         -= subtree;
+  // remove subtree from tree
+  RemoveFromTree(subtree);
 
   // update global lists
   ResetTreeLists();
@@ -604,6 +664,17 @@ mjCModel& mjCModel::operator-=(const mjCBody& subtree) {
   spec.element->signature = Signature();
 
   return *this;
+}
+
+
+mjCModel& mjCModel::operator-=(const mjCBody& subtree) {
+  return RemoveSubtree(subtree);
+}
+
+
+mjCModel& mjCModel::operator-=(const mjCFrame& frame) {
+  if (!FrameOwner(frame)) { throw mjCError(nullptr, "frame is not in this model"); }
+  return RemoveSubtree(frame);
 }
 
 
@@ -698,6 +769,12 @@ void mjCModel::operator-=(mjsElement* el) {
     *this         -= *body;
   }
 
+  // throws before the frame is detached if it is not in the tree
+  if (el->elemtype == mjOBJ_FRAME) {
+    mjCFrame* frame  = static_cast<mjCFrame*>(el);
+    *this           -= *frame;
+  }
+
   detached_.push_back(static_cast<mjCBase*>(el));
   ResetTreeLists();
 
@@ -718,6 +795,9 @@ void mjCModel::operator-=(mjsElement* el) {
       DeleteSubtreePlugin(subtree);
       break;
     }
+
+    case mjOBJ_FRAME:
+      break;  // removed above, frames are meta elements and have no object list
 
     case mjOBJ_DEFAULT:
       MakeTreeLists();  // rebuild lists that were reset at the beginning of the function

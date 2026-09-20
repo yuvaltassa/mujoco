@@ -199,6 +199,7 @@ class mjCModel : public mjCModel_, private mjSpec {
   mjCModel& operator=(const mjCModel& other);    // copy other into this, if they are not the same
   mjCModel& operator+=(const mjCModel& other);   // add other into this, even if they are the same
   mjCModel& operator-=(const mjCBody& subtree);  // remove subtree and all references from model
+  mjCModel& operator-=(const mjCFrame& frame);   // remove frame, its contents and all references
   mjCModel& operator+=(mjCDef& subtree);         // add default tree to this model
   mjCModel& operator-=(const mjCDef& subtree);   // remove default tree from this model
 
@@ -472,6 +473,21 @@ class mjCModel : public mjCModel_, private mjSpec {
   // delete from list the elements that cause an error
   template <class T>
   void RemoveFromList(std::vector<T*>& list, const mjCModel& other);
+
+  // remove subtree from the tree, then remove all elements that reference it
+  template <class T>
+  mjCModel& RemoveSubtree(const T& subtree);
+
+  // remove body or frame from the tree, a frame is removed together with the elements inside it
+  void RemoveFromTree(const mjCBody& subtree);
+  void RemoveFromTree(const mjCFrame& frame);
+
+  // return the body that owns the frame, nullptr if the frame is not in the tree
+  mjCBody* FrameOwner(const mjCFrame& frame, mjCBody* body = nullptr);
+
+  // move the elements of list that are inside frame to the detached list, return them
+  template <class T>
+  std::vector<T*> DetachFromFrame(std::vector<T*>& list, const mjCFrame& frame);
 
   // create mjCBase lists from children lists
   void CreateObjectLists();

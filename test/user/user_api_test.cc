@@ -1917,6 +1917,163 @@ TEST_F(MujocoTest, DetachBody) {
   TestDetachBody(/*compile=*/true);
 }
 
+void TestDeleteFrame(bool compile) {
+  std::array<char, 1000> er;
+  mjtNum tol = 0;
+  std::string field = "";
+
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="body">
+        <joint name="hinge"/>
+        <geom name="geom" size=".1"/>
+        <frame name="frame" pos="1 0 0">
+          <joint name="slide" type="slide"/>
+          <geom name="in_frame" size=".1"/>
+          <site name="in_frame"/>
+          <camera name="in_frame"/>
+          <light name="in_frame"/>
+          <frame name="nested" pos="0 1 0">
+            <geom name="in_nested" size=".1"/>
+            <body name="in_nested">
+              <joint name="in_body"/>
+              <geom name="in_body" size=".1"/>
+            </body>
+          </frame>
+        </frame>
+        <frame name="sibling" pos="0 0 1">
+          <geom name="in_sibling" size=".1"/>
+        </frame>
+      </body>
+    </worldbody>
+
+    <sensor>
+      <framepos name="geom" objtype="geom" objname="geom"/>
+      <framepos name="in_frame" objtype="site" objname="in_frame"/>
+      <framepos name="in_body" objtype="geom" objname="in_body"/>
+    </sensor>
+
+    <actuator>
+      <motor name="hinge" joint="hinge"/>
+      <motor name="slide" joint="slide"/>
+    </actuator>
+
+    <keyframe>
+      <key name="key" qpos="1 2 3"/>
+    </keyframe>
+  </mujoco>)";
+
+  static constexpr char xml_result[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="body">
+        <joint name="hinge"/>
+        <geom name="geom" size=".1"/>
+        <frame name="sibling" pos="0 0 1">
+          <geom name="in_sibling" size=".1"/>
+        </frame>
+      </body>
+    </worldbody>
+
+    <sensor>
+      <framepos name="geom" objtype="geom" objname="geom"/>
+    </sensor>
+
+    <actuator>
+      <motor name="hinge" joint="hinge"/>
+    </actuator>
+
+    <keyframe>
+      <key name="key" qpos="1"/>
+    </keyframe>
+  </mujoco>)";
+
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  EXPECT_THAT(spec, NotNull()) << er.data();
+
+  // compile model (for testing double compilation)
+  mjModel* m_before = compile ? mj_compile(spec, 0) : nullptr;
+
+  // delete the frame, everything inside it and everything that references it
+  mjsFrame* frame = mjs_findFrame(spec, "frame");
+  EXPECT_THAT(frame, NotNull());
+  EXPECT_EQ(mjs_delete(spec, frame->element), 0);
+  EXPECT_THAT(mjs_findFrame(spec, "frame"), IsNull());
+  EXPECT_THAT(mjs_findFrame(spec, "nested"), IsNull());
+  EXPECT_THAT(mjs_findFrame(spec, "sibling"), NotNull());
+
+  // deleting the frame again is an error
+  EXPECT_EQ(mjs_delete(spec, frame->element), -1);
+  EXPECT_THAT(mjs_getError(spec), HasSubstr("frame is not in this model"));
+
+  // compare with expected XML
+  mjModel* m_deleted = mj_compile(spec, 0);
+  EXPECT_THAT(m_deleted, NotNull()) << mjs_getError(spec);
+  MjModelPtr m_expected = LoadModelFromString(xml_result, er.data(), er.size());
+  EXPECT_THAT(m_expected.get(), NotNull()) << er.data();
+  EXPECT_LE(CompareModel(m_deleted, m_expected.get(), field), tol)
+      << "Expected and deleted models are different!\n"
+      << "Different field: " << field << '\n';
+
+  // destroy everything
+  mj_deleteSpec(spec);
+  mj_deleteModel(m_deleted);
+  if (m_before) mj_deleteModel(m_before);
+}
+
+TEST_F(MujocoTest, DeleteFrame) {
+  TestDeleteFrame(/*compile=*/false);
+  TestDeleteFrame(/*compile=*/true);
+}
+
+TEST_F(MujocoTest, DeleteFramePlugin) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <extension>
+      <plugin plugin="mujoco.elasticity.cable"/>
+      <plugin plugin="mujoco.sdf.torus">
+        <instance name="torus"/>
+      </plugin>
+    </extension>
+
+    <asset>
+      <mesh name="torus">
+        <plugin instance="torus"/>
+      </mesh>
+    </asset>
+
+    <worldbody>
+      <frame name="frame">
+        <geom type="sdf" mesh="torus">
+          <plugin plugin="mujoco.sdf.torus"/>
+        </geom>
+        <body>
+          <geom size=".1"/>
+          <plugin plugin="mujoco.elasticity.cable"/>
+        </body>
+      </frame>
+    </worldbody>
+  </mujoco>)";
+
+  std::array<char, 1000> err;
+  mjSpec* spec = mj_parseXMLString(xml, 0, err.data(), err.size());
+  ASSERT_THAT(spec, NotNull()) << err.data();
+  mjModel* model = mj_compile(spec, nullptr);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(model->nplugin, 3);
+
+  // the plugin instances created by the geom and the body are deleted with them
+  EXPECT_EQ(mjs_delete(spec, mjs_findFrame(spec, "frame")->element), 0);
+  mjModel* newmodel = mj_compile(spec, nullptr);
+  ASSERT_THAT(newmodel, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(newmodel->nplugin, 1);
+
+  mj_deleteSpec(spec);
+  mj_deleteModel(model);
+  mj_deleteModel(newmodel);
+}
+
 TEST_F(MujocoTest, AttachToSite) {
   std::array<char, 1000> er;
   mjtNum tol = 0;
