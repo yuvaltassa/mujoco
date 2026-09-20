@@ -46,6 +46,11 @@ Bug fixes
   register the forces that tendons apply to bodies (:issue:`832`).
 - :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD` now raise an error when :ref:`sleeping<Sleeping>` is enabled.
   Previously, their repeated evaluations changed the sleep state, leading to internal errors or wrong derivatives.
+- :ref:`fusestatic<compiler-fusestatic>` now replaces a fused body with a :ref:`frame<frame>` in its parent, so
+  that recompiling, copying or saving the :ref:`mjSpec` reproduces the fused model. Previously, recompiling misplaced
+  the elements and child bodies of fused bodies and lost their explicit inertia; elements and child bodies nested in a
+  frame of a fused body were read from freed memory and dropped from saved XML; cameras and lights of fused bodies
+  were misplaced; and under :ref:`alignfree<compiler-alignfree>`, so were the cameras and lights of aligned bodies.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

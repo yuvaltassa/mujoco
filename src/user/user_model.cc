@@ -4319,6 +4319,7 @@ void mjCModel::FuseReindex(mjCBody* body) {
   makelistid(sites_, body->sites);
   makelistid(cameras_, body->cameras);
   makelistid(lights_, body->lights);
+  frames_.insert(frames_.end(), body->frames.begin(), body->frames.end());
 
   // process children recursively
   for (int i = 0; i < body->bodies.size(); i++) { FuseReindex(body->bodies[i]); }
@@ -4326,13 +4327,12 @@ void mjCModel::FuseReindex(mjCBody* body) {
 
 
 template <class T>
-void mjCModel::ReassignChild(std::vector<T*>& dest,
-                             std::vector<T*>& list,
-                             mjCBody*         parent,
-                             mjCBody*         body) {
+void mjCModel::ReassignChild(
+    std::vector<T*>& dest, std::vector<T*>& list, mjCBody* parent, mjCBody* body, mjCFrame* frame) {
   for (int j = 0; j < list.size(); j++) {
     // assign
     list[j]->body = parent;
+    if (!list[j]->frame) { list[j]->frame = frame; }
     dest.push_back(list[j]);
 
     // change frame
@@ -4351,6 +4351,20 @@ void mjCModel::ResolveReferences(std::vector<T*>& list, mjCBody* body) {
 }
 
 
+// cameras are compiled with their body, copying from the spec would discard the compiled pose
+template <>
+void mjCModel::ResolveReferences(std::vector<mjCCamera*>& list, mjCBody* body) {
+  for (auto& item : list) { item->ResolveReferences(this); }
+}
+
+
+// lights are compiled with their body, copying from the spec would discard the compiled pose
+template <>
+void mjCModel::ResolveReferences(std::vector<mjCLight*>& list, mjCBody* body) {
+  for (auto& item : list) { item->ResolveReferences(this); }
+}
+
+
 template <>
 void mjCModel::ResolveReferences(std::vector<mjCSensor*>& list, mjCBody* body) {
   for (auto& item : list) {
@@ -4364,6 +4378,14 @@ void mjCModel::ResolveReferences(std::vector<mjCSensor*>& list, mjCBody* body) {
       throw mjCError(sensor, "cannot fuse a body used by a force/torque sensor");
     }
   }
+}
+
+
+// true if the body's inertia is inferred from its geoms
+static bool infersinertia(const mjCBody* body) {
+  int inertiafromgeom = body->compiler->inertiafromgeom;
+  return inertiafromgeom == mjINERTIAFROMGEOM_TRUE ||
+         (inertiafromgeom == mjINERTIAFROMGEOM_AUTO && !mjuu_defined(body->spec.ipos[0]));
 }
 
 
@@ -4405,13 +4427,42 @@ void mjCModel::FuseStatic(void) {
     //------------- add mass and inertia (if parent not world)
     if (body->parent && body->parent->name != "world" && body->mass >= mjMINVAL) {
       par->AccumulateInertia(body);
+
+      // make the fused inertia explicit, unless recompiling infers it from the fused geoms
+      if (!infersinertia(par) || !infersinertia(body)) {
+        par->explicitinertial      = true;
+        par->spec.explicitinertial = true;
+        par->spec.mass             = par->mass;
+        mjuu_copyvec(par->spec.ipos, par->ipos, 3);
+        mjuu_copyvec(par->spec.iquat, par->iquat, 4);
+        mjuu_copyvec(par->spec.inertia, par->inertia, 3);
+        par->spec.fullinertia[0] = mjNAN;
+        par->spec.ialt.type      = mjORIENTATION_QUAT;
+      }
     }
+
+    //------------- replace body with a frame in the parent
+
+    // children keep their specs, so recompiling and saving reproduce the fused model
+    mjCFrame* bframe = new mjCFrame(this, body->frame);
+    bframe->body     = par;
+    bframe->compiler = body->compiler;
+    bframe->spec.alt = body->spec.alt;
+    mjuu_copyvec(bframe->spec.pos, body->spec.pos, 3);
+    mjuu_copyvec(bframe->spec.quat, body->spec.quat, 4);
+    bframe->CopyFromSpec();
+    mjuu_copyvec(bframe->pos, body->pos, 3);
+    mjuu_copyvec(bframe->quat, body->quat, 4);
+    bframe->compiled = true;
+    par->frames.push_back(bframe);
 
     //------------- replace body with its children in parent body list
 
     // change frames of child bodies
-    for (int j = 0; j < body->bodies.size(); j++)
+    for (int j = 0; j < body->bodies.size(); j++) {
+      if (!body->bodies[j]->frame) { body->bodies[j]->frame = bframe; }
       changeframe(body->bodies[j]->pos, body->bodies[j]->quat, body->pos, body->quat);
+    }
 
     // find body in parent list, insert children before it
     bool found = false;
@@ -4435,15 +4486,17 @@ void mjCModel::FuseStatic(void) {
     }
     if (!found) { mju_error("Internal error: FuseStatic: body not found"); }
 
-    //------------- assign geoms, sites, cameras, lights to parent, change frames
+    //------------- assign geoms, sites, cameras, lights, frames to parent, change frames
 
-    ReassignChild(par->geoms, body->geoms, par, body);
-    ReassignChild(par->sites, body->sites, par, body);
-    ReassignChild(par->cameras, body->cameras, par, body);
+    ReassignChild(par->geoms, body->geoms, par, body, bframe);
+    ReassignChild(par->sites, body->sites, par, body, bframe);
+    ReassignChild(par->cameras, body->cameras, par, body, bframe);
+    ReassignChild(par->frames, body->frames, par, body, bframe);
 
     // lights have dir instead of quat, so handle separately
     for (int j = 0; j < body->lights.size(); j++) {
       body->lights[j]->body = par;
+      if (!body->lights[j]->frame) { body->lights[j]->frame = bframe; }
       par->lights.push_back(body->lights[j]);
 
       // transform pos into parent frame
@@ -4483,6 +4536,7 @@ void mjCModel::FuseStatic(void) {
     sites_.clear();
     cameras_.clear();
     lights_.clear();
+    frames_.clear();
     FuseReindex(bodies_[0]);
 
     // recompute parent contype, conaffinity, and margin
@@ -4495,10 +4549,7 @@ void mjCModel::FuseStatic(void) {
     }
 
     // recompute BVH
-    int nbvhfuse = body->tree.Nbvh() + par->tree.Nbvh();
     par->ComputeBVH();
-    nbvhstatic += par->tree.Nbvh() - nbvhfuse;
-    nbvh       += par->tree.Nbvh() - nbvhfuse;
 
     //------------- delete body (without deleting children)
 
@@ -4515,6 +4566,10 @@ void mjCModel::FuseStatic(void) {
 
   // remove empty names
   ProcessList_(ids, bodies_, mjOBJ_BODY, /*checkrepeat=*/true);
+
+  // body ids have changed, update the target bodies of cameras and lights
+  ResolveReferences(cameras_);
+  ResolveReferences(lights_);
 }
 
 
@@ -5094,11 +5149,7 @@ void mjCModel::TryCompile(mjModel*& m, mjData*& d, const mjVFS* vfs) {
   }
 
   // fuse static if enabled
-  if (compiler.fusestatic) {
-    FuseStatic();
-    for (int i = 0; i < lights_.size(); i++) { lights_[i]->Compile(); }
-    for (int i = 0; i < cameras_.size(); i++) { cameras_[i]->Compile(); }
-  }
+  if (compiler.fusestatic) { FuseStatic(); }
 
   // compile all other objects except for keyframes
   for (auto flex : flexes_) flex->Compile(vfs);
