@@ -2099,6 +2099,8 @@ mjCLight* mjCBody::AddLight(mjCDef* _def) {
 
 // create a frame in the parent body and move all contents of this body into it
 mjCFrame* mjCBody::ToFrame() {
+  if (!parent) { throw mjCError(this, "the world body cannot be converted to a frame"); }
+
   mjCFrame* newframe = parent->AddFrame(frame);
   mjuu_copyvec(newframe->spec.pos, spec.pos, 3);
   mjuu_copyvec(newframe->spec.quat, spec.quat, 4);
