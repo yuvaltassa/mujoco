@@ -56,6 +56,11 @@ Bug fixes
   any :ref:`flexcomp<body-flexcomp>` which is :ref:`rigid<body-flexcomp-rigid>`, has :ref:`pinned<flexcomp-pin>`
   vertices or has "trilinear" or "quadratic" :ref:`dofs<body-flexcomp-dof>`, if its parent was a static body other
   than the world.
+- :ref:`fusestatic<compiler-fusestatic>` now keeps names in step with ids while fusing. Previously, fusing a static
+  body which follows a sibling changed the order of geoms, sites, cameras and lights while their names still resolved
+  to the old ids, so contact pairs, equalities, tendons, actuators, sensors and tuples which reference them by name
+  were silently bound to a different object. Stale body ids also left static bodies unfused, in models where another
+  body is referenced by name.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
