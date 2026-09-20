@@ -87,6 +87,11 @@ Bug fixes
   :ref:`fluidshape<body-geom-fluidshape>`, if :ref:`density<option-density>` or :ref:`viscosity<option-viscosity>` are
   nonzero. Previously, the :doc:`fluid forces <computation/fluid>` of the fused model were different, since they apply
   to the inertia and ellipsoid geoms of each body.
+- :ref:`fusestatic<compiler-fusestatic>` no longer fuses static bodies which are referenced by a
+  :ref:`flex<deformable-flex>`. Previously such models failed to compile with an "unknown body" error. This affected
+  any :ref:`flexcomp<body-flexcomp>` which is :ref:`rigid<body-flexcomp-rigid>`, has :ref:`pinned<flexcomp-pin>`
+  vertices or has "trilinear" or "quadratic" :ref:`dofs<body-flexcomp-dof>`, if its parent was a static body other
+  than the world.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

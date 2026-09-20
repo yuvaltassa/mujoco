@@ -4769,6 +4769,7 @@ void mjCModel::FuseStatic(void) {
         ResolveReferences(actuators_);
         ResolveReferences(sensors_, bodies_[i]);
         ResolveReferences(tuples_);
+        ResolveReferences(flexes_);
       } catch (mjCError err) {
         ids[mjOBJ_BODY].insert({bodies_[i]->name, i});
         continue;
