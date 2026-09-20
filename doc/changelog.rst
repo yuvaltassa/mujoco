@@ -46,6 +46,8 @@ Bug fixes
   register the forces that tendons apply to bodies (:issue:`832`).
 - :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD` now raise an error when :ref:`sleeping<Sleeping>` is enabled.
   Previously, their repeated evaluations changed the sleep state, leading to internal errors or wrong derivatives.
+- Frames created by :ref:`mjs_bodyToFrame` now belong to the parent of the converted body. Previously they had no
+  parent body: :ref:`mjs_getParent` returned an invalid pointer and :ref:`mjs_attach` crashed when given such a frame.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

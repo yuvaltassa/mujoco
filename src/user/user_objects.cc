@@ -136,8 +136,8 @@ void MapFrame(std::vector<T*>& parent,
               mjCFrame*        frame,
               mjCBody*         parent_body) {
   std::for_each(child.begin(), child.end(), [frame, parent_body](T* element) {
+    element->SetParent(parent_body);  // needs to happen first, SetFrame checks the parent
     element->SetFrame(frame);
-    element->SetParent(parent_body);
   });
   parent.insert(parent.end(), child.begin(), child.end());
   child.clear();
@@ -1959,6 +1959,10 @@ mjCBody* mjCBody::AddBody(mjCDef* _def) {
 // create new frame and add it to body
 mjCFrame* mjCBody::AddFrame(mjCFrame* _frame) {
   mjCFrame* obj = new mjCFrame(model, _frame ? _frame : NULL);
+
+  // set body pointer, add
+  obj->body = this;
+
   frames.push_back(obj);
   model->ResetTreeLists();
   model->MakeTreeLists();

@@ -2165,6 +2165,63 @@ TEST_F(MujocoTest, BodyToFrameWithInertial) {
   mj_deleteModel(model);
 }
 
+TEST_F(MujocoTest, BodyToFrameAttach) {
+  std::array<char, 1000> er;
+  mjtNum tol = 0;
+  std::string field = "";
+
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="parent">
+        <body name="child" pos="1 0 0">
+          <geom name="geom" size=".1"/>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>)";
+
+  static constexpr char xml_result[] = R"(
+  <mujoco>
+    <worldbody>
+      <frame pos="1 0 0">
+        <geom name="attached-geom" size=".1"/>
+      </frame>
+    </worldbody>
+  </mujoco>)";
+
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  EXPECT_THAT(spec, NotNull()) << er.data();
+  mjsBody* parent = mjs_findBody(spec, "parent");
+  EXPECT_THAT(parent, NotNull());
+  mjsBody* child = mjs_findBody(spec, "child");
+  EXPECT_THAT(child, NotNull());
+
+  // the frame belongs to the parent of the converted body
+  mjsFrame* frame = mjs_bodyToFrame(&child);
+  EXPECT_THAT(frame, NotNull());
+  EXPECT_EQ(mjs_getParent(frame->element), parent);
+
+  // attach the frame to another spec
+  mjSpec* other = mj_makeSpec();
+  mjsBody* world = mjs_findBody(other, "world");
+  EXPECT_THAT(mjs_attach(world->element, frame->element, "attached-", ""),
+              NotNull());
+
+  // compile and compare
+  mjModel* model = mj_compile(other, 0);
+  EXPECT_THAT(model, NotNull());
+  MjModelPtr expected = LoadModelFromString(xml_result, er.data(), er.size());
+  EXPECT_THAT(expected.get(), NotNull()) << er.data();
+  EXPECT_LE(CompareModel(model, expected.get(), field), tol)
+      << "Expected and attached models are different!\n"
+      << "Different field: " << field << '\n';
+
+  mj_deleteSpec(spec);
+  mj_deleteSpec(other);
+  mj_deleteModel(model);
+}
+
 TEST_F(MujocoTest, AttachSpecToSite) {
   std::array<char, 1000> er;
   mjtNum tol = 0;

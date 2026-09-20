@@ -1351,6 +1351,7 @@ class SpecsTest(absltest.TestCase):
     spec.compile()
     frame = body.to_frame()
     np.testing.assert_array_equal(frame.pos, [1, 2, 3])
+    self.assertEqual(frame.parent, spec.worldbody)
 
   def test_get_frame(self):
     spec = mujoco.MjSpec()
