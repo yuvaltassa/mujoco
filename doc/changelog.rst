@@ -50,6 +50,8 @@ Bug fixes
   to another spec, or cannot be deleted (the world body, the spec itself, a tendon wrap). Previously such calls led to
   memory errors when the spec was deleted, for example after ``spec.delete(geom)`` was called twice in Python, and
   deleting an element of another spec left the spec unable to compile.
+- In Python, ``MjSpec.delete`` now raises a ``ValueError`` when the deletion of a pair, equality, tendon, actuator,
+  sensor or plugin fails, as it does for all other elements. Previously the error was ignored.
 - :ref:`mjs_delete` now also deletes the implicitly created :ref:`plugin<exPlugin>` instance of a geom, mesh, actuator
   or sensor when the spec was not compiled before the deletion. Previously the instance was left behind and the next
   compilation crashed.
