@@ -33,6 +33,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -490,8 +491,9 @@ mjCModel& mjCModel::operator+=(const mjCModel& other) {
 
 template <class T>
 void mjCModel::RemoveFromList(std::vector<T*>& list, const mjCModel& other) {
-  int nlist   = (int)list.size();
-  int removed = 0;
+  int             nlist   = (int)list.size();
+  int             removed = 0;
+  std::vector<T*> removed_elements;
   for (int i = 0; i < nlist; i++) {
     T* element   = list[i];
     element->id -= removed;
@@ -509,6 +511,7 @@ void mjCModel::RemoveFromList(std::vector<T*>& list, const mjCModel& other) {
     } catch (mjCError err) {
       ids[element->elemtype].erase(element->name);
       Detach(element);
+      removed_elements.push_back(element);
       list.erase(list.begin() + i);
       nlist--;
       i--;
@@ -518,6 +521,11 @@ void mjCModel::RemoveFromList(std::vector<T*>& list, const mjCModel& other) {
   if (removed > 0 && !list.empty()) {
     // if any elements were removed, update ids using processlist
     ProcessList_(ids, list, list[0]->elemtype, /*checkrepeat=*/false);
+  }
+
+  // delete the plugins created by the removed elements, after the ids of the list were updated
+  if constexpr (std::is_same_v<T, mjCActuator> || std::is_same_v<T, mjCSensor>) {
+    for (T* element : removed_elements) { DeleteImplicitPlugin(element->spec.plugin); }
   }
 }
 
@@ -793,6 +801,7 @@ void mjCModel::DeleteImplicitPlugin(const mjsPlugin& plugin) {
 // recursively delete all plugins in the subtree
 void mjCModel::DeleteSubtreePlugin(mjCBody* subtree) {
   DeleteImplicitPlugin(subtree->spec.plugin);
+  for (auto* geom : subtree->geoms) { DeleteImplicitPlugin(geom->spec.plugin); }
   for (auto* body : subtree->Bodies()) { DeleteSubtreePlugin(body); }
 }
 

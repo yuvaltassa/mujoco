@@ -63,6 +63,9 @@ Bug fixes
   Like the deleted element itself, they now remain valid until the spec is deleted, and so do deleted defaults.
   Previously pointers to them were left dangling, for example ``sensor.name`` after ``spec.delete(body)`` in Python,
   and deleting such an element or a default a second time was a memory error instead of an error.
+- Deleting a body with :ref:`mjs_delete` now also deletes the implicitly created :ref:`plugin<exPlugin>` instances of
+  the geoms inside it, and of the actuators and sensors that are removed because they reference it. Previously these
+  instances were left behind, and the next compilation failed or crashed.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
