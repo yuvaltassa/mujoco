@@ -1443,5 +1443,29 @@ TEST_F(Eig3Test, RepeatedEigenvalues) {
   }
 }
 
+// a loose tolerance stops early: off-diagonal elements are below the tolerance
+// and eigvec is orthonormal, as the broadphase requires of its frame
+TEST_F(Eig3Test, Tolerance) {
+  const mjtNum mat[9] = {2, .1, .2, .1, 3, .3, .2, .3, 4};
+  const mjtNum reltol = 1e-3;
+
+  mjtNum eigval[3], eigvec[9], quat[4];
+  int tight = mju_eig3(eigval, eigvec, quat, mat);
+  int loose = mju_eig3Tol(eigval, eigvec, quat, mat, reltol);
+  EXPECT_LT(loose, tight);
+
+  // D = eigvec' * mat * eigvec
+  mjtNum tmp[9], D[9];
+  mju_mulMatTMat(tmp, eigvec, mat, 3, 3, 3);
+  mju_mulMatMat(D, tmp, eigvec, 3, 3, 3);
+  EXPECT_LE(mju_abs(D[1]), reltol * 4);
+  EXPECT_LE(mju_abs(D[2]), reltol * 4);
+  EXPECT_LE(mju_abs(D[5]), reltol * 4);
+
+  mjtNum recon, orth;
+  Eig3Residual(&recon, &orth, mat, eigval, eigvec);
+  EXPECT_LE(orth, MjTol(5e-14, 5e-6));
+}
+
 }  // namespace
 }  // namespace mujoco

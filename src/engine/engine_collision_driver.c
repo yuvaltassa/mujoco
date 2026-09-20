@@ -1667,7 +1667,8 @@ static int mj_broadphase(const mjModel* m, mjData* d, mjPacked32* bfpair, int ma
   mju_scl(cov, cov, 1.0/cnt, 9);
 
   // construct covariance-aligned 3D frame: eigenvectors are columns of eigvec, rows of frame
-  mju_eig3(eigval, eigvec, quat, cov);
+  // SAP is exact in any frame, a rough one prunes as well
+  mju_eig3Tol(eigval, eigvec, quat, cov, 1e-3);
   mji_transpose3(frame, eigvec);
 
   // allocate collidable bodyflex ids, construct list

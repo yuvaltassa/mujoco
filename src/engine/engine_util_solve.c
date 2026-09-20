@@ -1105,16 +1105,23 @@ static const mjtNum eigTOL = 4e-15;
 #endif
 static const mjtNum eigEPS = mjMINVAL * 1000;   // eigenvalues closer than this are not reordered
 int mju_eig3(mjtNum eigval[3], mjtNum eigvec[9], mjtNum quat[4], const mjtNum mat[9]) {
+  return mju_eig3Tol(eigval, eigvec, quat, mat, eigTOL);
+}
+
+
+// same as mju_eig3, stop when off-diagonal elements are below reltol times the largest element
+int mju_eig3Tol(mjtNum eigval[3], mjtNum eigvec[9], mjtNum quat[4], const mjtNum mat[9],
+                mjtNum reltol) {
   mjtNum D[9], tmp[9];
   mjtNum tau, t;
   int iter, rk, ck, rotk;
 
-  // off-diagonal tolerance: roundoff level of D, about 16 epsilons of the largest element
+  // off-diagonal tolerance: no smaller than the roundoff level of D, about 16 epsilons
   mjtNum tol = 0;
   for (int i=0; i < 9; i++) {
     tol = mju_max(tol, mju_abs(mat[i]));
   }
-  tol *= eigTOL;
+  tol *= mju_max(reltol, eigTOL);
 
   // initialize with unit quaternion
   quat[0] = 1;
