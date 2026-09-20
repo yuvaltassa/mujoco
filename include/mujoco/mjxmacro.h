@@ -1057,6 +1057,7 @@
     X( size_t,    maxuse_arena       ) \
     X( int,       maxuse_con         ) \
     X( int,       maxuse_efc         ) \
+    X( int,       status             ) \
     X( int,       ncon               ) \
     X( int,       ne                 ) \
     X( int,       nf                 ) \

@@ -886,7 +886,7 @@ static void set0(mjModel* m, mjData* d) {
   // run remaining computations
   mj_tendon(m, d);
   mj_makeM(m, d);
-  mj_factorM(m, d);
+  (void)mj_factorM(m, d);
   mj_flex(m, d);
   mj_transmission(m, d);
 
@@ -1575,7 +1575,7 @@ static mjtNum evalAct(const mjModel* m, mjData* d, int index, int side,
   mju_scl(d->qvel, d->qvel, mju_exp(-m->opt.timestep/mjMAX(0.01, opt->timeconst)), nv);
 
   // step1: compute inertia and actuator moments
-  mj_step1(m, d);
+  (void)mj_step1(m, d);
 
   // dense actuator_moment row
   mj_markStack(d);
@@ -1595,7 +1595,7 @@ static mjtNum evalAct(const mjModel* m, mjData* d, int index, int side,
   }
 
   // step2: apply force
-  mj_step2(m, d);
+  (void)mj_step2(m, d);
 
   mj_freeStack(d);
 

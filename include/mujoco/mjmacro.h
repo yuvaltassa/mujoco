@@ -26,6 +26,9 @@
 // is actuator disabled
 #define mjACTUATORDISABLED(i) (m->opt.disableactuator & (1 << m->actuator_group[i]))
 
+// did the last pipeline call on d complete without simulation warnings
+#define mjOK(d) ((d)->status == mjSTATUS_OK)
+
 // annotation for functions that accept printf-like variadic arguments
 #ifndef mjPRINTFLIKE
   #if defined(__GNUC__)

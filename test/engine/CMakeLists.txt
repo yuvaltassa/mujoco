@@ -78,6 +78,7 @@ mujoco_test(engine_sleep_test)
 mujoco_test(engine_solver_test)
 
 mujoco_test(engine_sort_test)
+mujoco_test(engine_status_test)
 
 mujoco_test(engine_support_test)
 

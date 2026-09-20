@@ -19,6 +19,7 @@
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mjtype.h>
+#include "engine/engine_core_util.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -70,7 +71,7 @@ MJAPI int mj_factorI(mjtNum* mat, mjtNum* diaginv, int nv,
                      const int* rownnz, const int* rowadr, const int* colind, const int* index);
 
 // sparse L'*D*L factorization of the inertia matrix M, assumed spd
-MJAPI void mj_factorM(const mjModel* m, mjData* d);
+MJAPI mjNODISCARD mjtStatus mj_factorM(const mjModel* m, mjData* d);
 
 // in-place sparse backsubstitution (only dofs in index, if given):  x = inv(L'*D*L)*x
 //  handle n vectors at once

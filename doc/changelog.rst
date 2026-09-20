@@ -31,6 +31,18 @@ Engine
 - The sparse Newton solver no longer aborts with a "rank-deficient sparse Hessian" error when rounding loses a pivot of
   its Hessian, as can happen in single precision with ill-conditioned inertia. The pivot is now clamped and its row
   decoupled, as in the dense factorization.
+- The pipeline functions that can raise a simulation warning (:ref:`mj_step`, :ref:`mj_forward` and related) now
+  return an :ref:`mjtStatus`: 0 when no simulation warning was recorded, otherwise the first warning raised. The
+  same value is recorded in the new ``mjData.status``, and the new macro :ref:`mjOK` tests it.
+- Python: these functions return the status, and ``data.status`` records it; ``mj_step(m, d, nstep)`` returns the
+  first warning of the ``nstep`` steps.
+
+.. admonition:: Breaking API changes
+   :class: attention
+
+   - The pipeline functions that can raise a simulation warning return :ref:`mjtStatus` instead of ``void``.
+     Calls that ignore the result are unaffected; code that stores one of these functions in a pointer to a
+     function returning ``void`` must change the pointer type.
 
 Bug fixes
 ^^^^^^^^^

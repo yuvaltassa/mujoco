@@ -6766,6 +6766,12 @@ struct MjData {
   emscripten::val solver_fwdinv() const {
     return emscripten::val(emscripten::typed_memory_view(2, ptr_->solver_fwdinv));
   }
+  int status() const {
+    return ptr_->status;
+  }
+  void set_status(int value) {
+    ptr_->status = value;
+  }
   int ncon() const {
     return ptr_->ncon;
   }

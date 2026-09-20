@@ -20,6 +20,7 @@
 #include <mujoco/mjmacro.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mjsan.h>  // IWYU pragma: keep
+#include "engine/engine_core_util.h"
 #include "engine/engine_forward.h"
 #include "engine/engine_inverse.h"
 #include "engine/engine_memory.h"
@@ -110,39 +111,40 @@ static int inRange(const mjtNum x1, const mjtNum x2, const mjtNum* range) {
 
 
 // advance simulation using control callback, skipstage is mjtStage
-void mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
+mjtStatus mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
+  mjtStatus status = mjSTATUS_OK;
   TM_START;
 
   // common to all integrators
-  mj_checkPos(m, d);
-  mj_checkVel(m, d);
-  mj_forwardSkip(m, d, skipstage, skipsensor);
-  mj_checkAcc(m, d);
+  mjSTAGE(mj_checkPos(m, d));
+  mjSTAGE(mj_checkVel(m, d));
+  mjSTAGE(mj_forwardSkip(m, d, skipstage, skipsensor));
+  mjSTAGE(mj_checkAcc(m, d));
 
   // compare forward and inverse solutions if enabled
   if (mjENABLED(mjENBL_FWDINV)) {
-    mj_compareFwdInv(m, d);
+    mjSTAGE(mj_compareFwdInv(m, d));
   }
 
   // use selected integrator
   switch ((mjtIntegrator) m->opt.integrator) {
   case mjINT_EULER:
-    mj_EulerSkip(m, d, skipstage >= mjSTAGE_POS);
+    status = mji_join(status, mj_EulerSkip(m, d, skipstage >= mjSTAGE_POS));
     break;
 
   case mjINT_RK4:
     // ignore skipstage
-    mj_RungeKutta(m, d, 4);
+    status = mji_join(status, mj_RungeKutta(m, d, 4));
     break;
 
   case mjINT_IMPLICIT:
   case mjINT_IMPLICITFAST:
-    mj_implicitSkip(m, d, skipstage >= mjSTAGE_VEL);
+    status = mji_join(status, mj_implicitSkip(m, d, skipstage >= mjSTAGE_VEL));
     break;
 
   case mjINT_DISCRETE:
     // the solve already performed the velocity update: no skip-dependent work
-    mj_discrete(m, d);
+    status = mji_join(status, mj_discrete(m, d));
     break;
 
   default:
@@ -150,18 +152,20 @@ void mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
   }
 
   TM_END(mjTIMER_STEP);
+  return status;
 }
 
 
 // compute qfrc_inverse, optionally subtracting qfrc_actuator
-static void inverseSkip(const mjModel* m, mjData* d, mjtStage stage, int skipsensor,
-                        int flg_actuation, mjtNum* force) {
-  mj_inverseSkip(m, d, stage, skipsensor);
+static mjNODISCARD mjtStatus inverseSkip(const mjModel* m, mjData* d, mjtStage stage,
+                                         int skipsensor, int flg_actuation, mjtNum* force) {
+  mjtStatus status = mj_inverseSkip(m, d, stage, skipsensor);
   mju_copy(force, d->qfrc_inverse, m->nv);
   if (flg_actuation) {
-    mj_fwdActuation(m, d);
+    status = mji_join(status, mj_fwdActuation(m, d));
     mju_subFrom(force, d->qfrc_actuator, m->nv);
   }
+  return status;
 }
 
 
@@ -238,14 +242,14 @@ void mjd_smooth_velFD(const mjModel* m, mjData* d, mjtNum eps) {
     // eval at qvel[i]+eps
     d->qvel[i] = saveqvel + eps;
     mj_fwdVelocity(m, d);
-    mj_fwdActuation(m, d);
+    (void)mj_fwdActuation(m, d);
     mju_add(plus, d->qfrc_actuator, d->qfrc_passive, nv);
     mju_subFrom(plus, d->qfrc_bias, nv);
 
     // eval at qvel[i]-eps
     d->qvel[i] = saveqvel - eps;
     mj_fwdVelocity(m, d);
-    mj_fwdActuation(m, d);
+    (void)mj_fwdActuation(m, d);
     mju_add(minus, d->qfrc_actuator, d->qfrc_passive, nv);
     mju_subFrom(minus, d->qfrc_bias, nv);
 
@@ -274,7 +278,7 @@ void mjd_smooth_velFD(const mjModel* m, mjData* d, mjtNum eps) {
 
   // restore
   mj_fwdVelocity(m, d);
-  mj_fwdActuation(m, d);
+  (void)mj_fwdActuation(m, d);
 
   mj_freeStack(d);
 }
@@ -297,9 +301,10 @@ void mjd_smooth_velFD(const mjModel* m, mjData* d, mjtNum eps) {
 //   single-letter shortcuts:
 //     inputs: q=qpos, v=qvel, a=act, u=ctrl
 //     outputs: y=next_state (concatenated next qpos, qvel, act), s=sensordata
-void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
-                mjtNum* DyDq, mjtNum* DyDv, mjtNum* DyDa, mjtNum* DyDu,
-                mjtNum* DsDq, mjtNum* DsDv, mjtNum* DsDa, mjtNum* DsDu) {
+mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
+                                 mjtNum* DyDq, mjtNum* DyDv, mjtNum* DyDa, mjtNum* DyDu,
+                                 mjtNum* DsDq, mjtNum* DsDv, mjtNum* DsDa, mjtNum* DsDu) {
+  mjtStatus status = mjSTATUS_OK;
   if (m->nhistory) {
     mjERROR("delays are not supported");
   }
@@ -333,7 +338,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
   getState(m, d, state, NULL);
 
   // step input
-  mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor);
+  status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor));
 
   // save output
   getState(m, d, next, sensor);
@@ -352,7 +357,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
         d->ctrl[i] += eps;
 
         // step, get nudged output
-        mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor);
+        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor));
         getState(m, d, next_plus, sensor_plus);
 
         // reset
@@ -367,7 +372,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
         d->ctrl[i] -= eps;
 
         // step, get nudged output
-        mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor);
+        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor));
         getState(m, d, next_minus, sensor_minus);
 
         // reset
@@ -395,7 +400,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
       d->act[i] += eps;
 
       // step, get nudged output
-      mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor);
+      status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor));
       getState(m, d, next_plus, sensor_plus);
 
       // reset
@@ -407,7 +412,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
         d->act[i] -= eps;
 
         // step, get nudged output
-        mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor);
+        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor));
         getState(m, d, next_minus, sensor_minus);
 
         // reset
@@ -442,7 +447,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
       d->qvel[i] += eps;
 
       // step, get nudged output
-      mj_stepSkip(m, d, mjSTAGE_POS, skipsensor);
+      status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_POS, skipsensor));
       getState(m, d, next_plus, sensor_plus);
 
       // reset
@@ -454,7 +459,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
         d->qvel[i] -= eps;
 
         // step, get nudged output
-        mj_stepSkip(m, d, mjSTAGE_POS, skipsensor);
+        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_POS, skipsensor));
         getState(m, d, next_minus, sensor_minus);
 
         // reset
@@ -491,7 +496,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
       mj_integratePos(m, d->qpos, dpos, eps);
 
       // step, get nudged output
-      mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor);
+      status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor));
       getState(m, d, next_plus, sensor_plus);
 
       // reset
@@ -505,7 +510,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
         mj_integratePos(m, d->qpos, dpos, -eps);
 
         // step, get nudged output
-        mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor);
+        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor));
         getState(m, d, next_minus, sensor_minus);
 
         // reset
@@ -533,6 +538,7 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
   }
 
   mj_freeStack(d);
+  return status;
 }
 
 
@@ -544,8 +550,9 @@ void mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
 //      B: (2*nv+na x nu)
 //      C: (nsensordata x 2*nv+na)
 //      D: (nsensordata x nu)
-void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
-                      mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D) {
+mjtStatus mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
+                           mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D) {
+  mjtStatus status = mjSTATUS_OK;
   if (m->opt.integrator == mjINT_RK4) {
     mjERROR("RK4 integrator is not supported");
   }
@@ -585,7 +592,8 @@ void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_cente
   }
 
   // get Jacobians
-  mjd_stepFD(m, d, eps, flg_centered, DyDq, DyDv, DyDa, BT, DsDq, DsDv, DsDa, DT);
+  status = mji_join(status, mjd_stepFD(m, d, eps, flg_centered, DyDq, DyDv, DyDa,
+                                       BT, DsDq, DsDv, DsDa, DT));
 
 
   // transpose
@@ -595,6 +603,7 @@ void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_cente
   if (D) mju_transpose(D, DT, nu, ns);
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }
 
 // finite differenced Jacobians of (force, sensors) = mj_inverse(state, acceleration)
@@ -613,10 +622,11 @@ void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_cente
 //   notes:
 //     optionally compute mass matrix Jacobian DmDq
 //     flg_actuation specifies whether to subtract qfrc_actuator from qfrc_inverse
-void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuation,
-                   mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
-                   mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
-                   mjtNum *DmDq) {
+mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuation,
+                        mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
+                        mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
+                        mjtNum *DmDq) {
+  mjtStatus status = mjSTATUS_OK;
   int nq = m->nq, nv = m->nv, nC = m->nC, ns = m->nsensordata;
 
   if (m->opt.integrator == mjINT_RK4) {
@@ -646,7 +656,7 @@ void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuatio
   mju_copy(pos, d->qpos, nq);
 
   // center point outputs
-  inverseSkip(m, d, mjSTAGE_NONE, skipsensor, flg_actuation, force);
+  status = mji_join(status, inverseSkip(m, d, mjSTAGE_NONE, skipsensor, flg_actuation, force));
   if (sensor) mju_copy(sensor, d->sensordata, ns);
   if (mass) mju_copy(mass, d->M, nC);
 
@@ -658,7 +668,7 @@ void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuatio
       d->qacc[i] += eps;
 
       // inverse dynamics, get force output
-      inverseSkip(m, d, mjSTAGE_VEL, skipsensor, flg_actuation, force_plus);
+      status = mji_join(status, inverseSkip(m, d, mjSTAGE_VEL, skipsensor, flg_actuation, force_plus));
 
       // restore
       d->qacc[i] = tmp;
@@ -679,7 +689,7 @@ void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuatio
       d->qvel[i] += eps;
 
       // inverse dynamics, get force output
-      inverseSkip(m, d, mjSTAGE_POS, skipsensor, flg_actuation, force_plus);
+      status = mji_join(status, inverseSkip(m, d, mjSTAGE_POS, skipsensor, flg_actuation, force_plus));
 
       // restore
       d->qvel[i] = tmp;
@@ -702,7 +712,7 @@ void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuatio
       mj_integratePos(m, d->qpos, dpos, eps);
 
       // inverse dynamics, get force output
-      inverseSkip(m, d, mjSTAGE_NONE, skipsensor, flg_actuation, force_plus);
+      status = mji_join(status, inverseSkip(m, d, mjSTAGE_NONE, skipsensor, flg_actuation, force_plus));
 
       // restore
       mju_copy(d->qpos, pos, nq);
@@ -719,4 +729,5 @@ void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuatio
   }
 
   mj_freeStack(d);
+  return mji_report(d, status);
 }

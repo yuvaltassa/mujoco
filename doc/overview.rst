@@ -747,8 +747,9 @@ Divergence
 ~~~~~~~~~~
 
 Divergence of a simulation happens when elements of the state tend quickly to infinity. In MuJoCo this is usually
-manifested as an :ref:`mjWARN_BADQACC<mjtwarning>` warning. Divergence is endemic to all physics simulation and is not
-necessarily indicative of a bad model or bug in the simulator, but is rather a hint that the timestep  is too large for
+manifested as an :ref:`mjWARN_BADQACC<mjtwarning>` :ref:`simulation warning<siSimWarning>`, reported by
+:ref:`mj_step` in its return value and in ``mjData.status``. Divergence is endemic to all physics simulation and is not
+necessarily indicative of a bad model or bug in the simulator, but is rather a hint that the timestep is too large for
 the given choice of integrator. In physics simulation there is always a tension between speed (large time steps) and
 stability (small timesteps). A model which is well-tuned for speed has the largest possible timestep that does not
 diverge, which usually means that it *can* be made to diverge under extreme conditions. In that sense *rare* cases of

@@ -567,6 +567,20 @@ typedef enum mjtWarning {           // warning types
 } mjtWarning;
 
 
+typedef enum mjtStatus {            // status of a pipeline call, stored in mjData.status
+  mjSTATUS_OK          = 0,         // nothing to report
+
+  // simulation warnings, mjtWarning + 1
+  mjSTATUS_INERTIA     = 1,         // (near) singular inertia matrix
+  mjSTATUS_CONTACTFULL,             // too many contacts in contact list
+  mjSTATUS_CNSTRFULL,               // too many constraints
+  mjSTATUS_BADQPOS,                 // bad number in qpos
+  mjSTATUS_BADQVEL,                 // bad number in qvel
+  mjSTATUS_BADQACC,                 // bad number in qacc
+  mjSTATUS_BADCTRL                  // bad number in ctrl
+} mjtStatus;
+
+
 typedef enum mjtTimer {             // internal timers
   // main api
   mjTIMER_STEP           = 0,       // step

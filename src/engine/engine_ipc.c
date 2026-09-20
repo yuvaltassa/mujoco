@@ -613,7 +613,8 @@ static void ipc_pinnedPos(const mjModel* m, const mjData* d, int npt, const int*
 }
 
 
-void mj_ipc(const mjModel* m, mjData* d) {
+mjtStatus mj_ipc(const mjModel* m, mjData* d) {
+  mjtStatus status = mjSTATUS_OK;
   mjtNum h = m->opt.timestep;
   // every dim-2 flex takes part; their vertices are concatenated in flex order and fxadr[k] is
   // the offset of flex flist[k]. A model with no dim-2 flex takes the same path with an empty
@@ -1065,7 +1066,8 @@ void mj_ipc(const mjModel* m, mjData* d) {
         ipcEfcRows saved;
         ipc_efcPublish(m, d, &saved, npair, esnpt, esbase, esw, esD, esref, esxadr, esxnum, esxdof,
                        esxval);
-        mj_fwdConstraintCG(m, d);  // CG over the monolithic problem, whatever the model's solver
+        // CG over the monolithic problem, whatever the model's solver
+        status = mji_join(status, mj_fwdConstraintCG(m, d));
         ipc_efcRowForce(m, d, saved.nefc, qfrc_rows);  // the pairs' share of the solve's force
         ipc_efcRestore(d, &saved);
         for (int i=0; i < mjNISLAND; i++) d->solver_niter[i] += niter[i];
@@ -1276,7 +1278,7 @@ void mj_ipc(const mjModel* m, mjData* d) {
   // the shared commit: the acceleration, history and activations at the pre-step state, the
   // endpoint, time and plugins. The warm start stays as the rounds left it: every inner solve is
   // a different subproblem, so the step's acceleration is no guess for the next one
-  mj_commit(m, d, d->act_dot, qend, vend, aeff);
+  status = mji_join(status, mj_commit(m, d, d->act_dot, qend, vend, aeff));
   mj_freeStack(d);
   // an incomplete advance commits only part of the motion while time advances by h, which reads
   // as slow motion rather than as a failure: say so on either exit, the symptom is otherwise
@@ -1291,4 +1293,5 @@ void mj_ipc(const mjModel* m, mjData* d) {
                   "the motion). Time = %.4f", beta, d->time);
     }
   }
+  return status;
 }

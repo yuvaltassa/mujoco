@@ -5729,6 +5729,11 @@ STRUCTS: Mapping[str, StructDecl] = dict([
                  doc='timer statistics',
              ),
              StructFieldDecl(
+                 name='status',
+                 type=ValueType(name='int'),
+                 doc='status of the last pipeline call (mjtStatus)',
+             ),
+             StructFieldDecl(
                  name='ncon',
                  type=ValueType(name='int'),
                  doc='number of detected contacts',

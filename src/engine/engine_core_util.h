@@ -155,8 +155,35 @@ MJAPI mjtNum mj_actuatorArmature(const mjModel* m, mjtObj type, int id);
 // return DC motor winding resistance at the current temperature
 mjtNum mj_dcmotorResistance(const mjModel* m, const mjData* d, int id);
 
-// high-level warning function: count warnings in mjData, print only the first time
-MJAPI void mj_warning(mjData* d, int warning, int info);
+// warn when a call discards the status it returns: on the engine's own declarations, and only in
+// its C sources, where a status is either kept or discarded explicitly with a (void) cast. The
+// tests and other C++ callers of these headers may ignore it as users do, and gcc does not honor
+// the cast, so clang alone checks.
+#if defined(__clang__) && !defined(__cplusplus)
+  #define mjNODISCARD __attribute__((warn_unused_result))
+#else
+  #define mjNODISCARD
+#endif
+
+// high-level warning function: count warnings in mjData, print the first time; return the
+// status of the warning, for the caller to compose into its own
+MJAPI mjNODISCARD mjtStatus mj_warning(mjData* d, int warning, int info);
+
+// compose a status with the one a call reported: a call keeps the first warning it ran into
+static inline mjtStatus mji_join(mjtStatus status, mjtStatus reported) {
+  return status ? status : reported;
+}
+
+// record the status of a pipeline call in the data it ran on, and return it. The mirror serves
+// the consumers that never see a return value: callbacks and post-step hooks receiving only
+// (m, d), and recorders snapshotting mjData. The outermost call returns last, so it is the one
+// whose status the field ends up holding.
+static inline mjtStatus mji_report(mjData* d, mjtStatus status) {
+  return (mjtStatus)(d->status = status);
+}
+
+// run a stage of a pipeline function and keep its status
+#define mjSTAGE(call) { status = mji_join(status, (call)); }
 
 
 //-------------------------- effective-metric predicates ------------------------------------------

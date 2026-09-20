@@ -104,6 +104,7 @@ typedef struct mjData_ {
   // diagnostics
   mjWarningStat warning[mjNWARNING];          // warning statistics (mutable)
   mjTimerStat   timer[mjNTIMER];              // timer statistics
+  int           status;                       // status of the last pipeline call (mjtStatus)
 
   // variable sizes
   int     ncon;              // number of detected contacts
@@ -2822,6 +2823,18 @@ typedef enum mjtWarning {           // warning types
 
   mjNWARNING                        // number of warnings
 } mjtWarning;
+typedef enum mjtStatus {            // status of a pipeline call, stored in mjData.status
+  mjSTATUS_OK          = 0,         // nothing to report
+
+  // simulation warnings, mjtWarning + 1
+  mjSTATUS_INERTIA     = 1,         // (near) singular inertia matrix
+  mjSTATUS_CONTACTFULL,             // too many contacts in contact list
+  mjSTATUS_CNSTRFULL,               // too many constraints
+  mjSTATUS_BADQPOS,                 // bad number in qpos
+  mjSTATUS_BADQVEL,                 // bad number in qvel
+  mjSTATUS_BADQACC,                 // bad number in qacc
+  mjSTATUS_BADCTRL                  // bad number in ctrl
+} mjtStatus;
 typedef enum mjtTimer {             // internal timers
   // main api
   mjTIMER_STEP           = 0,       // step
@@ -3678,13 +3691,13 @@ void mj_freeLastXML(void);
 int mj_saveXMLString(const mjSpec* s, char* xml, int xml_sz, char* error, int error_sz);
 int mj_saveXML(const mjSpec* s, const char* filename, char* error, int error_sz);
 void mju_getXMLDependencies(const char* filename, mjStringVec* dependencies);
-void mj_step(const mjModel* m, mjData* d);
-void mj_step1(const mjModel* m, mjData* d);
-void mj_step2(const mjModel* m, mjData* d);
-void mj_forward(const mjModel* m, mjData* d);
-void mj_inverse(const mjModel* m, mjData* d);
-void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
-void mj_inverseSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
+mjtStatus mj_step(const mjModel* m, mjData* d);
+mjtStatus mj_step1(const mjModel* m, mjData* d);
+mjtStatus mj_step2(const mjModel* m, mjData* d);
+mjtStatus mj_forward(const mjModel* m, mjData* d);
+mjtStatus mj_inverse(const mjModel* m, mjData* d);
+mjtStatus mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
+mjtStatus mj_inverseSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor);
 void mj_defaultLROpt(mjLROpt* opt);
 void mj_defaultSolRefImp(mjtNum* solref, mjtNum* solimp);
 void mj_defaultOption(mjOption* opt);
@@ -3731,26 +3744,26 @@ void mj_printScene(const mjvScene* s, const char* filename);
 void mj_printFormattedScene(const mjvScene* s, const char* filename,
                             const char* float_format);
 void mj_fwdKinematics(const mjModel* m, mjData* d);
-void mj_fwdPosition(const mjModel* m, mjData* d);
+mjtStatus mj_fwdPosition(const mjModel* m, mjData* d);
 void mj_fwdVelocity(const mjModel* m, mjData* d);
-void mj_fwdActuation(const mjModel* m, mjData* d);
-void mj_fwdAcceleration(const mjModel* m, mjData* d);
-void mj_fwdConstraint(const mjModel* m, mjData* d);
-void mj_Euler(const mjModel* m, mjData* d);
-void mj_RungeKutta(const mjModel* m, mjData* d, int N);
-void mj_implicit(const mjModel* m, mjData* d);
-void mj_invPosition(const mjModel* m, mjData* d);
+mjtStatus mj_fwdActuation(const mjModel* m, mjData* d);
+mjtStatus mj_fwdAcceleration(const mjModel* m, mjData* d);
+mjtStatus mj_fwdConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_Euler(const mjModel* m, mjData* d);
+mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N);
+mjtStatus mj_implicit(const mjModel* m, mjData* d);
+mjtStatus mj_invPosition(const mjModel* m, mjData* d);
 void mj_invVelocity(const mjModel* m, mjData* d);
 void mj_invConstraint(const mjModel* m, mjData* d);
-void mj_compareFwdInv(const mjModel* m, mjData* d);
+mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d);
 void mj_sensorPos(const mjModel* m, mjData* d);
 void mj_sensorVel(const mjModel* m, mjData* d);
 void mj_sensorAcc(const mjModel* m, mjData* d);
 void mj_energyPos(const mjModel* m, mjData* d);
 void mj_energyVel(const mjModel* m, mjData* d);
-void mj_checkPos(const mjModel* m, mjData* d);
-void mj_checkVel(const mjModel* m, mjData* d);
-void mj_checkAcc(const mjModel* m, mjData* d);
+mjtStatus mj_checkPos(const mjModel* m, mjData* d);
+mjtStatus mj_checkVel(const mjModel* m, mjData* d);
+mjtStatus mj_checkAcc(const mjModel* m, mjData* d);
 void mj_kinematics(const mjModel* m, mjData* d);
 void mj_comPos(const mjModel* m, mjData* d);
 void mj_camlight(const mjModel* m, mjData* d);
@@ -3759,7 +3772,7 @@ void mj_tendon(const mjModel* m, mjData* d);
 void mj_transmission(const mjModel* m, mjData* d);
 void mj_crb(const mjModel* m, mjData* d);
 void mj_makeM(const mjModel* m, mjData* d);
-void mj_factorM(const mjModel* m, mjData* d);
+mjtStatus mj_factorM(const mjModel* m, mjData* d);
 void mj_solveM(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y, int n);
 void mj_solveM2(const mjModel* m, mjData* d, mjtNum* x, const mjtNum* y,
                 const mjtNum* sqrtInvD, int n);
@@ -3769,10 +3782,10 @@ void mj_subtreeVel(const mjModel* m, mjData* d);
 void mj_rne(const mjModel* m, mjData* d, int flg_acc, mjtNum* result);
 void mj_rnePostConstraint(const mjModel* m, mjData* d);
 int mj_maxContact(const mjModel* m, int g1, int g2, int has_margin);
-void mj_collision(const mjModel* m, mjData* d);
-void mj_makeConstraint(const mjModel* m, mjData* d);
-void mj_island(const mjModel* m, mjData* d);
-void mj_projectConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_collision(const mjModel* m, mjData* d);
+mjtStatus mj_makeConstraint(const mjModel* m, mjData* d);
+mjtStatus mj_island(const mjModel* m, mjData* d);
+mjtStatus mj_projectConstraint(const mjModel* m, mjData* d);
 void mj_referenceConstraint(const mjModel* m, mjData* d);
 void mj_constraintUpdate(const mjModel* m, mjData* d, const mjtNum* jar,
                          mjtNum cost[1], int flg_coneHessian);
@@ -3961,7 +3974,7 @@ void mju_info(int topic, const char* msg, ...) mjPRINTFLIKE(2, 3);
 void mju_message(const mjLogMessage* msg);
 void* mju_malloc(size_t size);
 void mju_free(void* ptr);
-void mj_warning(mjData* d, int warning, int info);
+mjtStatus mj_warning(mjData* d, int warning, int info);
 void mju_writeLog(const char* type, const char* msg);
 const char* mjs_getError(mjSpec* s);
 const double* mjs_getTimer(mjSpec* s);
@@ -4097,12 +4110,12 @@ const mjpPlugin* mjc_getSDF(const mjModel* m, int id);
 mjtNum mjc_distance(const mjModel* m, const mjData* d, const mjSDF* s, const mjtNum x[3]);
 void mjc_gradient(const mjModel* m, const mjData* d, const mjSDF* s, mjtNum gradient[3],
                   const mjtNum x[3]);
-void mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
-                      mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D);
-void mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuation,
-                   mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
-                   mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
-                   mjtNum *DmDq);
+mjtStatus mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_centered,
+                           mjtNum* A, mjtNum* B, mjtNum* C, mjtNum* D);
+mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_actuation,
+                        mjtNum *DfDq, mjtNum *DfDv, mjtNum *DfDa,
+                        mjtNum *DsDq, mjtNum *DsDv, mjtNum *DsDa,
+                        mjtNum *DmDq);
 void mjd_subQuat(const mjtNum qa[4], const mjtNum qb[4], mjtNum Da[9], mjtNum Db[9]);
 void mjd_quatIntegrate(const mjtNum vel[3], mjtNum scale,
                        mjtNum Dquat[9], mjtNum Dvel[9], mjtNum Dscale[3]);
