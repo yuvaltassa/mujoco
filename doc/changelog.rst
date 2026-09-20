@@ -55,6 +55,11 @@ Bug fixes
 - :ref:`mjs_delete` now also deletes the implicitly created :ref:`plugin<exPlugin>` instance of a geom, mesh, actuator
   or sensor when the spec was not compiled before the deletion. Previously the instance was left behind and the next
   compilation crashed.
+- :ref:`mjs_delete` no longer frees the elements that are removed along with a deleted body: the elements that reference
+  it, the plugin instances that are no longer used, and all keyframes, which are re-created at the next compilation.
+  Like the deleted element itself, they now remain valid until the spec is deleted, and so do deleted defaults.
+  Previously pointers to them were left dangling, for example ``sensor.name`` after ``spec.delete(body)`` in Python,
+  and deleting such an element or a default a second time was a memory error instead of an error.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

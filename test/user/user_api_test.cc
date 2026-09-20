@@ -23,6 +23,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gmock/gmock.h>
@@ -3381,6 +3382,173 @@ TEST_F(MujocoTest, DeleteTwice) {
   EXPECT_EQ(model->nbody, 2);
   EXPECT_EQ(model->ngeom, 1);
   EXPECT_EQ(model->nsensor, 0);
+
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+TEST_F(MujocoTest, DeleteBodyKeepsReferencingElements) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <extension>
+      <plugin plugin="mujoco.pid">
+        <instance name="instance"/>
+      </plugin>
+    </extension>
+
+    <worldbody>
+      <body name="kept">
+        <joint name="kept_joint"/>
+        <geom name="kept_geom" size=".1"/>
+      </body>
+      <body name="body">
+        <joint name="joint"/>
+        <geom name="geom" size=".1"/>
+      </body>
+    </worldbody>
+
+    <contact>
+      <pair name="pair" geom1="kept_geom" geom2="geom"/>
+      <exclude name="exclude" body1="kept" body2="body"/>
+    </contact>
+
+    <tendon>
+      <fixed name="tendon">
+        <joint joint="joint" coef="1"/>
+      </fixed>
+    </tendon>
+
+    <equality>
+      <joint name="equality" joint1="joint"/>
+    </equality>
+
+    <actuator>
+      <plugin name="actuator" joint="joint" instance="instance"/>
+    </actuator>
+
+    <sensor>
+      <jointpos name="sensor" joint="joint"/>
+    </sensor>
+  </mujoco>)";
+
+  std::array<char, 1024> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+
+  // elements that reference the body, and the plugin instance of one of them
+  std::vector<std::pair<mjtObj, std::string>> names = {
+      {mjOBJ_PAIR, "pair"},         {mjOBJ_EXCLUDE, "exclude"},
+      {mjOBJ_TENDON, "tendon"},     {mjOBJ_EQUALITY, "equality"},
+      {mjOBJ_ACTUATOR, "actuator"}, {mjOBJ_SENSOR, "sensor"},
+      {mjOBJ_PLUGIN, "instance"}};
+  std::vector<mjsElement*> elements;
+  for (const auto& [type, name] : names) {
+    elements.push_back(mjs_findElement(spec, type, name.c_str()));
+    ASSERT_THAT(elements.back(), NotNull()) << name;
+  }
+
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(spec, mjOBJ_BODY, "body")), 0);
+
+  // they were removed from the spec, but remain valid until it is deleted
+  for (int i = 0; i < elements.size(); i++) {
+    const auto& [type, name] = names[i];
+    EXPECT_THAT(mjs_findElement(spec, type, name.c_str()), IsNull()) << name;
+    EXPECT_STREQ(mjs_getString(mjs_getName(elements[i])), name.c_str());
+    EXPECT_EQ(mjs_getId(elements[i]), -1) << name;
+    EXPECT_EQ(mjs_delete(spec, elements[i]), -1) << name;
+    EXPECT_THAT(mjs_getError(spec), HasSubstr("element was already deleted"));
+  }
+
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(model->nbody, 2);
+  EXPECT_EQ(model->nu, 0);
+  EXPECT_EQ(model->nplugin, 0);
+
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+TEST_F(MujocoTest, DeleteBodyKeepsKeyframes) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="kept">
+        <joint/>
+        <geom size=".1"/>
+      </body>
+      <body name="body">
+        <joint/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+
+    <keyframe>
+      <key name="key" qpos="1 2"/>
+    </keyframe>
+  </mujoco>)";
+
+  std::array<char, 1024> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+
+  // deleting a body replaces all keyframes, the old ones remain valid
+  mjsElement* key = mjs_findElement(spec, mjOBJ_KEY, "key");
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(spec, mjOBJ_BODY, "body")), 0);
+  EXPECT_STREQ(mjs_getString(mjs_getName(key)), "key");
+  EXPECT_EQ(mjs_delete(spec, key), -1);
+  EXPECT_THAT(mjs_getError(spec), HasSubstr("element was already deleted"));
+
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(model->nkey, 1);
+  EXPECT_EQ(model->nq, 1);
+  EXPECT_EQ(model->key_qpos[0], 1);
+  EXPECT_NE(mjs_findElement(spec, mjOBJ_KEY, "key"), key);
+
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+TEST_F(MujocoTest, DeleteDefaultKeepsItValid) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <default>
+      <default class="parent">
+        <default class="child">
+          <geom size=".5"/>
+        </default>
+      </default>
+    </default>
+
+    <worldbody>
+      <geom name="geom" class="child"/>
+    </worldbody>
+  </mujoco>)";
+
+  std::array<char, 1024> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+
+  mjsDefault* parent = mjs_findDefault(spec, "parent");
+  mjsDefault* child = mjs_findDefault(spec, "child");
+  EXPECT_EQ(mjs_delete(spec, parent->element), 0);
+  EXPECT_THAT(mjs_findDefault(spec, "child"), IsNull());
+
+  // the defaults remain valid, also for the element that points to one of them
+  EXPECT_STREQ(mjs_getString(mjs_getName(child->element)), "child");
+  mjsElement* geom = mjs_findElement(spec, mjOBJ_GEOM, "geom");
+  EXPECT_EQ(mjs_getDefault(geom)->geom->size[0], .5);
+
+  // deleting again is an error, also for the default deleted with its parent
+  for (mjsDefault* def : {parent, child}) {
+    EXPECT_EQ(mjs_delete(spec, def->element), -1);
+    EXPECT_THAT(mjs_getError(spec), HasSubstr("element was already deleted"));
+  }
+
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(model->geom_size[0], .5);
 
   mj_deleteModel(model);
   mj_deleteSpec(spec);

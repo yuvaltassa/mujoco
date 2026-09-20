@@ -529,6 +529,12 @@ class mjCModel : public mjCModel_, private mjSpec {
   // return true if the element was deleted, by itself or along with a body that contains it
   bool IsDetached(const mjCBase* element) const;
 
+  // return true if the default was deleted, by itself or along with its parent
+  bool IsDetached(const mjCDef* def) const;
+
+  // keep an element that was removed from the model alive until the model is deleted
+  void Detach(mjCBase* element);
+
   // expand all keyframes in the model
   void ExpandAllKeyframes();
 
@@ -542,5 +548,6 @@ class mjCModel : public mjCModel_, private mjSpec {
   bool                   attached_ = false;  // true if model is attached to a parent model
   std::unordered_map<const mjsCompiler*, mjSpec*> compiler2spec_;  // map from compiler to spec
   std::vector<mjCBase*>                           detached_;       // list of detached objects
+  std::vector<mjCDef*>                            detached_defaults_;  // list of detached defaults
 };
 #endif  // MUJOCO_SRC_USER_USER_MODEL_H_
