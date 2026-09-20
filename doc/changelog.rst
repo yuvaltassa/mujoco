@@ -83,6 +83,10 @@ Bug fixes
   compensation of the parent and the forces of the plugin were lost, changing the dynamics of the model. The invalid
   :ref:`sleep<body-sleep>` policy of a static body is now an error with :at:`fusestatic` too, rather than being
   silently discarded.
+- :ref:`fusestatic<compiler-fusestatic>` no longer fuses bodies which have mass or geoms with an ellipsoid
+  :ref:`fluidshape<body-geom-fluidshape>`, if :ref:`density<option-density>` or :ref:`viscosity<option-viscosity>` are
+  nonzero. Previously, the :doc:`fluid forces <computation/fluid>` of the fused model were different, since they apply
+  to the inertia and ellipsoid geoms of each body.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

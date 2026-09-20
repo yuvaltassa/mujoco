@@ -937,12 +937,15 @@ has any effect. The settings here are global and apply to the entire model.
    - They have a :ref:`plugin<body-plugin>`.
    - They have mass and a :ref:`gravcomp<body-gravcomp>` which is different from their parent's, unless the parent is
      the world.
+   - They have mass or geoms with an ellipsoid :ref:`fluidshape<body-geom-fluidshape>`, and
+     :ref:`density<option-density>` or :ref:`viscosity<option-viscosity>` are nonzero, unless the parent is the world.
 
    This optimization is particularly useful when importing URDF models which often have many dummy bodies, but can also
    be used to optimize MJCF models. After optimization, the new model has identical kinematics and dynamics as the
-   original but is faster to simulate. Fusing modifies the :ref:`mjSpec`: a fused body is replaced by a
-   :ref:`frame<frame>` in its parent, so recompiling or saving the spec yields the fused model. The name and
-   :ref:`user<body-user>` data of a fused body are discarded.
+   original but is faster to simulate. The exception is :doc:`fluid forces <computation/fluid>`, if density and
+   viscosity are both zero at compile time and modified at runtime. Fusing modifies the :ref:`mjSpec`: a fused body is
+   replaced by a :ref:`frame<frame>` in its parent, so recompiling or saving the spec yields the fused model. The name
+   and :ref:`user<body-user>` data of a fused body are discarded.
 
 .. _compiler-inertiafromgeom:
 
