@@ -1587,6 +1587,46 @@ class SpecsTest(absltest.TestCase):
     self.assertEqual(spec.compile().ngeom, 1)
     self.assertEqual(other.compile().ngeom, 2)
 
+  def test_delete_body_keeps_removed_elements_valid(self):
+    spec = mujoco.MjSpec.from_string("""
+      <mujoco>
+        <worldbody>
+          <body name="kept">
+            <joint/>
+            <geom size=".1"/>
+          </body>
+          <body name="body">
+            <joint name="joint"/>
+            <geom size=".1"/>
+          </body>
+        </worldbody>
+
+        <sensor>
+          <jointpos name="sensor" joint="joint"/>
+        </sensor>
+
+        <keyframe>
+          <key name="key" qpos="1 2"/>
+        </keyframe>
+      </mujoco>
+    """)
+    sensor = spec.sensor('sensor')
+    key = spec.key('key')
+    spec.delete(spec.body('body'))
+
+    # the sensor is removed with the body and the keyframes are replaced, the
+    # old elements remain valid
+    self.assertEqual(sensor.name, 'sensor')
+    self.assertEqual(key.name, 'key')
+    for element in (sensor, key):
+      with self.assertRaisesRegex(ValueError, 'element was already deleted'):
+        spec.delete(element)
+
+    model = spec.compile()
+    self.assertEqual(model.nsensor, 0)
+    self.assertEqual(model.nkey, 1)
+    np.testing.assert_array_equal(model.key_qpos, [[1]])
+
   def test_attach_valid_child_lists(self):
     xml1 = """
     <mujoco>

@@ -508,7 +508,7 @@ void mjCModel::RemoveFromList(std::vector<T*>& list, const mjCModel& other) {
       element->ResolveReferences(this);
     } catch (mjCError err) {
       ids[element->elemtype].erase(element->name);
-      element->Release();
+      Detach(element);
       list.erase(list.begin() + i);
       nlist--;
       i--;
@@ -522,9 +522,10 @@ void mjCModel::RemoveFromList(std::vector<T*>& list, const mjCModel& other) {
 }
 
 
+// the keyframes are re-created by the next compilation, user code may still point to the old ones
 template <>
 void mjCModel::DeleteAll<mjCKey>(std::vector<mjCKey*>& elements) {
-  for (mjCKey* element : elements) { element->Release(); }
+  for (mjCKey* element : elements) { Detach(element); }
   elements.clear();
 }
 
@@ -554,7 +555,7 @@ void mjCModel::RemovePlugins() {
     if (plugins_[i]->name.empty()) { continue; }
     if (instances.find(plugins_[i]->name) == instances.end()) {
       ids[plugins_[i]->elemtype].erase(plugins_[i]->name);
-      plugins_[i]->Release();
+      Detach(plugins_[i]);
       plugins_.erase(plugins_.begin() + i);
       nlist--;
       i--;
@@ -698,6 +699,7 @@ mjCModel& mjCModel::operator+=(mjCDef& subtree) {
 // remove default class from array
 mjCModel& mjCModel::operator-=(const mjCDef& subtree) {
   if (subtree.model != this) { throw mjCError(nullptr, "default is not in this model"); }
+  if (IsDetached(&subtree)) { throw mjCError(nullptr, "element was already deleted"); }
 
   // check we aren't trying to remove the 'main' default
   if (subtree.id == 0) { throw mjCError(0, "cannot remove the global default ('main')"); }
@@ -729,8 +731,10 @@ mjCModel& mjCModel::operator-=(const mjCDef& subtree) {
   // remove from the tree
   std::sort(default_ids_to_remove.begin(), default_ids_to_remove.end(), std::greater<int>());
 
+  // the defaults are deleted with the model, elements and user code may still point to them
   for (int id : default_ids_to_remove) {
-    delete defaults_[id];
+    defaults_[id]->id = -1;
+    detached_defaults_.push_back(defaults_[id]);
     defaults_.erase(defaults_.begin() + id);
   }
 
@@ -760,6 +764,20 @@ bool mjCModel::IsDetached(const mjCBase* element) const {
     if (std::find(detached_.begin(), detached_.end(), element) != detached_.end()) { return true; }
   }
   return false;
+}
+
+
+// return true if the default was deleted, by itself or along with its parent
+bool mjCModel::IsDetached(const mjCDef* def) const {
+  return std::find(detached_defaults_.begin(), detached_defaults_.end(), def) !=
+         detached_defaults_.end();
+}
+
+
+// keep an element that was removed from the model alive until the model is deleted
+void mjCModel::Detach(mjCBase* element) {
+  element->id = -1;
+  detached_.push_back(element);
 }
 
 
@@ -1167,6 +1185,7 @@ mjCModel::~mjCModel() {
   for (int i = 0; i < specs_.size(); i++) mj_deleteSpec(specs_[i]);
   for (int i = 0; i < plugins_.size(); i++) plugins_[i]->Release();
   for (int i = 0; i < detached_.size(); i++) detached_[i]->Release();
+  for (int i = 0; i < detached_defaults_.size(); i++) delete detached_defaults_[i];
 
   // clear sizes and pointer lists created in Compile
   Clear();
