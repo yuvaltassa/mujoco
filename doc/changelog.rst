@@ -68,6 +68,9 @@ Bug fixes
   ``body_inertia`` was accurate to 1e-6 (``mju_eig3`` to 1e-3 in single precision) and products of inertia below 1e-12
   were ignored, so small bodies fared worse. Compiled models change accordingly: inertia tensors by up to 1e-6, and the
   principal axes of bodies and meshes with nearly equal moments of inertia, which are ill-defined, by more.
+- Fixed the frame used by broadphase collision detection, which was the transpose of the intended covariance-aligned
+  frame. Broadphase pruning is now more effective, notably in scenes whose bodies are not spread along the world axes,
+  making collision detection faster. Simulation results are unchanged.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
