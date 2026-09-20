@@ -2135,6 +2135,50 @@ TEST_F(MujocoTest, BodyToFrame) {
   mj_deleteModel(model2);
 }
 
+TEST_F(MujocoTest, BodyToFrameOrientation) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="parent">
+        <body name="child" pos="0 0 1" euler="0 0 90">
+          <geom size=".1" pos="1 0 0"/>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>)";
+
+  static constexpr char xml_expected[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="parent">
+        <frame pos="0 0 1" euler="0 0 90">
+          <geom size=".1" pos="1 0 0"/>
+        </frame>
+      </body>
+    </worldbody>
+  </mujoco>)";
+
+  std::array<char, 1000> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjsBody* child = mjs_findBody(spec, "child");
+  ASSERT_THAT(child, NotNull());
+  ASSERT_THAT(mjs_bodyToFrame(&child), NotNull());
+
+  // the frame has the orientation of the body
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  MjModelPtr expected = LoadModelFromString(xml_expected, er.data(), er.size());
+  ASSERT_THAT(expected.get(), NotNull()) << er.data();
+  std::string field = "";
+  EXPECT_LE(CompareModel(model, expected.get(), field), 0)
+      << "Expected and converted models are different!\n"
+      << "Different field: " << field << '\n';
+
+  mj_deleteSpec(spec);
+  mj_deleteModel(model);
+}
+
 TEST_F(MujocoTest, BodyToFrameWithInertial) {
   static constexpr char xml_child[] = R"(
     <mujoco>
