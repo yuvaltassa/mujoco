@@ -689,13 +689,6 @@ from its default.
    This flag disables implicit integration with respect to joint damping in the Euler integrator. See the
    :ref:`Numerical Integration<geIntegration>` section for more details.
 
-.. _option-flag-autoreset:
-
-:at:`autoreset`: :at-val:`[disable, enable], "enable"`
-   Deprecated in favor of :ref:`onwarn<option-onwarn>`, and will be removed in a future release. Disabling this flag
-   withholds the state resets of :at:`onwarn` :at-val:`auto`, which then behaves as :at-val:`continue`; the flag has
-   no effect under the other :at:`onwarn` settings. Loading a model that specifies it prints a warning.
-
 .. _option-flag-override:
 
 :at:`override`: :at-val:`[disable, enable], "disable"`

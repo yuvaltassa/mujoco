@@ -60,7 +60,7 @@ mjtStatus mj_checkPos(const mjModel* m, mjData* d) {
   for (int i=0; i < nq; i++) {
     if (mju_isBad(qpos[i])) {
       status = mji_join(status, mj_warning(d, mjWARN_BADQPOS, i));
-      if (mji_autoreset(m)) {
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
 
         // restore the warning statistics wiped by the reset; the status is a local,
@@ -86,7 +86,7 @@ mjtStatus mj_checkVel(const mjModel* m, mjData* d) {
 
     if (mju_isBad(d->qvel[i])) {
       status = mji_join(status, mj_warning(d, mjWARN_BADQVEL, i));
-      if (mji_autoreset(m)) {
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
 
         // restore the warning statistics wiped by the reset; the status is a local,
@@ -112,7 +112,7 @@ mjtStatus mj_checkAcc(const mjModel* m, mjData* d) {
 
     if (mju_isBad(d->qacc[i])) {
       status = mji_join(status, mj_warning(d, mjWARN_BADQACC, i));
-      if (mji_autoreset(m)) {
+      if (m->opt.onwarn == mjONWARN_AUTO) {
         mj_resetData(m, d);
 
         // restore the warning statistics wiped by the reset; the status is a local,

@@ -1223,7 +1223,6 @@ exceptions:
 :ref:`disableflags <option-flag>` has the following differences:
 
 - :ref:`mjDSBL_MIDPHASE <mjtDisablebit>` is not available.
-- :ref:`mjDSBL_AUTORESET <mjtDisablebit>` is not available.
 - :ref:`mjDSBL_NATIVECCD <mjtDisablebit>` changes the default box-box collider from CCD to a primitive collider.
 
 :ref:`enableflags <option-flag>` has the following differences:

@@ -736,8 +736,7 @@ void ParseUsdPhysicsScene(mjSpec* spec,
   mjc_physics_scene.GetEulerDampFlagAttr().Get(&eulerdamp_flag);
   spec->option.disableflags |= (!eulerdamp_flag ? mjDSBL_EULERDAMP : 0);
 
-  // the autoreset flag is deprecated in favor of the onwarn option: a disabled flag is
-  // onwarn=continue
+  // the autoreset flag was replaced by the onwarn option: a disabled flag is onwarn=continue
   bool autoreset_flag;
   mjc_physics_scene.GetAutoResetFlagAttr().Get(&autoreset_flag);
   spec->option.onwarn = autoreset_flag ? mjONWARN_AUTO : mjONWARN_CONTINUE;

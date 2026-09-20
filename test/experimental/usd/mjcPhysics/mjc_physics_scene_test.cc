@@ -170,8 +170,6 @@ TEST_F(MjcPhysicsSceneTest, TestDefaults) {
                                                     mjDSBL_NATIVECCD);
   EXPECT_DISABLE_FLAG_USD_FALLBACK_EQ_MODEL_DEFAULT(EulerDampFlag,
                                                     mjDSBL_EULERDAMP);
-  EXPECT_DISABLE_FLAG_USD_FALLBACK_EQ_MODEL_DEFAULT(AutoResetFlag,
-                                                    mjDSBL_AUTORESET);
   EXPECT_DISABLE_FLAG_USD_FALLBACK_EQ_MODEL_DEFAULT(MultiCCDFlag,
                                                     mjDSBL_MULTICCD);
 

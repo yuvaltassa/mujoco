@@ -34,9 +34,8 @@ Engine
 - Added the :ref:`onwarn<option-onwarn>` option, selecting the engine's response to
   :ref:`simulation warnings<siSimWarning>`: :at-val:`auto` (default) applies the per-warning automatic recovery as
   before, :at-val:`continue` records the warning without resetting the state, and the new :at-val:`stop` mode stops
-  the top-level call at the first warning, leaving the state available for inspection. The
-  :ref:`autoreset<option-flag-autoreset>` flag is deprecated in favor of this option and will be removed in a future
-  release: disabling it withholds the resets of :at-val:`auto`, which then behaves as :at-val:`continue`.
+  the top-level call at the first warning, leaving the state available for inspection. The option replaces the
+  :at:`autoreset` flag, which is removed (see below): :at-val:`continue` is what disabling the flag used to do.
 - The pipeline functions that can raise a simulation warning (:ref:`mj_step`, :ref:`mj_forward` and related) now
   return an :ref:`mjtStatus`: 0 when no simulation warning was recorded, otherwise the first warning raised. The
   same value is recorded in the new ``mjData.status``, and the new macro :ref:`mjOK` tests it.
@@ -46,6 +45,10 @@ Engine
 .. admonition:: Breaking API changes
    :class: attention
 
+   - Removed the deprecated ``autoreset`` :ref:`flag<option-flag>`, subsumed by :ref:`onwarn<option-onwarn>`: replace
+     :at-val:`autoreset="disable"` with :at-val:`onwarn="continue"` (the enabled default corresponds to
+     :at-val:`onwarn="auto"`). ``mjDSBL_AUTORESET`` is removed from ``mjtDisableBit`` and the subsequent enum
+     values are renumbered.
    - The pipeline functions that can raise a simulation warning return :ref:`mjtStatus` instead of ``void``.
      Calls that ignore the result are unaffected; code that stores one of these functions in a pointer to a
      function returning ``void`` must change the pointer type.
@@ -1766,7 +1769,7 @@ Version 3.2.1 (Aug 5, 2024)
 General
 ^^^^^^^
 1. :commit:`e92af73c` Renamed ``mjModel.tex_rgb`` to ``mjModel.tex_data``.
-2. :commit:`24a55506` Added a new :ref:`autoreset<option-flag-autoreset>` flag to disable automatic reset when NaNs or
+2. :commit:`24a55506` Added a new :at:`autoreset` flag (since removed) to disable automatic reset when NaNs or
    infinities are detected.
 3. :commit:`33e59606` Added sub-elements to the MJCF :ref:`material<asset-material>` element, to allow specification of
    multiple textures for rendering (e.g., ``occlusion, roughness, metallic``). Note that the MuJoCo renderer doesn't

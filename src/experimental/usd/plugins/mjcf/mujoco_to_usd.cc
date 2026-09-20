@@ -708,14 +708,12 @@ class ModelWriter {
       create_flag_attr(token, flag, false);
     }
 
-    // the autoreset flag is deprecated in favor of the onwarn option: the enabled flag is
-    // onwarn=auto, the disabled one onwarn=continue (or auto with the deprecated MuJoCo flag
-    // disabled); stop has no representation in the schema
+    // the autoreset flag was replaced by the onwarn option: the enabled flag is onwarn=auto and
+    // the disabled one onwarn=continue; stop has no representation in the schema
     if (spec_->option.onwarn != mjONWARN_STOP) {
       WriteUniformAttribute(physics_scene_spec, pxr::SdfValueTypeNames->Bool,
                             MjcPhysicsTokens->mjcFlagAutoreset,
-                            spec_->option.onwarn == mjONWARN_AUTO &&
-                                !(spec_->option.disableflags & mjDSBL_AUTORESET));
+                            spec_->option.onwarn == mjONWARN_AUTO);
     }
 
     // Compiler attributes

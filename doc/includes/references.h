@@ -2406,12 +2406,11 @@ typedef enum mjtDisableBit {      // disable default feature bitflags
   mjDSBL_SENSOR       = 1<<13,    // sensors
   mjDSBL_MIDPHASE     = 1<<14,    // mid-phase collision filtering
   mjDSBL_EULERDAMP    = 1<<15,    // implicit integration of joint damping in Euler integrator
-  mjDSBL_AUTORESET    = 1<<16,    // deprecated, see onwarn: automatic reset on divergence
-  mjDSBL_NATIVECCD    = 1<<17,    // native convex collision detection
-  mjDSBL_ISLAND       = 1<<18,    // constraint island discovery
-  mjDSBL_MULTICCD     = 1<<19,    // multiple CCD contact points
+  mjDSBL_NATIVECCD    = 1<<16,    // native convex collision detection
+  mjDSBL_ISLAND       = 1<<17,    // constraint island discovery
+  mjDSBL_MULTICCD     = 1<<18,    // multiple CCD contact points
 
-  mjNDISABLE          = 20        // number of disable flags
+  mjNDISABLE          = 19        // number of disable flags
 } mjtDisableBit;
 typedef enum mjtEnableBit {       // enable optional feature bitflags
   mjENBL_OVERRIDE     = 1<<0,     // override contact parameters
@@ -3488,7 +3487,6 @@ const char* mjDISABLESTRING[mjNDISABLE] = {
   "Sensor",
   "Midphase",
   "Eulerdamp",
-  "AutoReset",
   "NativeCCD",
   "Island",
   "MultiCCD"

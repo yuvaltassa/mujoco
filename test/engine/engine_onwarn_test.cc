@@ -29,6 +29,7 @@ namespace mujoco {
 namespace {
 
 using ::testing::HasSubstr;
+using ::testing::IsNull;
 using ::testing::NotNull;
 using OnWarnTest = MujocoTest;
 
@@ -282,52 +283,20 @@ TEST_F(OnWarnTest, XmlOnwarn) {
   EXPECT_THAT(saved, HasSubstr("onwarn=\"stop\""));
 }
 
-// the deprecated autoreset flag still loads, with a warning, and when disabled
-// withholds the resets of the auto policy: it behaves as continue
-TEST_F(OnWarnTest, DeprecatedAutoresetFlagWithholdsResets) {
+// the removed autoreset flag is a schema error
+TEST_F(OnWarnTest, RemovedAutoresetFlagIsAnError) {
   static constexpr char xml[] = R"(
   <mujoco>
     <option>
       <flag autoreset="disable"/>
     </option>
-    <worldbody>
-      <body>
-        <joint name="slide" type="slide"/>
-        <geom size=".1"/>
-      </body>
-    </worldbody>
+    <worldbody/>
   </mujoco>
   )";
-  mock_warning_handler.ExpectWarnings("deprecated");
   char error[1024];
   MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
-  ASSERT_THAT(model.get(), NotNull()) << error;
-  EXPECT_EQ(model->opt.onwarn, mjONWARN_AUTO);
-  EXPECT_TRUE(model->opt.disableflags & mjDSBL_AUTORESET);
-  MjDataPtr data = MakeData(model);
-
-  // auto with the flag disabled: reported, not reset
-  mock_warning_handler.ExpectWarnings();
-  data->qvel[0] = kNaN;
-  EXPECT_EQ(mj_step(model.get(), data.get()), mjSTATUS_BADQVEL);
-  EXPECT_GT(data->time, 0);
-  EXPECT_TRUE(std::isnan(data->qvel[0]));
-
-  // the flag never adds a reset, and does not interfere with stop
-  model->opt.onwarn = mjONWARN_STOP;
-  mj_resetData(model.get(), data.get());
-  data->qvel[0] = kNaN;
-  EXPECT_EQ(mj_step(model.get(), data.get()), mjSTATUS_BADQVEL);
-  EXPECT_EQ(data->time, 0);
-  EXPECT_TRUE(std::isnan(data->qvel[0]));
-
-  // with the flag enabled, auto resets as before
-  model->opt.onwarn = mjONWARN_AUTO;
-  model->opt.disableflags &= ~mjDSBL_AUTORESET;
-  mj_resetData(model.get(), data.get());
-  data->qvel[0] = kNaN;
-  EXPECT_EQ(mj_step(model.get(), data.get()), mjSTATUS_BADQVEL);
-  EXPECT_TRUE(std::isfinite(data->qvel[0]));
+  EXPECT_THAT(model.get(), IsNull());
+  EXPECT_THAT(error, HasSubstr("autoreset"));
 }
 // every driver frees the frame it owns before stopping, so the same data can be
 // called again

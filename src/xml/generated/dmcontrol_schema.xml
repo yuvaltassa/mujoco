@@ -98,7 +98,6 @@
             <attribute name="sensor" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="midphase" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="eulerdamp" type="keyword" valid_values="disable enable" default="enable"/>
-            <attribute name="autoreset" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="nativeccd" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="island" type="keyword" valid_values="disable enable" default="enable"/>
             <attribute name="multiccd" type="keyword" valid_values="disable enable" default="enable"/>

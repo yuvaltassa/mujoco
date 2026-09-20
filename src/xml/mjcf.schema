@@ -629,7 +629,6 @@ element flag {
   sensor             : enum<enable> = enable
   midphase           : enum<enable> = enable
   eulerdamp          : enum<enable> = enable
-  autoreset          : enum<enable> = enable
   nativeccd          : enum<enable> = enable
   island             : enum<enable> = enable
   multiccd           : enum<enable> = enable

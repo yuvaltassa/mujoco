@@ -171,10 +171,7 @@ StepControl::Status StepControl::Advance(mjModel* m, mjData* d) {
       post_step_(m, d);
     }
 
-    // The state is not reset under continue, nor under auto with the deprecated flag disabled.
-    const bool noreset = m->opt.onwarn == mjONWARN_CONTINUE ||
-                         (m->opt.onwarn == mjONWARN_AUTO && mjDISABLED(mjDSBL_AUTORESET));
-    if (noreset) {
+    if (m->opt.onwarn == mjONWARN_CONTINUE) {
       for (mjtWarning w : kDivergedWarnings) {
         if (d->warning[w].number > 0) {
           // Stop stepping if the simulation diverged.

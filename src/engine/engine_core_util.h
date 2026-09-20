@@ -199,12 +199,6 @@ static inline int mji_stop(const mjModel* m, mjtStatus status) {
   return status && m->opt.onwarn == mjONWARN_STOP;
 }
 
-// the auto policy resets a diverged state, unless the deprecated autoreset flag withholds it;
-// the flag has no effect under the other policies
-static inline int mji_autoreset(const mjModel* m) {
-  return m->opt.onwarn == mjONWARN_AUTO && !(m->opt.disableflags & mjDSBL_AUTORESET);
-}
-
 
 //-------------------------- effective-metric predicates ------------------------------------------
 

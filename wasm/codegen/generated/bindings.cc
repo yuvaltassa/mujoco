@@ -4026,7 +4026,6 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .value("mjDSBL_SENSOR", mjDSBL_SENSOR)
     .value("mjDSBL_MIDPHASE", mjDSBL_MIDPHASE)
     .value("mjDSBL_EULERDAMP", mjDSBL_EULERDAMP)
-    .value("mjDSBL_AUTORESET", mjDSBL_AUTORESET)
     .value("mjDSBL_NATIVECCD", mjDSBL_NATIVECCD)
     .value("mjDSBL_ISLAND", mjDSBL_ISLAND)
     .value("mjDSBL_MULTICCD", mjDSBL_MULTICCD)

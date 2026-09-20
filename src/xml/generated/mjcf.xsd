@@ -1182,7 +1182,6 @@
     <xs:attribute name="sensor" type="kw_enable" default="enable"/>
     <xs:attribute name="midphase" type="kw_enable" default="enable"/>
     <xs:attribute name="eulerdamp" type="kw_enable" default="enable"/>
-    <xs:attribute name="autoreset" type="kw_enable" default="enable"/>
     <xs:attribute name="nativeccd" type="kw_enable" default="enable"/>
     <xs:attribute name="island" type="kw_enable" default="enable"/>
     <xs:attribute name="multiccd" type="kw_enable" default="enable"/>

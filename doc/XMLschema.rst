@@ -162,9 +162,6 @@
                :ref:`eulerdamp<option-flag-eulerdamp>`
 
             .. grid-item::
-               :ref:`autoreset<option-flag-autoreset>`
-
-            .. grid-item::
                :ref:`nativeccd<option-flag-nativeccd>`
 
             .. grid-item::

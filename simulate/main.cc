@@ -200,10 +200,8 @@ const char* Diverged(const mjModel* m, const mjData* d) {
     return mju_warningText(d->status - 1, d->warning[d->status - 1].lastinfo);
   }
 
-  // divergence is not reset (continue, or auto with the deprecated autoreset flag disabled): stop
-  // stepping
-  if (m->opt.onwarn == mjONWARN_CONTINUE ||
-      (m->opt.onwarn == mjONWARN_AUTO && (m->opt.disableflags & mjDSBL_AUTORESET))) {
+  // continue policy: divergence is not reset, stop stepping
+  if (m->opt.onwarn == mjONWARN_CONTINUE) {
     for (mjtWarning w : {mjWARN_BADQACC, mjWARN_BADQVEL, mjWARN_BADQPOS}) {
       if (d->warning[w].number > 0) { return mju_warningText(w, d->warning[w].lastinfo); }
     }
