@@ -1472,7 +1472,9 @@ PYBIND11_MODULE(_specs, m, pybind11::mod_gil_not_used()) {
 
   // ============================= MJSPAIR =====================================
   mjSpec.def("delete", [](MjSpec& self, raw::MjsPair& obj) {
-    mjs_delete(self.ptr, obj.element);
+    if (mjs_delete(self.ptr, obj.element) != 0) {
+      throw pybind11::value_error(mjs_getError(self.ptr));
+    }
   });
   mjsPair.def_property(
       "classname",
@@ -1486,7 +1488,9 @@ PYBIND11_MODULE(_specs, m, pybind11::mod_gil_not_used()) {
 
   // ============================= MJSEQUAL ====================================
   mjSpec.def("delete", [](MjSpec& self, raw::MjsEquality& obj) {
-    mjs_delete(self.ptr, obj.element);
+    if (mjs_delete(self.ptr, obj.element) != 0) {
+      throw pybind11::value_error(mjs_getError(self.ptr));
+    }
   });
   mjsEquality.def_property(
       "classname",
@@ -1500,7 +1504,9 @@ PYBIND11_MODULE(_specs, m, pybind11::mod_gil_not_used()) {
 
   // ============================= MJSACTUATOR =================================
   mjSpec.def("delete", [](MjSpec& self, raw::MjsActuator& obj) {
-    mjs_delete(self.ptr, obj.element);
+    if (mjs_delete(self.ptr, obj.element) != 0) {
+      throw pybind11::value_error(mjs_getError(self.ptr));
+    }
   });
   mjsActuator.def_property(
       "classname",
@@ -1730,7 +1736,9 @@ PYBIND11_MODULE(_specs, m, pybind11::mod_gil_not_used()) {
 
 
   mjSpec.def("delete", [](MjSpec& self, raw::MjsTendon& obj) {
-    mjs_delete(self.ptr, obj.element);
+    if (mjs_delete(self.ptr, obj.element) != 0) {
+      throw pybind11::value_error(mjs_getError(self.ptr));
+    }
   });
 
   // ============================= MJSTENDON ===================================
@@ -1773,7 +1781,9 @@ PYBIND11_MODULE(_specs, m, pybind11::mod_gil_not_used()) {
 
   // ============================= MJSSENSOR ===================================
   mjSpec.def("delete", [](MjSpec& self, raw::MjsSensor& obj) {
-    mjs_delete(self.ptr, obj.element);
+    if (mjs_delete(self.ptr, obj.element) != 0) {
+      throw pybind11::value_error(mjs_getError(self.ptr));
+    }
   });
   mjsSensor.def("get_data_size", [](raw::MjsSensor& self) -> int {
     return mjs_sensorDim(&self);
@@ -1850,7 +1860,9 @@ PYBIND11_MODULE(_specs, m, pybind11::mod_gil_not_used()) {
         self.element = other->element;
       });
   mjSpec.def("delete", [](MjSpec& self, raw::MjsPlugin& obj) {
-    mjs_delete(self.ptr, obj.element);
+    if (mjs_delete(self.ptr, obj.element) != 0) {
+      throw pybind11::value_error(mjs_getError(self.ptr));
+    }
   });
   mjsPlugin.def_property(
       "config",

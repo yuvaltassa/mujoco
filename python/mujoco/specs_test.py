@@ -1506,6 +1506,59 @@ class SpecsTest(absltest.TestCase):
     ):
       child.delete(geom)
 
+  def test_delete_error_is_raised_for_all_types(self):
+    spec = mujoco.MjSpec.from_string("""
+      <mujoco>
+        <extension>
+          <plugin plugin="mujoco.pid">
+            <instance name="plugin"/>
+          </plugin>
+        </extension>
+
+        <worldbody>
+          <body name="body">
+            <joint name="joint"/>
+            <geom name="geom1" size=".1"/>
+            <geom name="geom2" size=".1"/>
+          </body>
+        </worldbody>
+
+        <contact>
+          <pair name="pair" geom1="geom1" geom2="geom2"/>
+        </contact>
+
+        <equality>
+          <joint name="equality" joint1="joint"/>
+        </equality>
+
+        <tendon>
+          <fixed name="tendon">
+            <joint joint="joint" coef="1"/>
+          </fixed>
+        </tendon>
+
+        <actuator>
+          <motor name="actuator" joint="joint"/>
+        </actuator>
+
+        <sensor>
+          <jointpos name="sensor" joint="joint"/>
+        </sensor>
+      </mujoco>
+    """)
+    elements = (
+        spec.pair('pair'),
+        spec.equality('equality'),
+        spec.tendon('tendon'),
+        spec.actuator('actuator'),
+        spec.sensor('sensor'),
+        spec.plugin('plugin'),
+    )
+    for element in elements:
+      spec.delete(element)
+      with self.assertRaisesRegex(ValueError, 'element was already deleted'):
+        spec.delete(element)
+
   def test_delete_errors(self):
     xml = """
       <mujoco>
