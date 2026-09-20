@@ -2487,6 +2487,9 @@ void mjCBody::SpecInertial(double com[3], double inert[6]) const {
     if (err) { throw mjCError(this, "error '%s' in inertia alternative", err); }
   }
 
+  // frame enclosing the inertial element
+  if (iframe) { FrameToBody(iframe, com, orient); }
+
   RotateInertia(inert, local, orient);
 }
 
@@ -2537,6 +2540,7 @@ void mjCBody::MergeInertial(const mjCBody* child) {
 
   // save as full inertia in body coordinates
   MakeInertialExplicit();
+  iframe    = nullptr;
   spec.mass = totalmass;
   mjuu_copyvec(spec.ipos, totalcom, 3);
   mjuu_setvec(spec.iquat, 1, 0, 0, 0);

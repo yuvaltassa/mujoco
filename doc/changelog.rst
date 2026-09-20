@@ -57,7 +57,7 @@ Bug fixes
   body was silently dropped if the spec had never been compiled. After a compilation, the merged parent could no longer
   be compiled ("fullinertia and diagonal inertia cannot both be specified"), and converting a body without an inertial
   element corrupted the inertial of its parent. The merge now also accounts for :at:`fullinertia`, for orientation
-  alternatives and for frames enclosing the converted body.
+  alternatives and for frames enclosing the converted body or either inertial element.
 - :ref:`mjs_bodyToFrame` now keeps elements of the converted body in their :ref:`frames<body-frame>`. Previously
   elements nested in a frame were moved out of it and lost its transformation.
 - The frame made by :ref:`mjs_bodyToFrame` now has a parent body. Previously :ref:`mjs_getParent` returned an invalid

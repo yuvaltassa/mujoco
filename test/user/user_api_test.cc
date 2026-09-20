@@ -2428,6 +2428,61 @@ TEST_F(MujocoTest, BodyToFrameInertialPose) {
   mj_deleteModel(model);
 }
 
+TEST_F(MujocoTest, BodyToFrameInertialInFrame) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="parent">
+        <joint/>
+        <frame pos="0 0 1" euler="0 0 30">
+          <inertial mass="1" pos=".1 .2 .3" euler="10 20 30" diaginertia="2 3 4"/>
+        </frame>
+        <body name="child" pos="1 0 0" euler="0 40 0">
+          <frame pos="0 1 0" axisangle="1 1 0 60">
+            <inertial mass="2" pos="0 .5 0" euler="50 0 0" diaginertia="3 4 5"/>
+          </frame>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>)";
+
+  // fuse the static child into the parent at compile time
+  std::array<char, 1000> er;
+  mjSpec* spec_fused = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec_fused, NotNull()) << er.data();
+  spec_fused->compiler.fusestatic = 1;
+  mjModel* fused = mj_compile(spec_fused, 0);
+  ASSERT_THAT(fused, NotNull()) << mjs_getError(spec_fused);
+
+  // convert the child to a frame
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjsBody* child = mjs_findBody(spec, "child");
+  ASSERT_THAT(child, NotNull());
+  ASSERT_THAT(mjs_bodyToFrame(&child), NotNull()) << mjs_getError(spec);
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+
+  // both inertials follow their frames, the merged one is in body coordinates
+  ASSERT_EQ(model->nbody, 2);
+  ASSERT_EQ(fused->nbody, 2);
+  EXPECT_EQ(model->body_mass[1], fused->body_mass[1]);
+  for (int i = 0; i < 3; i++) {
+    EXPECT_NEAR(model->body_ipos[3 + i], fused->body_ipos[3 + i],
+                MjTol(1e-14, 1e-6));
+  }
+  std::array<mjtNum, 6> inertia = BodyInertia(model, 1);
+  std::array<mjtNum, 6> expected = BodyInertia(fused, 1);
+  for (int i = 0; i < 6; i++) {
+    EXPECT_NEAR(inertia[i], expected[i], MjTol(1e-13, 1e-6));
+  }
+
+  mj_deleteSpec(spec_fused);
+  mj_deleteSpec(spec);
+  mj_deleteModel(fused);
+  mj_deleteModel(model);
+}
+
 TEST_F(MujocoTest, BodyToFrameFullInertia) {
   static constexpr char xml[] = R"(
   <mujoco>
