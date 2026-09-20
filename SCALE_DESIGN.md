@@ -1,45 +1,28 @@
 # Scaling models in MJCF and mjSpec
 
-*Design proposal, 2026-09-08. Branch `claude/mjoco-scaling-design-33b126`. Early draft: the
-user-facing shape is the thing to settle first; mechanism follows.*
+*Design proposal, 2026-09-08, revised 2026-09-20 after review. Branch
+`claude/mjoco-scaling-design-33b126`. Early draft: the user-facing shape and the physical
+policy are the things to settle first; mechanism follows.*
 
 ## Summary
 
-MuJoCo does not fix a system of units ([Units are unspecified](doc/overview.rst)): a 1 m,
-1 kg spaceship with a 1 N thruster and a 1 cm, 1 g spaceship with a 1 dyn thruster have the
-same dynamics. The corollary is that multiplying every quantity by $s_L^a s_M^b s_T^c$,
-where $[L^a M^b T^c]$ is its dimension, is an exact symmetry of the simulator. Applied to a
-*part* of a model the symmetry is broken by everything that is not scaled, gravity, the
-timestep, the neighbours, and the transform becomes a physical resize.
+The proposal is a non-destructive **`scale` attribute on `<frame>`**: everything under the
+frame is resized at compile time, the spec is untouched, and the parameter survives
+save/load. Three things need settling around it:
 
-One transform therefore covers every scaling use case; what differs is the scope and the
-three factors:
+1. **What resizing means physically.** Geometry and constant-density inertia are not
+   controversial. What happens to everything force-like (actuator gains, springs, dampers,
+   force limits) is a *policy*, and the doc names two (section 2).
+2. **Where per-field dimensions come from.** A `dim` facet in `mjcf.schema`, generating the
+   units column of the XML reference, the scaling table, and a coverage test (section 4).
+3. **What happens at the boundary** between scaled and unscaled parts of a model, which is
+   the normal case, not an error (section 5).
 
-| use case | scope | $(s_L, s_M, s_T)$ |
-|---|---|---|
-| "make this robot 2× bigger" at constant density | subtree | $(s, s^3, 1)$ |
-| same, keeping the motors and masses | subtree | $(s, 1, 1)$ |
-| dynamically similar creature (Froude scaling) | subtree | $(s, s^3, \sqrt{s})$ |
-| unit conversion (CAD in mm, CGS to MKS) | whole spec | anything; the model is re-expressed, not changed |
+Section 3 works three examples through to the numbers; they are the quickest way to see what
+is being proposed. Unit conversion at load is a separate proposal (appendix A).
 
-The proposal has three parts:
-
-1. **The primitive is a `scale` on `<frame>`.** A frame already wraps a subtree and applies
-   a transform to it at compile time; scale makes it a similarity transform. Because it is
-   applied at compile time it is a *parameter*, not an operation: set it, compile, set it
-   again, compile. Attach returns a frame, so attaching at a scale is attaching onto a
-   scaled frame. The scale is a vector in the frame's own axes, so anisotropic scaling of
-   rigid assets has a well-defined home from day one, even if v1 accepts only uniform values.
-2. **Per-field dimensions live in `mjcf.schema`** as a `dim` facet, generating the units
-   column of the XML reference, the scaling table, and a coverage test.
-3. **Unit conversion at load** is a `<compiler>` attribute that converts the numbers the
-   file states into MKS, paired with a documentation change: the simulator stays
-   unit-agnostic, the defaults are declared MKS.
-
-There is a prerequisite (section 3.0): frames do not round-trip today, their pose is baked
-into their children on save and only the name survives. A scale that is a parameter needs
-the writer to emit authored frames and frame-relative contents, and the same contract
-covers free-joint alignment, the other transform the compiler currently bakes.
+Status: the prerequisite, frames round-tripping through save, is implemented (fork branch
+`frames-roundtrip`, 0572fd554). Free-joint alignment is still baked on save (section 6.1).
 
 ## 1. What the user gets
 
@@ -57,135 +40,232 @@ Items marked **decision** are open.
 </frame>
 ```
 
-Everything under the frame is scaled geometrically by the factor: positions, sizes, contact
-lengths, slide-joint ranges, tendon lengths, keyframe columns, camera intrinsics, light
-attenuation, everything with a length in its dimension. Masses follow density: inferred
-inertials scale by construction, and explicit `<inertial>` clauses get $s^3$ on mass and
-$s^5$ on inertia so the two kinds of body agree. Time-dimensioned quantities are untouched,
-so `solref` time constants, actuator dynamics and the timestep stay as they are.
-
-Properties:
-
-- **A parameter, not an operation.** The spec is untouched. Saved XML contains the frame
-  with its `scale` and the original numbers (this needs the writer change in section 3.0).
+- **A parameter, not an operation.** The spec is untouched; the scale is applied during
+  compilation. Saved XML contains the frame with its `scale` and the original numbers.
   Domain randomization is `frame.scale = s; compile()` in a loop, with no copy and no risk
   of scaling twice.
-- **Composes.** Nested frames multiply. A body's effective scale is the product of the
-  frame scales above it, all the way to the world.
-- **Attach.** `<attach>` places the child under a frame, so "attach at scale 2" is the
-  first example above and needs no attribute of its own. Three copies at three scales are
-  three frames. Since attach copies the child spec and prefixes its assets, an attached
-  model never shares anything with the rest of the model and never triggers the
-  shared-asset refusal in section 3.
-- **Vector-valued.** `scale="sx sy sz"`, in the frame's axes. A single value means uniform.
-  Section 1.4 sets out what anisotropic values require.
+- **Scales contents, not itself.** A frame's `pos` and `quat` are in its parent's
+  coordinates and are not affected by its own scale. The frame defines a similarity
+  transform about its own origin.
+- **Composes along element ancestry.** An element's effective scale is the product of the
+  scales of every frame on its ancestry path: its own enclosing frames, its body, that
+  body's enclosing frames, the parent body, and so on to the world. Scale therefore lives on
+  elements, not bodies: a frame may wrap two of a body's five geoms.
+- **Attach.** `<attach>` places the child under a frame, so "attach at scale 2" is the first
+  example above and needs no attribute of its own. Three copies at three scales are three
+  frames.
+- **Vector-valued.** `scale="sx sy sz"` in the frame's axes; a single value means uniform.
+  v1 accepts uniform values only (section 1.3).
 
-Decisions:
-
-- **decision:** name. `scale` is short and matches `mesh scale`; `lengthscale` leaves room
-  for the mass and time siblings below and reads unambiguously next to them.
-- **decision:** whether frames also carry mass and time factors (`massscale`, `timescale`)
-  for the general gauge and for Froude-similar subtrees, or whether those stay API-only.
-  The physically meaningful defaults ($s^3$, $1$) are what the frame does without them.
-  Leaning to API-only in v1, with `scale` on frames meaning geometric similarity at
-  constant density.
-
-### 1.2 Unit conversion at load, and "defaults are MKS"
-
-A file authored in millimetres and grams should be loadable without a preprocessing script:
-
-```xml
-<compiler lengthscale="0.001" massscale="0.001"/>
-```
-
-This is deliberately *not* a scale on the root. Take a file in mm that does not mention
-gravity. Scaling everything would turn the default 9.81 into 0.00981, which nobody wants.
-The default was never in the file's units: it is an MKS number, and it was already wrong for
-a self-consistent mm model. The coherent rule is that defaults are MKS and explicit values
-are in the file's units, and the conversion maps the latter into the former. A specified
-`density="0.001"` in g/mm³ becomes 1000 kg/m³; an unspecified density stays at the default
-1000 kg/m³. Both are water.
-
-Two consequences:
-
-- **Documentation.** The overview keeps "the simulator is unit-agnostic" and adds "the
-  defaults assume MKS", which the current text half-admits already (gravity, density).
-  With that sentence in place the attribute is well-defined.
-- **Mechanism.** Explicit-versus-default is only known in the reader, so this is a
-  reader-time conversion driven by the schema's `dim` facets, not a compile-time transform.
-  Binary assets are in file units too, so mesh, skin and flex vertex data are converted
-  through mesh `scale` and friends even when those are unspecified.
-
-- **decision:** naming and form. `lengthscale`/`massscale`/`timescale`, or a keyword
-  `units="mm g"` form with a fixed table, or both.
-- **decision:** v1 or follow-up. It is the largest reader change in this proposal and is
-  independent of frame scaling.
-
-### 1.3 API
-
-Frame scale is a field on `mjsFrame`, and therefore on the Python `MjsFrame`:
+In Python, `scale` is a field on `MjsFrame`:
 
 ```python
-hand = spec.worldbody.add_frame(scale=[2, 2, 2])   # or scale=2 in Python
-hand.attach_body(child.body('palm'), 'h_')
-
-for s in rng.uniform(0.8, 1.2, size=100):           # domain randomization
+for s in rng.uniform(0.8, 1.2, size=100):
   spec.frame('fork').scale = s
   model = spec.compile()
 ```
 
-The destructive form, one C function explicit about all three factors, applies the same
-transform to the spec itself:
+- **decision:** name. `scale` is short and matches `mesh scale`.
+- **decision:** how the physical policy of section 2 is selected: a second frame attribute
+  with two keywords, and which is the default.
+
+### 1.2 API: `mjs_scale`, later
+
+A destructive counterpart that applies the same transform to the spec itself, for baking a
+scale into saved numbers and for whole-spec rescaling (the world has no frame):
 
 ```c
-// Scale a subtree (body or frame) or the whole spec (pass mjs_getSpec(...)->element).
 MJAPI void mjs_scale(mjsElement* element, double length, double mass, double time);
 ```
 
-```python
-body.scale(2)                       # bake in: length 2, mass 8, time 1
-body.scale(2, time=2**0.5)          # Froude-similar
-spec.scale(length=1e-3, mass=1e-3)  # whole spec, the exact symmetry: mm, g -> m, kg
+On the whole spec with all three factors this is the exact unit-system symmetry of the
+simulator and cannot fail. It shares the traversal with frame scaling and is v2.
+
+### 1.3 Anisotropic scaling: uniform in v1, attribute shaped for later
+
+The use case is reshaping rigid objects for domain randomization: one fork, stretched along
+its handle. The semantics, when it comes:
+
+- The **reference configuration** of the scaled subtree is the affine image of the original
+  under $S = \mathrm{diag}(s_x, s_y, s_z)$ in the frame's axes. After that, bodies move
+  rigidly as always. Nothing requires *every* configuration to be an affine image, so joints
+  impose no restriction: a stretched fork on a free joint is fine.
+- Each body's contents are reshaped in the body's own frame by $A = R_0^T S R_0$, where
+  $R_0$ is the body's reference orientation relative to the scaling frame. The only
+  restriction is **whether each shape can represent its reshaped self**: meshes always can
+  (variants are derived by an arbitrary linear map, section 5.3); boxes, ellipsoids and
+  heightfields need $A$ diagonal in the geom's frame; capsules and cylinders additionally
+  need the two transverse factors equal; spheres need $A$ uniform. Anything else is a
+  compile error naming the geom.
+- Explicit inertia has an exact transform. With second-moment tensor
+  $\Sigma = \tfrac12 \mathrm{tr}(I)\,\mathbb{1} - I$, the map is $m' = \det(A)\, m$,
+  $\Sigma' = \det(A)\, A \Sigma A^T$, $I' = \mathrm{tr}(\Sigma')\,\mathbb{1} - \Sigma'$.
+  Off-diagonal terms go through the existing `fullinertia` principal-axis path.
+
+v1 is uniform-only because it needs none of the representability checks. The restrictions
+above are recorded as the expected shape, not as a commitment.
+
+## 2. Physical policy: what "bigger" means
+
+Dimensional analysis tells us how each field transforms under a change of units
+$(s_L, s_M, s_T)$: a field of dimension $[L^a M^b T^c]$ is multiplied by
+$s_L^a s_M^b s_T^c$. Applied to a whole model this is an exact symmetry
+([Units are unspecified](doc/overview.rst)). Applied to a subtree it is a physical change,
+and *which* factors to use is a modelling decision that dimensional analysis does not make.
+Two policies are worth naming:
+
+| | **similar** | **geometry** |
+|---|---|---|
+| definition | the unit-change $(s, s^3, 1)$ applied to the subtree | lengths and inertials only |
+| lengths (positions, sizes, contact lengths, slide ranges, tendon lengths) | $\times s$ | $\times s$ |
+| mass, inertia (explicit; inferred follow from geometry) | $\times s^3$, $\times s^5$ | $\times s^3$, $\times s^5$ |
+| forces, slide stiffness and damping | $\times s^4$, $\times s^3$ | unchanged |
+| torques, hinge stiffness, damping and armature | $\times s^5$ | unchanged |
+| time-like (`solref` timeconst, actuator dynamics) | unchanged | unchanged |
+| behaviour | same motion in the time domain: servo bandwidth, damping ratios and spring frequencies are preserved; only gravity (and other unscaled surroundings) breaks the similarity | the same motors, springs and gains on a body with $s^5$ the inertia: slower and weaker, as in "same actuators, longer links" |
+
+Neither is "correct". *similar* is the policy under which a resized robot still works
+without retuning, which is what scene assembly and size randomization want; *geometry* is
+the policy for evaluating fixed hardware on different morphology. Anything in between
+(muscle force with cross-section, $s^2$) is *geometry* plus a line of user code on the
+actuators. The rule for *geometry* is mechanical given the schema dimensions: fields with
+no mass dimension scale by their length exponent, inertials scale at constant density,
+every other mass-bearing field is left alone.
+
+Not available under either policy: preserving both strength-to-weight and natural
+frequencies in a fixed gravity field. That is the square-cube law.
+
+- **decision:** the default. Leaning *similar*.
+- **decision:** whether a third, general form (independent mass and time factors on the
+  frame, e.g. Froude scaling $(s, s^3, \sqrt{s})$) is wanted in MJCF or only in `mjs_scale`.
+
+### 2.1 Actuator semantics
+
+The dimensions assigned to actuator fields must describe MuJoCo's established semantics and
+must keep control inputs meaningful:
+
+- **`gear` is dimensionless** for every transmission. Actuator length carries the
+  transmission's coordinate dimension ($Q$, section 4: an angle for a hinge, a length for a
+  slide or tendon), and actuator force is the matching generalized force.
+- **`ctrl` keeps the dimension of what it competes with** in
+  `force = gain*ctrl + bias0 + bias1*length + bias2*velocity`: $Q$ if the bias has a length
+  term (position servo), $Q/T$ if it has only a velocity term (velocity servo),
+  dimensionless otherwise (motor). `gainprm` carries the rest. So a position target on a
+  slide scales with the robot, a target angle does not, and a normalized motor command in
+  $[-1, 1]$ keeps its meaning while the gain carries the force scaling.
+- `forcerange` is a generalized force; `ctrlrange` has the dimension of `ctrl`;
+  `lengthrange` is $Q$. Muscles: only the peak `force` is dimensioned, the rest is in units
+  of $L_0$.
+
+For hinges all of this is invisible: $Q = 1$, so `ctrl`, `ctrlrange` and `gear` never change
+and only gains and force limits do.
+
+## 3. Worked examples
+
+### 3.1 A resized actuated pendulum
+
+```xml
+<worldbody>
+  <frame scale="2">
+    <body name="arm" pos="0 0 1">
+      <joint name="hinge" axis="0 1 0" damping="0.1" armature="0.01"/>
+      <geom type="capsule" fromto="0 0 0 0 0 -0.5" size="0.05"/>
+    </body>
+  </frame>
+</worldbody>
+<actuator>
+  <position joint="hinge" kp="10" kv="1" ctrlrange="-1 1" forcerange="-5 5"/>
+</actuator>
 ```
 
-It exists for baking a scale into saved numbers, for the whole-spec gauge (the world body
-has no frame), and for factors the frame does not carry. It is the same traversal as the
-compile-time one run against the spec structs instead of the compiled copies, so it is
-cheap once frames work, and it is v2.
+The actuator is outside the tree; it references a joint at scale 2, so it is scaled with it.
 
-- **decision:** the Python mass default for `body.scale`. $s_L^3$ matches the frame and the
-  compiler; it is a trap for `spec.scale(length=1e-3)` used as unit conversion, where
-  masses would silently change by $10^{-9}$. Leaning to one rule and a docstring, since
-  `<compiler>` is the primary unit-conversion route.
+| compiled quantity | unscaled | *similar*, $s=2$ | *geometry*, $s=2$ |
+|---|---|---|---|
+| body `pos` | 0 0 1 | 0 0 2 | 0 0 2 |
+| capsule half-length, radius | 0.25, 0.05 | 0.5, 0.1 | 0.5, 0.1 |
+| mass, inertia (inferred) | $m$, $I$ | $8m$, $32I$ | $8m$, $32I$ |
+| `damping`, `armature` | 0.1, 0.01 | 3.2, 0.32 | 0.1, 0.01 |
+| `kp`, `kv` | 10, 1 | 320, 32 | 10, 1 |
+| `forcerange` | ±5 | ±160 | ±5 |
+| `ctrlrange`, `gear` | ±1, 1 | ±1, 1 | ±1, 1 |
+| servo frequency $\sqrt{k_p/I}$ | $\omega$ | $\omega$ | $\omega/\sqrt{32}$ |
+| gravity sag $m g l / k_p$ | $\theta$ | $\theta/2$ | $16\,\theta$ |
+| pendulum frequency $\sqrt{g/l}$ | $\omega_g$ | $\omega_g/\sqrt2$ | $\omega_g/\sqrt2$ |
 
-### 1.4 Anisotropic scaling: designed in, gated
+`ctrl = 0.5` means "go to 0.5 rad" in all three columns.
 
-Cartesian anisotropic scaling $S = \mathrm{diag}(s_x, s_y, s_z)$ does not commute with
-rotation, so it cannot be applied to an arbitrary articulated subtree; but it is exactly
-what domain randomization of rigid objects wants (a fork stretched along its handle), and
-the frame is the right place for it because the stretch axes are the frame's own. The
-rules, so that v1 can accept only uniform values while leaving the door open:
+The slide-joint variant, where $Q = L$: with `range="0 0.2"`, a position servo with
+`kp="100" ctrlrange="0 0.2"` becomes, under *similar*, `range` 0 0.4, `ctrlrange` 0 0.4,
+`kp` 800 ($[M T^{-2}]$, $s^3$), and a force limit scales by 16. A motor on the same joint
+with `gear="50" ctrlrange="-1 1"` keeps both; its gain goes from 1 to 16.
 
-- **Propagation.** Into a child body with orientation $R$ the scale becomes $R^T S R$,
-  which must remain diagonal: $R$ must be a signed axis permutation, or $S$ must be
-  uniform in the plane $R$ mixes. Otherwise the child is sheared and compilation fails.
-- **Primitives.** Boxes, ellipsoids, sites and meshes accept any diagonal scale (a mesh
-  absorbs it into its `scale`). Capsules and cylinders need the two transverse factors
-  equal; spheres need all three equal. `fromto` endpoints are just points and always scale.
-- **Joints.** Stretching along $x$ turns a rotation about $z$ into a non-rigid motion.
-  A hinge needs the scale uniform in the plane perpendicular to its axis; a ball or free
-  joint needs it fully uniform; slides are unconditionally fine. Being axis-aligned is
-  necessary but not sufficient, which is the check one would naively write.
-- **Inertia.** Explicit `<inertial>` clauses have no simple transform under anisotropy and
-  are refused; inferred inertials are computed from the stretched geoms by the compiler.
+### 3.2 Three sizes of one mesh object
 
-In practice anisotropy is for rigid leaf assets with at most slide joints, and that is the
-important case.
+```xml
+<asset>
+  <mesh name="fork" file="fork.stl"/>
+</asset>
+<worldbody>
+  <frame pos="0 0 0">            <body><freejoint/><geom type="mesh" mesh="fork"/></body></frame>
+  <frame pos=".3 0 0" scale="1.5"><body><freejoint/><geom type="mesh" mesh="fork"/></body></frame>
+  <frame pos=".6 0 0" scale="0.5"><body><freejoint/><geom type="mesh" mesh="fork"/></body></frame>
+</worldbody>
+```
 
-- **decision:** v1 accepts uniform only, or anisotropic wherever the rules above allow. The
-  rules are needed either way to produce the errors; the difference is testing surface.
+One authored asset, three geoms. The frames sit at x = 0, 0.3, 0.6 regardless of their
+scales. The compiled model has three meshes: `fork` and two compiler-generated variants
+(section 5.3), with volumes, masses and inertias in ratio $1 : 1.5^3 : 0.5^3$ and
+$1 : 1.5^5 : 0.5^5$. The saved XML is the text above. With a future anisotropic
+`scale="1 1 1.5"` the third fork is stretched along the frame's z axis and still falls and
+tumbles as a rigid body.
 
-## 2. Where the dimensions live: a `dim` facet in `mjcf.schema`
+### 3.3 A resized robot connected to an unchanged environment
+
+```xml
+<worldbody>
+  <geom name="floor" type="plane" size="5 5 .1"/>
+  <site name="hook" pos="0 0 3"/>
+  <frame scale="2">
+    <body name="arm" pos="0 0 1">
+      <joint name="hinge" axis="0 1 0"/>
+      <geom name="hand" type="capsule" fromto="0 0 0 0 0 -0.5" size="0.05"/>
+      <site name="tip" pos="0 0 -0.5"/>
+    </body>
+  </frame>
+</worldbody>
+<contact>
+  <pair geom1="hand" geom2="floor" margin="0.01" friction="1 1 0.005 0.0001 0.0001"/>
+</contact>
+<equality>
+  <connect body1="arm" body2="world" anchor="0 0 0.2"/>
+  <connect site1="tip" site2="hook"/>
+</equality>
+<tendon>
+  <spatial name="bungee" stiffness="100">
+    <site site="tip"/> <site site="hook"/>
+  </spatial>
+</tendon>
+<sensor>
+  <framepos objtype="site" objname="tip" reftype="site" refname="hook" cutoff="4"/>
+  <touch site="tip" cutoff="10"/>
+</sensor>
+<keyframe>
+  <key qpos="0.3"/>
+</keyframe>
+```
+
+| element | what happens | why |
+|---|---|---|
+| `connect` with `anchor` | anchor becomes 0 0 0.4 | the anchor is expressed in `body1` coordinates; it takes `body1`'s scale |
+| `connect` with sites | nothing to scale | both attachment points are elements with their own scales |
+| `pair` hand/floor | `margin` 0.02, torsional 0.01, rolling 0.0002 | the floor is unscaled and abstains; contact lengths follow the scaled geom (section 5.2) |
+| `bungee` | path and auto `springlength` are recomputed from the scaled sites; `stiffness` unchanged | the tendon belongs to neither side; an *explicit* `springlength` here would be a compile error, since neither $\times1$ nor $\times2$ is right |
+| `framepos` tip relative to hook | `cutoff` unchanged | object and reference are at different scales; the output is in the reference's units |
+| `touch` on tip | `cutoff` 160 under *similar*, 10 under *geometry* | a force on a scaled element |
+| keyframe `qpos` | unchanged | hinge angle; a slide would scale, a free joint maps through the frame (section 5.4) |
+
+## 4. Where the dimensions live: a `dim` facet in `mjcf.schema`
 
 The catalogue of which fields carry length is long and has traps: torsional and rolling
 friction coefficients are lengths, `solimp[2]` is a length for contacts and tendon limits
@@ -202,166 +282,179 @@ Proposal: the dimension is a facet on the attribute in `src/xml/mjcf.schema`, ne
   friction   : double[1..3] = {1, 0.005, 0.0001} (dim="1 L L")
   solref     : double[1..mjNREF] = {0.02, 1} (dim=solref)
   stiffness  : double = 0 (dim="M L^2 T^-2 Q^-2")
+  gear       : double[1..6] = {1, 0, 0, 0, 0, 0} (dim=1)
 ```
 
 This buys three things at once:
 
 1. **Documentation.** The XML reference tables gain a units column generated from the
    schema, answering the perennial "what units is torsional friction in".
-2. **The scaling code.** Both the compile-time frame scaling and `mjs_scale` are driven by
-   (or tested against) a generated table of `(struct, field, exponents)`, the same way the
-   reader is driven by `mjcf_read_table.inc` today. Every mjSpec field that is an XML
-   attribute is covered.
+2. **The scaling code.** Frame scaling and `mjs_scale` are driven by (or tested against) a
+   generated table of `(struct, field, exponents)`, the same way the reader is driven by
+   `mjcf_read_table.inc` today. Both policies of section 2 are functions of the exponents.
 3. **Coverage.** A `doc_test` check that every numeric attribute carries a `dim` (including
-   `dim=1` and `dim=custom`), so a new attribute cannot be added without stating its
-   units. That closes the "hidden length" class of bugs permanently, rather than by
-   catalogue.
+   `dim=1` and `dim=custom`), so a new attribute cannot be added without stating its units.
 
 **Generalized coordinates.** Joint-dimensioned quantities depend on the joint type: a slide
 joint's stiffness is $[M T^{-2}]$, a hinge's is $[M L^2 T^{-2}]$. Introduce a symbol $Q$,
-"one unit of the coordinate", resolved when scaling to $L$ for slide joints and
-translational free-joint components and to $1$ for angles. Then each such attribute has one
-declaration: energy is $\tfrac12 k q^2$, so `stiffness` is $M L^2 T^{-2} Q^{-2}$, `damping`
-is $M L^2 T^{-1} Q^{-2}$, `armature` is $M L^2 Q^{-2}$, `range` and `springref` are $Q$,
-`gear` on a joint transmission is $L\,Q^{-1}$ (a moment arm on a hinge, dimensionless on a
-slide), and a motor's `ctrlrange` is a force $[M L T^{-2}]$ in both cases. The tables of
-"slide vs hinge" collapse.
+"one unit of the coordinate", resolved when scaling to $L$ for slide joints, tendons and
+translational free-joint components and to $1$ for angles. Energy is $\tfrac12 k q^2$, so
+`stiffness` is $M L^2 T^{-2} Q^{-2}$, `damping` is $M L^2 T^{-1} Q^{-2}$, `armature` is
+$M L^2 Q^{-2}$, `frictionloss` and actuator forces are $M L^2 T^{-2} Q^{-1}$, `range` and
+`springref` are $Q$. The tables of "slide vs hinge" collapse to one declaration each.
 
-**Custom dimensions.** A minority of attributes have dimensions that depend on an enum on the
-same element: `sensor noise`/`cutoff` on the sensor type, `gainprm`/`biasprm`/`ctrlrange`
-on the actuator's gain and bias type, `key qpos`/`qvel`/`ctrl` per column. These are
-declared `dim=custom` and handled in code, exactly as `reading=custom` attributes are read
-by hand today. The coverage check still applies; custom is an annotation, not an omission.
+**Custom dimensions.** A minority of attributes have dimensions that depend on other
+attributes of the same element: sensor `noise`/`cutoff` on the sensor type,
+`gainprm`/`biasprm`/`ctrlrange`/`actrange` on the actuator's gain, bias and dynamics types
+(section 2.1), keyframe columns on the joint or actuator they belong to. These are declared
+`dim=custom` and handled in code, as `reading=custom` attributes are read by hand today.
+The coverage check still applies; custom is an annotation, not an omission.
 
 - **decision:** facet grammar details: per-component lists (`"1 L L"`), named special
   cases (`solref`). Exponents are spelled `L^2`.
 - **decision:** generated table consumed at runtime, versus hand-written scaling code with
-  a test that diffs it against the schema. The former cannot drift; the latter keeps the
-  user layer readable and matches how the rest of it is written.
+  a test that diffs it against the schema.
 
-## 3. Mechanism and scope
+## 5. The boundary between scaled and unscaled
 
-### 3.0 Prerequisite: frames must round-trip
+A scaled subtree in an unscaled world is the normal case. Elements outside the kinematic
+tree (tendons, actuators, equalities, pairs, sensors, keyframes) and shared assets are
+handled by a rule per relationship, with compile errors reserved for cases that are
+genuinely undefined.
 
-Frames today are half transient. The XML reference says that in a saved model "the frame
-elements have disappeared" with their transformation accumulated into the children. The
-writer no longer does that: `OneFrame` emits `<frame name childclass>` with no `pos` or
-`quat` (a frame with neither is dropped), while the children are written from their compiled
-poses, which had the frame folded in. A frame survives saving as a named husk with an
-identity transform; after reload `spec.frame('x').pos` is zero and the children have moved.
-The compiled model is identical, the structure is not, and the name survives only because
-`<attach frame="...">` needs a target.
+### 5.1 The owner rule
 
-A frame scale that survives saving requires resolving this, and the resolution is a
-contract for the writer: **emit authored values and authored structure; the compiler
-re-derives everything it derives.** Concretely:
+Most dimensioned fields of a non-tree element are expressed relative to one specific
+referenced element, their *owner*, and take the owner's effective scale:
 
-- Frames are written with `pos`, `quat` and `scale`, and their contents are written in
-  frame-relative coordinates, sourced from the spec structs rather than the compiled
-  copies. The writer already does this for one case, recovering a mesh geom's pose before
-  the mesh re-centering transform, because the authored value is the one that round-trips.
-  Orientations authored as `euler` or `axisangle` are resolved to a quaternion without the
-  frame folded in; `fromto` geoms come out as `pos`/`quat` as they do today. So "authored"
-  means authored, canonicalized, frame-relative.
-- Every authored frame persists, named or not. Making persistence depend on having a name
-  (named frames as parameters, anonymous ones baked, which is one step from the current
-  writer rule) was considered: it keeps the flat output of the anonymous-`add_frame`-then-
-  attach idiom and ties "survives the file" to "can be found in the file", but it doesn't
-  shrink the writer change, it adds a second path plus the nested cases, and it makes the
-  saved file depend on whether a debugging name was added. Nothing else in MJCF changes
-  meaning by being named. If churn to existing saved files turns out to matter, this is the
-  fallback, since the machinery is a superset either way.
-- The XML reference paragraph is updated to match.
+- An actuator takes the scale of its transmission target (joint, tendon, site, body).
+- A joint or tendon sensor, a site-attached sensor, a frame sensor without a reference:
+  the scale of its object. A frame sensor whose object and reference are at different
+  scales keeps its `noise` and `cutoff` unscaled.
+- `connect anchor` and `weld relpose` are in `body1` coordinates and take `body1`'s scale.
+  Site-based equalities have nothing to scale. Joint and tendon equalities (`polycoef`) are
+  polynomial in two coordinates and scale term by term from their dimensions when both
+  sides share a scale; otherwise they are an error.
+- A keyframe column belongs to a joint or actuator (section 5.4).
 
-**Alignment is a transient frame.** Free-joint alignment (`joint align`, `compiler
-alignfree`) is the other baked transform: in `mjCBody::Compile`, right after the enclosing
-frame's pose is accumulated, a leaf body with a lone free joint has its pose composed with
-its inertial pose, `ipos`/`iquat` zeroed, and its geoms, sites, cameras and lights
-counter-transformed by the inverse, in two phases because sites compile later than geoms.
-The writer emits the aligned numbers and does not write the joint's `align` attribute back;
-reload is stable only because aligning an aligned body is the identity. Under the contract
-above the writer emits the unaligned `pos` and `ipos` and writes `align`, and the compiler
-re-aligns on load. Structurally, alignment is a frame the compiler inserts between the body
-and its contents, with the inverse inertial pose as its transform, plus the matching shift
-of the body. Once the accumulated-transform pass for scale exists (below), alignment can be
-expressed as a compiler-generated transient frame in that pass rather than as the two-phase
-special case. Generated frames are transient by an internal flag, never written, which gives
-two kinds of frame, authored and generated, without a user-facing rule. This refactor is a
-consequence, not a prerequisite. One ordering constraint either way: scale is accumulated
-before alignment, since `ipos` is a length and must be scaled before it re-bases the body.
+### 5.2 Relationships with no owner
 
-- **decision:** the writer change as a standalone commit ahead of everything else, or
-  together with frame scale. Standalone is reviewable on its own and fixes a documented
-  behaviour that the code already contradicts.
+- **Contact pairs.** `margin`, `gap`, the `solimp` width and torsional and rolling friction
+  are lengths of the contact. Geoms with effective scale 1 abstain; the pair takes the
+  geometric mean of the scales of the others. A robot on an unscaled floor takes the
+  robot's scale, consistent with what the geom-level parameters of the scaled geom would
+  have produced.
+- **Tendons spanning scales.** The path is defined by sites and geoms that each have their
+  own scale, so geometry is always meaningful and `springlength="-1"` is recomputed.
+  Explicit length fields (`springlength`, `range`, `margin`) on a tendon whose path elements
+  are not all at one scale are a compile error: no single factor is right. Its force-like
+  fields are left unscaled. A tendon entirely inside one scale is an ordinary owned element.
+- **decision:** whether spanning tendons with explicit lengths are an error or are left
+  unscaled with a warning.
 
-### 3.1 Scaling at compile time
+### 5.3 Shared meshes: compiler-generated variants
 
-**Where it runs.** Compile already copies each element's `spec` struct into the internal
-object (`CopyFromSpec`) and only then applies the enclosing frame's pose. Scale rides the
-same path with one difference: a pose affects only the frame's immediate children, since
-grandchildren are posed relative to their parent body, but scale must propagate down the
-whole subtree. So each body gets an accumulated scale, the product of the frame scales on
-its chain to the world, computed in a pass before element compilation, and every element
-multiplies its dimensioned fields by its body's accumulated scale during compile. Mass and
-inertia use $s_L^3$ and $s_L^5$ in the uniform case. `mjs_scale` is the same traversal
-applied to the spec structs.
+A mesh asset referenced at several effective scales compiles to several meshes in
+`mjModel`: the authored one and one variant per distinct scale. The spec and the saved XML
+keep the single shared asset. Variants are cheap because everything the mesh compiler
+produces is covariant under a linear map $A$: $\mathrm{hull}(AV) = A\,\mathrm{hull}(V)$, so
+the convex hull's graph and polygon structure are reused; vertices map by $A$, normals by
+$A^{-T}$, volume by $\det A$, inertia by the rule in section 1.3, and a negative determinant
+flips the winding. Heightfields and skins follow the same scheme. v1 may ship with a compile
+error for multi-scale references and add variants immediately after; the error is
+forward-compatible.
 
-**In the tree.** The frame's bodies and everything under them: bodies (`pos`, `ipos`,
-`mass`, `inertia`), geoms, sites, joints, cameras, lights, and flexes whose bodies are all
-inside.
+- **decision:** naming of variants in `mjModel` (unnamed, or a reserved suffix).
 
-**Outside the tree, referencing in.** Tendons, actuators, equality constraints, contact
-pairs, sensors, and keyframes are not tree elements but carry dimensioned quantities tied
-to things that are. The rule is uniform: an element is scaled if everything it references
-has the same accumulated scale, and compilation fails with a clear message otherwise. A
-spatial tendon routed through bodies at two scales has no consistent `springlength`; a
-`connect` between a scaled subtree and the floor has no consistent anchor. Keyframes are
-scaled per column, since each `qpos`/`qvel`/`act`/`ctrl` column belongs to a joint or
-actuator whose scale is known. Attached models never hit the failure, since a child spec
-contains all of its own references.
+**Alternative: scale meshes at runtime through `geom_size`.** Today a mesh geom's
+`geom_size` is not an input: the compiler overwrites it with the mesh's AABB half-extents.
+It could instead be a per-geom scale, default 1 1 1, applied wherever mesh data is consumed.
+Mesh data would then be shared across scales with no variants, and mesh geoms would reach
+parity with primitives, whose `geom_size` can already be edited in `mjModel` (with the same
+caveat that mass, inertia, `geom_rbound` and `geom_aabb` are compile-time and do not
+follow). The arithmetic cost is small: the support function of a scaled convex set is
+$S\,\mathrm{support}_K(S d)$, rays are transformed into the unscaled frame, BVH boxes are
+scaled. The cost is blast radius: every reader of `mesh_vert` has to apply the geom's scale
+(convex, SDF and continuous collision, rays, sensors, IPC, the classic and Filament
+renderers with inverse-transpose normals, MJX, MuJoCo Warp), and third-party consumers of
+`mjModel` would be silently wrong until they did. It also needs a new home for the AABB
+half-extents currently stored in `geom_size`. Since the scale is known at compile time,
+variants deliver the same authoring experience with no change to `mjModel` semantics, at the
+price of memory. Recommendation: not a prerequisite. If runtime mesh scaling lands later on
+its own merits (runtime randomization without recompiling), variants collapse into it with
+no user-visible change.
 
-- **decision:** contact pairs with geoms at two scales. Their `margin`, `gap`, torsional
-  and rolling friction are lengths of the *contact*, and there is a defensible
-  geometric-mean answer. Leaning to the uniform rule (error) for v1.
+### 5.4 Keyframes and mocap
 
-**Shared assets.** A mesh or heightfield holds its own `scale`, and one asset can be
-referenced by geoms at different accumulated scales. Rather than cloning the asset, this is
-refused: a mesh may be referenced at one accumulated scale. The user duplicates the asset,
-or attaches, which duplicates it for them. This is the one place the frame design costs
-something relative to a destructive per-geom mutation, and it is the right trade.
+Slide-joint `qpos`/`qvel` and other $Q$-dimensioned columns scale by the joint's scale. A
+free joint's position is a point in its parent body's coordinates, and the scaling frame
+acts about its own origin, not the parent's: for a frame at pose $(p, R)$ the keyframe
+position maps as $x' = p + R\,S\,R^T (x - p)$, composed over nested frames. Multiplying by
+$s$ is only right when the frame sits at the parent's origin. `mpos` of a mocap body under
+a scaled frame maps the same way.
 
-**Defaults.** Nothing to do. An mjSpec element holds resolved values (its constructor copies
-the default class in), so scaling touches elements, never `<default>`.
+### 5.5 Other scope notes
 
-**Plugins.** Plugin configuration is opaque strings; it is not scaled, and this is
-documented. A plugin callback for scaling is a possible later addition.
+- **Defaults.** Nothing to do: an mjSpec element holds resolved values, so scaling touches
+  elements, never `<default>`.
+- **Plugins.** Plugin configuration is opaque strings and is not scaled. Documented.
 
-**Whole-spec.** The world body has no frame, so the exact symmetry, everything including
-`option`, `visual`, `statistic` and assets, is `mjs_scale` on the spec, and it cannot fail
-because there are no outside references.
+## 6. Mechanism
 
-## 4. Things this is not
+### 6.1 Frames round-trip (done), alignment (not yet)
 
-- Not a physics-preserving resize. No choice of $(s_L, s_M, s_T)$ preserves both the
-  strength-to-weight ratio and the natural frequencies of a subtree in a fixed world; that
-  is the square-cube law, not a bug. The tools expose the factors and stop there.
-- Not allometry. Muscle strength scaling with cross-section ($s^2$) is a modelling choice
-  layered on top, one line of Python on the caller's side.
-- Not per-segment morphing ("longer legs"). Scaling along each segment's own axis is a
-  different feature with its own design.
+Frames used to be half transient on save: written with only their name, their transform
+baked into the children. The writer now emits every authored frame with its pose and its
+contents in frame-relative coordinates (fork branch `frames-roundtrip`), under the contract
+**emit authored values and authored structure; the compiler re-derives what it derives.**
+Every authored frame persists, named or not; making persistence depend on a name was
+considered and rejected (it adds a second writer path and makes saved output depend on a
+debugging name).
 
-## 5. Suggested order of work
+Free-joint alignment (`joint align`, `compiler alignfree`) is the other transform baked on
+save: the writer emits aligned poses and drops the joint's `align`. Under the contract it
+should write the unaligned values and `align`. Structurally alignment is a frame the
+compiler inserts between a body and its contents, so it can later be expressed as a
+compiler-generated transient frame in the pass below. Ordering constraint: scale before
+alignment, since `ipos` is a length.
 
-0. Frames round-trip (section 3.0): the writer emits authored frames with `pos`/`quat` and
-   frame-relative contents, writes `align` back, and the XML reference is corrected. A
-   round-trip test: load, save, reload, compare specs. Independent of everything below.
-1. `dim` facets in `mjcf.schema`, the units column in the XML reference, and the coverage
-   test. Self-contained, reviewable on its own, and immediately useful as documentation.
-2. `scale` on `mjsFrame` and `<frame>`, uniform, with the accumulated-scale pass, the
-   reference rule, the shared-asset refusal, and tests that compile a scaled model and
-   check `mjModel` field by field against the exponent rule.
-3. Optionally, alignment re-expressed as a generated transient frame in the same pass.
-4. Anisotropic values with the section 1.4 checks.
-5. `<compiler>` unit conversion in the reader, with the overview change.
-6. `mjs_scale` and the Python `scale` methods.
-7. Later, if wanted: mass and time factors on frames, plugin scaling callbacks.
+### 6.2 Scaling at compile time
+
+Compile copies each element's `spec` struct into the internal object (`CopyFromSpec`) and
+then applies the enclosing frame's pose. Scale rides the same path. A pass before element
+compilation computes each element's effective scale along its ancestry (section 1.1); each
+element then multiplies its dimensioned fields according to the policy and the schema
+exponents, non-tree elements resolve their owner's scale (section 5), and mesh references
+resolve to variants. A frame's pose is applied after scaling the child's position.
+
+## 7. Things this is not
+
+- Not a physics-preserving resize; see the end of section 2.
+- Not per-segment morphing ("longer legs"): scaling along each segment's own axis is a
+  different feature, though nested anisotropic frames get part of the way there.
+- Not unit conversion (appendix A).
+
+## 8. Suggested order of work
+
+0. Frames round-trip. **Done**, pending import. Alignment un-baking is a follow-up commit.
+1. `dim` facets in `mjcf.schema`, the units column in the XML reference, the coverage test.
+   Self-contained and immediately useful as documentation. Settles section 2.1 in writing.
+2. `scale` on `mjsFrame` and `<frame>`, uniform, both policies, the ancestry pass, owner and
+   boundary rules, multi-scale mesh references as an error. Tests: the three examples of
+   section 3, checked field by field in `mjModel`.
+3. Mesh variants.
+4. Anisotropic values with the representability checks.
+5. `mjs_scale` and the Python methods.
+6. Separately: unit conversion at load; runtime mesh scaling; plugin scaling callbacks.
+
+## Appendix A. Deferred: unit conversion at load
+
+Loading a file authored in millimetres and grams (`<compiler lengthscale="0.001"
+massscale="0.001"/>` or a `units` keyword) is a different feature with different questions
+and gets its own proposal. The one conclusion worth recording here: it cannot be a scale on
+the root. A file in mm that does not mention gravity must not end up with gravity 0.00981;
+the default was never in the file's units. The coherent rule is that **defaults are MKS and
+explicit values are in the file's units**, which makes it a reader-time conversion of
+explicitly present attributes (and of binary assets), driven by the same `dim` facets, and
+which wants the overview's "units are unspecified" section to add that the defaults assume
+MKS.
