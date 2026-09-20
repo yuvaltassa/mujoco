@@ -1,0 +1,122 @@
+models listed 397, loaded by both 382, bit-identical 289
+load status differs: 0
+array size differs: 0
+
+models with some raw field differing by more than 0.001 (relative to the field's largest element): 12
+     9.80e-01  test/engine/testdata/collision_convex/100spheremesh.xml
+     9.56e-01  mjlab/src/mjlab/asset_zoo/robots/unitree_go1/xmls/go1.xml
+     8.80e-01  test/user/testdata/makemesh.xml
+     7.55e-01  mujoco_menagerie/i2rt_yam/yam.xml
+     7.55e-01  mujoco_menagerie/i2rt_yam/scene.xml
+     7.55e-01  mjlab/src/mjlab/asset_zoo/robots/i2rt_yam/xmls/yam.xml
+     4.97e-01  test/benchmark/testdata/cache_hits.xml
+     3.84e-01  mjlab/src/mjlab/asset_zoo/robots/unitree_g1/xmls/g1.xml
+     3.82e-01  model/mug/mug.xml
+     2.96e-01  test/experimental/usd/plugins/mjcf/testdata/materials.xml
+
+models with some raw field differing by more than 1e-06 (relative to the field's largest element): 16
+     9.80e-01  test/engine/testdata/collision_convex/100spheremesh.xml
+     9.56e-01  mjlab/src/mjlab/asset_zoo/robots/unitree_go1/xmls/go1.xml
+     8.80e-01  test/user/testdata/makemesh.xml
+     7.55e-01  mujoco_menagerie/i2rt_yam/yam.xml
+     7.55e-01  mujoco_menagerie/i2rt_yam/scene.xml
+     7.55e-01  mjlab/src/mjlab/asset_zoo/robots/i2rt_yam/xmls/yam.xml
+     4.97e-01  test/benchmark/testdata/cache_hits.xml
+     3.84e-01  mjlab/src/mjlab/asset_zoo/robots/unitree_g1/xmls/g1.xml
+     3.82e-01  model/mug/mug.xml
+     2.96e-01  test/experimental/usd/plugins/mjcf/testdata/materials.xml
+
+models with some raw field differing by more than 1e-09 (relative to the field's largest element): 35
+     9.80e-01  test/engine/testdata/collision_convex/100spheremesh.xml
+     9.56e-01  mjlab/src/mjlab/asset_zoo/robots/unitree_go1/xmls/go1.xml
+     8.80e-01  test/user/testdata/makemesh.xml
+     7.55e-01  mujoco_menagerie/i2rt_yam/yam.xml
+     7.55e-01  mujoco_menagerie/i2rt_yam/scene.xml
+     7.55e-01  mjlab/src/mjlab/asset_zoo/robots/i2rt_yam/xmls/yam.xml
+     4.97e-01  test/benchmark/testdata/cache_hits.xml
+     3.84e-01  mjlab/src/mjlab/asset_zoo/robots/unitree_g1/xmls/g1.xml
+     3.82e-01  model/mug/mug.xml
+     2.96e-01  test/experimental/usd/plugins/mjcf/testdata/materials.xml
+
+raw field differences (relative to the largest element of the field)
+field                    models    max rel    max abs  worst model
+bvh_nodeid                   11   9.80e-01   1.07e+05  test/engine/testdata/collision_convex/100spheremesh.xml
+mesh_extrema                  3   5.01e-01   1.22e+03  test/engine/testdata/collision_convex/100spheremesh.xml
+bvh_aabb                     83   4.85e-01   1.39e+00  mjlab/src/mjlab/asset_zoo/robots/unitree_go1/xmls/go1.xml
+body_iquat                   75   2.32e-01   2.32e-01  test/experimental/usd/plugins/mjcf/testdata/materials.xml
+mesh_polynormal              27   5.07e-02   5.07e-02  test/engine/testdata/collision_convex/100spheremesh.xml
+mesh_normal                  26   5.07e-02   5.07e-02  test/engine/testdata/collision_convex/100spheremesh.xml
+mesh_vert                    30   5.07e-02   5.07e-03  test/engine/testdata/collision_convex/100spheremesh.xml
+mesh_quat                    34   2.60e-02   1.84e-02  test/engine/testdata/collision_convex/100spheremesh.xml
+geom_quat                    35   1.84e-02   1.84e-02  test/engine/testdata/collision_convex/100spheremesh.xml
+geom_size                    34   4.76e-05   2.38e-05  test/engine/testdata/collision_convex/100spheremesh.xml
+geom_rbound                  32   2.36e-05   4.09e-06  test/engine/testdata/collision_convex/100spheremesh.xml
+geom_aabb                    34   1.59e-05   5.82e-05  mjlab/src/mjlab/asset_zoo/robots/i2rt_yam/xmls/yam.xml
+dof_length                   20   4.09e-06   4.09e-06  test/engine/testdata/collision_convex/100spheremesh.xml
+stat                         38   4.14e-07   4.09e-06  test/user/testdata/mesh.xml
+dof_invweight0               54   1.99e-07   4.40e-06  test/engine/testdata/core_smooth/ten_J2.xml
+oct_coeff                     2   1.30e-07   1.35e-07  model/plugin/sdf/mug.xml
+body_invweight0              65   7.32e-08   1.87e-06  test/engine/testdata/core_smooth/ten_J2.xml
+actuator_acc0                34   3.98e-08   8.04e-05  test/benchmark/testdata/100_humanoids_chol.xml
+cam_pos                       1   2.94e-08   3.15e-08  test/user/testdata/freejoint.xml
+light_dir                     1   2.75e-08   2.75e-08  test/user/testdata/freejoint.xml
+body_inertia                 86   2.36e-08   1.67e-09  test/user/testdata/fitmesh_aabb.xml
+tendon_invweight0            13   2.12e-08   6.21e-10  test/user/testdata/freejoint.xml
+body_mass                     2   1.59e-08   5.86e-08  test/user/testdata/fitmesh_aabb.xml
+cam_quat                      1   1.47e-08   1.25e-08  test/user/testdata/freejoint.xml
+site_quat                     1   1.36e-08   1.36e-08  test/user/testdata/freejoint.xml
+site_pos                      1   1.30e-08   2.61e-08  test/user/testdata/freejoint.xml
+geom_pos                      2   1.30e-08   1.94e-08  test/user/testdata/freejoint.xml
+body_quat                     1   1.17e-08   1.17e-08  test/user/testdata/freejoint.xml
+qpos0                         1   1.02e-08   1.17e-08  test/user/testdata/freejoint.xml
+qpos_spring                   1   1.02e-08   1.17e-08  test/user/testdata/freejoint.xml
+body_ipos                     1   7.87e-09   7.71e-10  test/user/testdata/fitmesh_aabb.xml
+body_subtreemass              2   4.61e-09   8.64e-08  test/user/testdata/fitmesh_aabb.xml
+oct_aabb                      2   4.01e-09   6.43e-09  model/plugin/sdf/mug.xml
+light_pos                     1   2.98e-09   2.98e-08  test/user/testdata/freejoint.xml
+light_poscom0                 3   2.62e-09   2.37e-09  test/user/testdata/fitmesh_aabb.xml
+dof_M0                       48   2.12e-09   4.17e-08  test/engine/testdata/sensor/fromto_body_body.xml
+jnt_stiffness                 1   3.46e-11   9.67e-10  test/engine/testdata/sensor/contact_net.xml
+dof_damping                   1   3.46e-11   1.93e-10  test/engine/testdata/sensor/contact_net.xml
+cam_poscom0                   1   4.96e-16   4.44e-16  test/user/testdata/freejoint.xml
+cam_pos0                      1   4.96e-16   4.44e-16  test/user/testdata/freejoint.xml
+cam_mat0                      1   4.05e-16   3.33e-16  test/user/testdata/freejoint.xml
+light_dir0                    1   2.22e-16   2.22e-16  test/user/testdata/freejoint.xml
+tendon_length0                1   1.34e-16   2.22e-16  test/user/testdata/freejoint.xml
+light_pos0                    1   2.22e-17   2.22e-16  test/user/testdata/freejoint.xml
+
+body inertia tensor R diag(I) R^T in the body frame, max change relative to the body's largest moment
+  models with any change: 86
+  models above 0.001: 0
+  models above 1e-05: 0
+  models above 1e-06: 3
+  models above 1e-07: 8
+  models above 1e-09: 23
+  models above 1e-12: 27
+     1.14e-06  body    2  moment  5.53e-01  test/engine/testdata/core_smooth/ten_armature_4.xml
+     1.14e-06  body    2  moment  5.53e-01  test/engine/testdata/core_smooth/ten_armature_3.xml
+     1.14e-06  body    1  moment  5.53e-01  test/engine/testdata/core_smooth/ten_J2.xml
+     2.54e-07  body    6  moment  4.02e-02  test/engine/testdata/sensor/fromto_convex.xml
+     2.25e-07  body   27  moment  6.45e-03  test/benchmark/testdata/2humanoid100_chol.xml
+     2.25e-07  body    7  moment  6.45e-03  test/benchmark/testdata/100_humanoids_chol.xml
+     1.43e-07  body    1  moment  9.53e-02  test/engine/testdata/sensor/fromto_body_body.xml
+     1.43e-07  body    1  moment  9.53e-02  model/replicate/helix.xml
+     4.65e-08  body    1  moment  1.67e-02  test/engine/testdata/collision_convex/100spheremesh.xml
+     4.30e-08  body    3  moment  7.70e-02  model/surfacevel/carousel.xml
+
+mesh geom vertices in the body frame, max change relative to mesh size
+  mesh geoms with any change: 496
+  above 0.001: 0
+  above 1e-06: 0
+  above 1e-09: 371
+  above 1e-12: 382
+     1.04e-07  mesh geom #  3  mujoco_menagerie/i2rt_yam/yam.xml
+     1.04e-07  mesh geom #  3  mujoco_menagerie/i2rt_yam/scene.xml
+     1.04e-07  mesh geom #  3  mjlab/src/mjlab/asset_zoo/robots/i2rt_yam/xmls/yam.xml
+     9.06e-08  mesh geom #  0  model/mug/mug.xml
+     8.19e-08  mesh geom #  6  model/surfacevel/carousel.xml
+     7.47e-08  mesh geom #  3  model/surfacevel/carousel.xml
+     7.37e-08  mesh geom # 99  test/engine/testdata/collision_convex/100spheremesh.xml
+     7.37e-08  mesh geom # 98  test/engine/testdata/collision_convex/100spheremesh.xml
+     7.37e-08  mesh geom # 97  test/engine/testdata/collision_convex/100spheremesh.xml
+     7.37e-08  mesh geom # 96  test/engine/testdata/collision_convex/100spheremesh.xml

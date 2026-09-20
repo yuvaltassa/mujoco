@@ -1,0 +1,7 @@
+<mujoco>
+  <worldbody>
+    <body pos="0 0 1"><joint axis="0 1 0"/><geom type="capsule" fromto="0 0 0 .3 0 0" size=".02"/>
+      <body pos=".3 0 0"><joint axis="0 1 0"/><geom type="capsule" fromto="0 0 0 .3 0 0" size=".02"/></body>
+    </body>
+  </worldbody>
+</mujoco>

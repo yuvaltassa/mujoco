@@ -1,0 +1,59 @@
+mjtNum: double, ntrial per row: 200000
+
+== library functions, unit scale
+family          scale   solver                 recon_max recon_med  offd_max  axis_max  orth_max  eval_max it_avg it_mx     ncap
+separated       1e+00   lib:mju_eig3(f64)        9.2e-15   2.1e-15   4.2e-15   3.7e-14   4.7e-15   7.8e-15   8.09    10        0
+separated       1e+00   lib:mjuu_eig3(f64)       1.6e-14   4.9e-15   4.3e-15   3.7e-14   1.2e-14   7.8e-15   8.09    10        0
+near_pair       1e+00   lib:mju_eig3(f64)        9.6e-15   1.8e-15   4.4e-15   0.0e+00   4.7e-15   7.4e-15   4.45     8        0
+near_pair       1e+00   lib:mjuu_eig3(f64)       1.6e-14   4.1e-15   4.2e-15   0.0e+00   1.2e-14   7.4e-15   4.45     8        0
+near_triple     1e+00   lib:mju_eig3(f64)        9.5e-15   1.9e-15   4.2e-15   0.0e+00   4.7e-15   6.8e-15   4.04     9        0
+near_triple     1e+00   lib:mjuu_eig3(f64)       1.6e-14   3.9e-15   4.3e-15   0.0e+00   1.2e-14   6.8e-15   4.04     9        0
+exact_pair      1e+00   lib:mju_eig3(f64)        6.0e-15   9.4e-16   1.1e-15   0.0e+00   4.7e-15   3.8e-15   2.00     2        0
+exact_pair      1e+00   lib:mjuu_eig3(f64)       9.2e-15   2.8e-15   1.1e-15   0.0e+00   7.5e-15   3.8e-15   2.00     2        0
+exact_triple    1e+00   lib:mju_eig3(f64)        3.2e-16   7.1e-17   3.2e-16   0.0e+00   0.0e+00   1.4e-15   0.00     0        0
+exact_triple    1e+00   lib:mjuu_eig3(f64)       3.2e-16   7.1e-17   3.2e-16   0.0e+00   0.0e+00   1.4e-15   0.00     0        0
+exact_pair_int  1e+00   lib:mju_eig3(f64)        3.8e-15   6.8e-16   6.2e-16   0.0e+00   4.4e-15   0.0e+00   1.58     2        0
+exact_pair_int  1e+00   lib:mjuu_eig3(f64)       6.6e-15   2.7e-15   6.2e-16   0.0e+00   6.2e-15   0.0e+00   1.58     2        0
+rank2           1e+00   lib:mju_eig3(f64)        8.8e-15   2.0e-15   4.3e-15   0.0e+00   4.7e-15   8.0e-15   7.94    10        0
+rank2           1e+00   lib:mjuu_eig3(f64)       1.8e-14   4.9e-15   4.3e-15   0.0e+00   1.2e-14   8.0e-15   7.94    10        0
+rank1           1e+00   lib:mju_eig3(f64)        6.1e-15   9.2e-16   1.3e-15   0.0e+00   4.4e-15   4.8e-15   2.00     2        0
+rank1           1e+00   lib:mjuu_eig3(f64)       8.9e-15   2.8e-15   1.3e-15   0.0e+00   7.5e-15   4.8e-15   2.00     2        0
+near_diagonal   1e+00   lib:mju_eig3(f64)        6.7e-15   2.5e-15   4.1e-15   0.0e+00   4.9e-15   0.0e+00   2.93     9        0
+near_diagonal   1e+00   lib:mjuu_eig3(f64)       1.5e-14   5.1e-15   4.1e-15   0.0e+00   1.1e-14   0.0e+00   2.93     9        0
+inertia_cloud   1e+00   lib:mju_eig3(f64)        8.7e-15   3.2e-15   4.2e-15   0.0e+00   4.4e-15   0.0e+00   7.08     9        0
+inertia_cloud   1e+00   lib:mjuu_eig3(f64)       1.6e-14   9.1e-15   4.2e-15   0.0e+00   1.3e-14   0.0e+00   7.08     9        0
+tiny_rotation   1e+00   lib:mju_eig3(f64)        8.5e-15   1.3e-15   4.5e-15   0.0e+00   4.7e-15   7.3e-15   5.76    10        0
+tiny_rotation   1e+00   lib:mjuu_eig3(f64)       1.1e-14   1.3e-15   4.5e-15   0.0e+00   7.1e-15   7.3e-15   5.76    10        0
+indefinite      1e+00   lib:mju_eig3(f64)        9.1e-15   2.1e-15   4.6e-15   0.0e+00   4.7e-15   8.8e-15   8.00    10        0
+indefinite      1e+00   lib:mjuu_eig3(f64)       1.6e-14   4.9e-15   4.5e-15   0.0e+00   1.2e-14   8.8e-15   8.00    10        0
+
+== library functions, scale sweep
+family          scale   solver                 recon_max recon_med  offd_max  axis_max  orth_max  eval_max it_avg it_mx     ncap
+separated       1e-12   lib:mju_eig3(f64)        9.5e-15   1.8e-15   4.4e-15   3.6e-14   4.7e-15   7.4e-15   8.09    10        0
+separated       1e-12   lib:mjuu_eig3(f64)       1.8e-14   3.3e-15   4.3e-15   3.6e-14   1.2e-14   7.4e-15   8.09    10        0
+separated       1e-09   lib:mju_eig3(f64)        9.1e-15   2.1e-15   4.5e-15   3.4e-14   4.7e-15   7.5e-15   8.09    10        0
+separated       1e-09   lib:mjuu_eig3(f64)       1.7e-14   4.9e-15   4.3e-15   3.4e-14   1.2e-14   7.5e-15   8.09    10        0
+separated       1e-06   lib:mju_eig3(f64)        9.0e-15   2.1e-15   4.3e-15   3.5e-14   4.7e-15   7.1e-15   8.09    10        0
+separated       1e-06   lib:mjuu_eig3(f64)       1.8e-14   4.9e-15   4.3e-15   3.5e-14   1.3e-14   7.1e-15   8.09    10        0
+separated       1e-03   lib:mju_eig3(f64)        9.2e-15   2.1e-15   4.3e-15   3.6e-14   4.7e-15   7.4e-15   8.09    10        0
+separated       1e-03   lib:mjuu_eig3(f64)       1.7e-14   4.9e-15   4.3e-15   3.6e-14   1.2e-14   7.4e-15   8.09    10        0
+separated       1e+03   lib:mju_eig3(f64)        8.8e-15   2.1e-15   4.3e-15   3.4e-14   4.7e-15   7.3e-15   8.09    10        0
+separated       1e+03   lib:mjuu_eig3(f64)       1.6e-14   4.9e-15   4.2e-15   3.4e-14   1.2e-14   7.3e-15   8.09    10        0
+separated       1e+06   lib:mju_eig3(f64)        8.9e-15   2.1e-15   4.3e-15   3.5e-14   4.7e-15   7.2e-15   8.09    10        0
+separated       1e+06   lib:mjuu_eig3(f64)       1.7e-14   4.9e-15   4.3e-15   3.5e-14   1.3e-14   7.2e-15   8.09    10        0
+separated       1e+09   lib:mju_eig3(f64)        8.8e-15   2.1e-15   4.3e-15   3.4e-14   4.7e-15   7.3e-15   8.09    10        0
+separated       1e+09   lib:mjuu_eig3(f64)       1.7e-14   4.9e-15   4.3e-15   3.4e-14   1.2e-14   7.3e-15   8.09    10        0
+exact_pair      1e-12   lib:mju_eig3(f64)        5.9e-15   8.4e-16   1.1e-15   0.0e+00   4.7e-15   3.8e-15   2.00     2        0
+exact_pair      1e-12   lib:mjuu_eig3(f64)       9.0e-15   1.4e-15   9.2e-16   0.0e+00   7.5e-15   3.8e-15   2.00     2        0
+exact_pair      1e-09   lib:mju_eig3(f64)        6.1e-15   9.4e-16   1.1e-15   0.0e+00   4.4e-15   3.9e-15   2.00     2        0
+exact_pair      1e-09   lib:mjuu_eig3(f64)       9.2e-15   2.8e-15   9.9e-16   0.0e+00   7.5e-15   3.9e-15   2.00     2        0
+exact_pair      1e-06   lib:mju_eig3(f64)        5.9e-15   9.4e-16   1.3e-15   0.0e+00   4.4e-15   3.8e-15   2.00     2        0
+exact_pair      1e-06   lib:mjuu_eig3(f64)       9.1e-15   2.8e-15   9.3e-16   0.0e+00   7.5e-15   3.8e-15   2.00     2        0
+exact_pair      1e-03   lib:mju_eig3(f64)        5.9e-15   9.4e-16   1.0e-15   0.0e+00   4.7e-15   3.9e-15   2.00     2        0
+exact_pair      1e-03   lib:mjuu_eig3(f64)       9.2e-15   2.8e-15   1.0e-15   0.0e+00   7.5e-15   3.9e-15   2.00     2        0
+exact_pair      1e+03   lib:mju_eig3(f64)        6.0e-15   9.7e-16   1.1e-15   0.0e+00   4.7e-15   3.8e-15   2.00     2        0
+exact_pair      1e+03   lib:mjuu_eig3(f64)       1.1e-14   2.9e-15   1.2e-15   0.0e+00   1.0e-14   3.8e-15   2.00     2        0
+exact_pair      1e+06   lib:mju_eig3(f64)        5.9e-15   1.3e-15   1.2e-15   0.0e+00   4.7e-15   3.8e-15   2.00     2        0
+exact_pair      1e+06   lib:mjuu_eig3(f64)       1.2e-14   3.9e-15   9.4e-16   0.0e+00   1.0e-14   3.8e-15   2.00     2        0
+exact_pair      1e+09   lib:mju_eig3(f64)        5.9e-15   1.3e-15   1.0e-15   0.0e+00   4.7e-15   4.3e-15   2.00     2        0
+exact_pair      1e+09   lib:mjuu_eig3(f64)       1.2e-14   3.9e-15   9.4e-16   0.0e+00   1.0e-14   4.3e-15   2.00     2        0

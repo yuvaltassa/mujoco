@@ -1,0 +1,43 @@
+bodies with changed iquat: 1215
+  frame rotated by more than 0.1 rad: 1
+  frame rotated by more than 0.01 rad: 101
+  frame rotated by more than 0.001 rad: 101
+  frame rotated by more than 0.0001 rad: 101
+  frame rotated by more than 1e-05 rad: 101
+  frame rotated by more than 1e-06 rad: 106
+ angle[rad]  min rel gap  max moment  model:body
+   5.24e-01     1.07e-16    3.33e+01  materials.xml:1
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:100
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:99
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:98
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:97
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:96
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:95
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:94
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:93
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:92
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:91
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:90
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:89
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:88
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:87
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:86
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:85
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:84
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:83
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:82
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:81
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:80
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:79
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:78
+   5.07e-02     3.08e-08    1.67e-02  100spheremesh.xml:77
+
+largest angle among bodies with well-separated moments (rel gap > 1e-2):
+   9.41e-07     2.25e-02    1.43e+03  midphase.xml:17
+   7.13e-07     2.27e-01    4.02e-02  fromto_convex.xml:6
+   1.88e-07     7.80e-02    6.45e-03  2humanoid100_chol.xml:86
+   1.88e-07     7.80e-02    6.45e-03  2humanoid100_chol.xml:83
+   1.88e-07     7.80e-02    6.45e-03  2humanoid100_chol.xml:30
+   1.88e-07     7.80e-02    6.45e-03  2humanoid100_chol.xml:27
+   1.88e-07     7.80e-02    6.45e-03  100_humanoids_chol.xml:1594
+   1.88e-07     7.80e-02    6.45e-03  100_humanoids_chol.xml:1591
