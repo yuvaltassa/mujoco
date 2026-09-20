@@ -743,7 +743,7 @@ void mjCModel::operator-=(mjsElement* el) {
 
     case mjOBJ_GEOM: {
       mjCGeom* geom = static_cast<mjCGeom*>(el);
-      DeleteImplicitPlugin(geom->plugin);
+      DeleteImplicitPlugin(geom->spec.plugin);
       deletefromlist(&(geom->body->geoms), el);
       break;
     }
@@ -766,21 +766,21 @@ void mjCModel::operator-=(mjsElement* el) {
 
     case mjOBJ_MESH: {
       mjCMesh* mesh = static_cast<mjCMesh*>(el);
-      DeleteImplicitPlugin(mesh->plugin);
+      DeleteImplicitPlugin(mesh->spec.plugin);
       deletefromlist(object_lists_[mjOBJ_MESH], el);
       break;
     }
 
     case mjOBJ_ACTUATOR: {
       mjCActuator* actuator = static_cast<mjCActuator*>(el);
-      DeleteImplicitPlugin(actuator->plugin);
+      DeleteImplicitPlugin(actuator->spec.plugin);
       deletefromlist(object_lists_[mjOBJ_ACTUATOR], el);
       break;
     }
 
     case mjOBJ_SENSOR: {
       mjCSensor* sensor = static_cast<mjCSensor*>(el);
-      DeleteImplicitPlugin(sensor->plugin);
+      DeleteImplicitPlugin(sensor->spec.plugin);
       deletefromlist(object_lists_[mjOBJ_SENSOR], el);
       break;
     }

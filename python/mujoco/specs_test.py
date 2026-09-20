@@ -1079,6 +1079,30 @@ class SpecsTest(absltest.TestCase):
     self.assertIsNotNone(model)
     self.assertEqual(model.nplugin, 0)
 
+  def test_delete_implicit_plugin_before_compile(self):
+    spec = mujoco.MjSpec.from_string("""
+      <mujoco>
+        <extension>
+          <plugin plugin="mujoco.pid"/>
+        </extension>
+
+        <worldbody>
+          <body>
+            <joint name="joint"/>
+            <geom size="1"/>
+          </body>
+        </worldbody>
+
+        <actuator>
+          <plugin name="actuator" joint="joint" plugin="mujoco.pid"/>
+        </actuator>
+      </mujoco>
+    """)
+    self.assertLen(spec.plugins, 1)
+    spec.delete(spec.actuator('actuator'))
+    self.assertEmpty(spec.plugins)
+    self.assertEqual(spec.compile().nplugin, 0)
+
   def testPluginAssignment(self):
     spec = mujoco.MjSpec()
     body = spec.worldbody.add_body()
