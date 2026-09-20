@@ -57,6 +57,8 @@ Bug fixes
   alternatives and for frames enclosing the converted body.
 - :ref:`mjs_bodyToFrame` now keeps elements of the converted body in their :ref:`frames<body-frame>`. Previously
   elements nested in a frame were moved out of it and lost its transformation.
+- The frame made by :ref:`mjs_bodyToFrame` now has a parent body. Previously :ref:`mjs_getParent` returned an invalid
+  pointer for it and :ref:`attaching<mjs_attach>` to it crashed.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
