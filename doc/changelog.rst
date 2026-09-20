@@ -73,6 +73,11 @@ Bug fixes
   and corrupted memory. Fixed several bugs in :ref:`mjs_bodyToFrame`: orientation alternatives and nested frames of the
   converted body were dropped, inertials were merged incorrectly, errors were thrown through the C API, and the new
   frame had no parent body.
+- :ref:`fusestatic<compiler-fusestatic>` now replaces a fused body with a :ref:`frame<frame>` in its parent, so
+  that recompiling, copying or saving the :ref:`mjSpec` reproduces the fused model. Previously, recompiling misplaced
+  the elements and child bodies of fused bodies and lost their explicit inertia; elements and child bodies nested in a
+  frame of a fused body were read from freed memory and dropped from saved XML; cameras and lights of fused bodies
+  were misplaced; and under :ref:`alignfree<compiler-alignfree>`, so were the cameras and lights of aligned bodies.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

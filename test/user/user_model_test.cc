@@ -26,6 +26,7 @@
 #include <absl/strings/str_format.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mujoco.h>
+#include "src/xml/xml_numeric_format.h"
 #include "test/compare_model.h"
 #include "test/fixture.h"
 
@@ -776,6 +777,210 @@ TEST_F(FuseStaticTest, FuseStaticLightInBody) {
   ASSERT_THAT(m.get(), NotNull()) << error.data();
   EXPECT_EQ(m->nbody, 2) << "Static body should be fused";
   EXPECT_EQ(m->nlight, 1);
+}
+
+// expect equal global poses of same-named elements, equal joint-space inertia
+static void ExpectEquivalent(const MjModelPtr& m1, const MjModelPtr& m2) {
+  ASSERT_EQ(m1->nC, m2->nC);
+  MjDataPtr d1 = MakeData(m1);
+  MjDataPtr d2 = MakeData(m2);
+  mj_forward(m1.get(), d1.get());
+  mj_forward(m2.get(), d2.get());
+
+  struct Field {
+    const char* name;
+    mjtObj type;
+    mjtSize num;
+    int dim;
+    const mjtNum* x1;
+    const mjtNum* x2;
+  };
+  const Field fields[] = {
+      {"xpos", mjOBJ_BODY, m1->nbody, 3, d1->xpos, d2->xpos},
+      {"xmat", mjOBJ_BODY, m1->nbody, 9, d1->xmat, d2->xmat},
+      {"xanchor", mjOBJ_JOINT, m1->njnt, 3, d1->xanchor, d2->xanchor},
+      {"xaxis", mjOBJ_JOINT, m1->njnt, 3, d1->xaxis, d2->xaxis},
+      {"geom_xpos", mjOBJ_GEOM, m1->ngeom, 3, d1->geom_xpos, d2->geom_xpos},
+      {"geom_xmat", mjOBJ_GEOM, m1->ngeom, 9, d1->geom_xmat, d2->geom_xmat},
+      {"site_xpos", mjOBJ_SITE, m1->nsite, 3, d1->site_xpos, d2->site_xpos},
+      {"site_xmat", mjOBJ_SITE, m1->nsite, 9, d1->site_xmat, d2->site_xmat},
+      {"cam_xpos", mjOBJ_CAMERA, m1->ncam, 3, d1->cam_xpos, d2->cam_xpos},
+      {"cam_xmat", mjOBJ_CAMERA, m1->ncam, 9, d1->cam_xmat, d2->cam_xmat},
+      {"light_xpos", mjOBJ_LIGHT, m1->nlight, 3, d1->light_xpos,
+       d2->light_xpos},
+      {"light_xdir", mjOBJ_LIGHT, m1->nlight, 3, d1->light_xdir,
+       d2->light_xdir},
+  };
+  for (const Field& f : fields) {
+    for (int i = 0; i < f.num; i++) {
+      const char* name = mj_id2name(m1.get(), f.type, i);
+      ASSERT_THAT(name, NotNull()) << f.name << " " << i;
+      int j = mj_name2id(m2.get(), f.type, name);
+      ASSERT_GE(j, 0) << name;
+      EXPECT_THAT(
+          AsVector(f.x1 + f.dim * i, f.dim),
+          Pointwise(MjNear(1e-15, 2e-6), AsVector(f.x2 + f.dim * j, f.dim)))
+          << f.name << " of " << name;
+    }
+  }
+
+  // fused inertia is as accurate as its principal axes
+  mjtNum scale = 1 / mju_norm(d2->M, m2->nC);
+  mju_scl(d1->M, d1->M, scale, m1->nC);
+  mju_scl(d2->M, d2->M, scale, m2->nC);
+  EXPECT_THAT(AsVector(d1->M, m1->nC),
+              Pointwise(MjNear(1e-6, 1e-6), AsVector(d2->M, m2->nC)));
+}
+
+// expect the fused model to be equivalent to the model which is not fused,
+// and to be reproduced by recompiling, copying and saving the fused spec
+static void ExpectCoherentFuse(const std::string& fuse_xml,
+                               const std::string& no_fuse_xml, mjtNum tol) {
+  std::array<char, 1024> error;
+  MjModelPtr no_fuse =
+      LoadModelFromString(no_fuse_xml, error.data(), error.size());
+  ASSERT_THAT(no_fuse.get(), NotNull()) << error.data();
+
+  std::unique_ptr<mjSpec, decltype(&mj_deleteSpec)> spec(
+      mj_parseXMLString(fuse_xml.c_str(), nullptr, error.data(), error.size()),
+      mj_deleteSpec);
+  ASSERT_THAT(spec.get(), NotNull()) << error.data();
+  MjModelPtr fuse(mj_compile(spec.get(), nullptr));
+  ASSERT_THAT(fuse.get(), NotNull()) << mjs_getError(spec.get());
+  EXPECT_LT(fuse->nbody, no_fuse->nbody);
+  ExpectEquivalent(fuse, no_fuse);
+
+  std::string field;
+  MjModelPtr recompiled(mj_compile(spec.get(), nullptr));
+  ASSERT_THAT(recompiled.get(), NotNull()) << mjs_getError(spec.get());
+  EXPECT_LE(CompareModel(fuse.get(), recompiled.get(), field), tol)
+      << "recompiled model is different: " << field;
+
+  std::unique_ptr<mjSpec, decltype(&mj_deleteSpec)> copy(
+      mj_copySpec(spec.get()), mj_deleteSpec);
+  MjModelPtr copied(mj_compile(copy.get(), nullptr));
+  ASSERT_THAT(copied.get(), NotNull()) << mjs_getError(copy.get());
+  EXPECT_LE(CompareModel(fuse.get(), copied.get(), field), tol)
+      << "copied model is different: " << field;
+
+  FullFloatPrecision increase_precision;
+  MjModelPtr saved = LoadModelFromString(SaveAndReadXml(spec.get()),
+                                         error.data(), error.size());
+  ASSERT_THAT(saved.get(), NotNull()) << error.data();
+  EXPECT_LE(CompareModel(fuse.get(), saved.get(), field), tol)
+      << "saved model is different: " << field;
+}
+
+TEST_F(FuseStaticTest, FuseStaticFrames) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="%s"/>
+    <worldbody>
+      <body name="fixed" pos="1 2 3" euler="10 20 30">
+        <frame pos="0 0 1" euler="0 0 30">
+          <geom name="fixed" type="box" size=".1 .2 .3" pos=".1 0 0"/>
+        </frame>
+      </body>
+      <body name="moving" pos="0 0 1">
+        <freejoint name="free"/>
+        <inertial pos=".1 .2 .3" mass="2" diaginertia="1 2 3"/>
+        <geom name="moving" size=".1"/>
+        <frame name="wrapper" pos="0 0 .5" euler="0 90 0">
+          <body name="static" pos="1 0 0" euler="0 0 90">
+            <geom name="static" type="box" size=".1 .2 .3" pos="0 0 1"/>
+            <frame name="outer" pos="0 1 0" euler="90 0 0">
+              <geom name="outer" type="box" size=".3 .2 .1" pos=".1 .2 .3"/>
+              <geom name="fromto" type="box" size=".1" fromto="0 0 0 .1 .2 .3"/>
+              <frame name="inner" pos="0 0 1" euler="0 45 0">
+                <site name="inner" pos=".2 .3 .4" euler="0 30 0"/>
+                <camera name="inner" pos=".3 .4 .5" euler="10 20 30"/>
+                <light name="inner" pos=".4 .5 .6" dir="1 2 3"/>
+                <body name="child" pos=".5 .6 .7" euler="30 20 10">
+                  <joint name="hinge" axis="1 2 3"/>
+                  <geom name="child" type="box" size=".1 .2 .3" pos=".1 0 0"/>
+                </body>
+                <body name="nested" pos=".7 .6 .5" euler="10 30 20">
+                  <geom name="nested" type="box" size=".2 .3 .1" pos="0 .1 0"/>
+                </body>
+              </frame>
+            </frame>
+          </body>
+        </frame>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  ExpectCoherentFuse(absl::StrFormat(xml, "true"),
+                     absl::StrFormat(xml, "false"), 0);
+}
+
+TEST_F(FuseStaticTest, FuseStaticInertia) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="%s"/>
+    <worldbody>
+      <body name="moving">
+        <freejoint name="free"/>
+        %s
+        <geom name="moving" type="box" size=".1 .2 .3" pos=".1 0 0"/>
+        <body name="static" pos="1 0 0" euler="10 20 30">
+          %s
+          <geom name="static" type="box" size=".3 .1 .2" pos="0 .2 0"/>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  static constexpr char parent[] =
+      R"(<inertial pos=".1 .2 .3" mass="2" diaginertia="1 2 3"/>)";
+  static constexpr char parent_full[] =
+      R"(<inertial pos=".1 .2 .3" mass="2" fullinertia="4 3 2 .3 .2 .1"/>)";
+  static constexpr char parent_framed[] = R"(
+      <frame pos="0 0 1" euler="0 0 30">
+        <inertial pos=".1 .2 .3" mass="2" diaginertia="1 2 3"/>
+      </frame>)";
+  static constexpr char child[] =
+      R"(<inertial pos=".3 .2 .1" mass="3" diaginertia="3 2 4"/>)";
+  static constexpr char child_framed[] = R"(
+      <frame pos="0 1 0" euler="30 0 0">
+        <inertial pos=".3 .2 .1" mass="3" diaginertia="3 2 4"/>
+      </frame>)";
+
+  for (const char* parent_inertial : {"", parent, parent_full, parent_framed}) {
+    for (const char* child_inertial : {"", child, child_framed}) {
+      SCOPED_TRACE(absl::StrFormat("parent '%s' child '%s'", parent_inertial,
+                                   child_inertial));
+
+      // inertia inferred from the fused geoms is as accurate as principal axes
+      bool inferred = !*parent_inertial && !*child_inertial;
+      ExpectCoherentFuse(
+          absl::StrFormat(xml, "true", parent_inertial, child_inertial),
+          absl::StrFormat(xml, "false", parent_inertial, child_inertial),
+          inferred ? 1e-5 : 0);
+    }
+  }
+}
+
+// fusestatic does not discard the free joint alignment of cameras and lights
+TEST_F(FuseStaticTest, FuseStaticAlignFree) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="%s" alignfree="true"/>
+    <worldbody>
+      <body name="moving" pos="0 0 1">
+        <freejoint name="free"/>
+        <geom name="moving" type="box" size=".1 .2 .3" pos="1 2 3" euler="10 20 30"/>
+        <camera name="moving" pos="0 1 0" euler="30 20 10"/>
+        <light name="moving" pos="0 1 0" dir="1 2 3"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  MjModelPtr fuse = LoadModelFromString(absl::StrFormat(xml, "true"));
+  MjModelPtr no_fuse = LoadModelFromString(absl::StrFormat(xml, "false"));
+  ASSERT_THAT(fuse.get(), NotNull());
+  ASSERT_THAT(no_fuse.get(), NotNull());
+  ExpectEquivalent(fuse, no_fuse);
 }
 
 // ------------- test discardvisual --------------------------------------------

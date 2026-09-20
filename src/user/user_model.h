@@ -547,9 +547,13 @@ class mjCModel : public mjCModel_, private mjSpec {
   // generate a signature for the model
   uint64_t Signature();
 
-  // reassign children of a body to a new parent
+  // reassign children of a body to a new parent, nest them in the frame replacing the body
   template <class T>
-  void ReassignChild(std::vector<T*>& dest, std::vector<T*>& list, mjCBody* parent, mjCBody* body);
+  void ReassignChild(std::vector<T*>& dest,
+                     std::vector<T*>& list,
+                     mjCBody*         parent,
+                     mjCBody*         body,
+                     mjCFrame*        frame);
 
   // resolve references in a list of objects
   template <class T>
