@@ -53,6 +53,9 @@ Bug fixes
   to another spec, or cannot be deleted (the world body, the spec itself, a tendon wrap). Previously such calls led to
   memory errors when the spec was deleted, for example after ``spec.delete(geom)`` was called twice in Python, and
   deleting an element of another spec left the spec unable to compile.
+- :ref:`mjs_delete` now also deletes the implicitly created :ref:`plugin<exPlugin>` instance of a geom, mesh, actuator
+  or sensor when the spec was not compiled before the deletion. Previously the instance was left behind and the next
+  compilation crashed.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

@@ -3674,6 +3674,102 @@ TEST_F(MujocoTest, DeletePluginBeforeElement) {
   mj_deleteSpec(spec);
 }
 
+TEST_F(MujocoTest, DeleteElementWithPluginOfOtherSpec) {
+  // two specs with an actuator, the plugin instance is made by the second one
+  mjSpec* specs[2];
+  mjsActuator* actuators[2];
+  for (int i = 0; i < 2; i++) {
+    specs[i] = mj_makeSpec();
+    mjs_activatePlugin(specs[i], "mujoco.pid");
+    mjsBody* body = mjs_addBody(mjs_findBody(specs[i], "world"), 0);
+    mjs_setName(mjs_addJoint(body, 0)->element, "joint");
+    mjs_addGeom(body, 0)->size[0] = 1;
+    actuators[i] = mjs_addActuator(specs[i], 0);
+    mjs_setString(actuators[i]->target, "joint");
+    mjs_setString(actuators[i]->plugin.plugin_name, "mujoco.pid");
+    actuators[i]->plugin.active = true;
+    actuators[i]->trntype = mjTRN_JOINT;
+  }
+  actuators[1]->plugin.element = mjs_addPlugin(specs[1])->element;
+  actuators[0]->plugin.element = actuators[1]->plugin.element;
+
+  // the actuator is deleted, the instance that is not in its spec is left alone
+  EXPECT_EQ(mjs_delete(specs[0], actuators[0]->element), 0);
+  mjModel* model = mj_compile(specs[0], 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(specs[0]);
+  EXPECT_EQ(model->nu, 0);
+  mjModel* other_model = mj_compile(specs[1], 0);
+  ASSERT_THAT(other_model, NotNull()) << mjs_getError(specs[1]);
+  EXPECT_EQ(other_model->nplugin, 1);
+
+  mj_deleteModel(model);
+  mj_deleteModel(other_model);
+  mj_deleteSpec(specs[0]);
+  mj_deleteSpec(specs[1]);
+}
+
+TEST_F(MujocoTest, DeletePluginOfUncompiledElement) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <extension>
+      <plugin plugin="mujoco.pid"/>
+      <plugin plugin="mujoco.sdf.torus"/>
+      <plugin plugin="mujoco.sensor.touch_grid"/>
+    </extension>
+
+    <asset>
+      <mesh name="mesh">
+        <plugin plugin="mujoco.sdf.torus"/>
+      </mesh>
+    </asset>
+
+    <worldbody>
+      <body>
+        <joint name="joint"/>
+        <geom size=".1"/>
+        <geom name="geom" type="sdf" mesh="mesh">
+          <plugin plugin="mujoco.sdf.torus"/>
+        </geom>
+        <frame name="frame">
+          <geom type="sdf" mesh="mesh">
+            <plugin plugin="mujoco.sdf.torus"/>
+          </geom>
+        </frame>
+        <site name="site"/>
+      </body>
+    </worldbody>
+
+    <actuator>
+      <plugin name="actuator" joint="joint" plugin="mujoco.pid"/>
+    </actuator>
+
+    <sensor>
+      <plugin name="sensor" plugin="mujoco.sensor.touch_grid" objtype="site" objname="site"/>
+    </sensor>
+  </mujoco>)";
+
+  std::array<char, 1024> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+
+  // the plugin instances are deleted with their elements, in a spec that was
+  // never compiled
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(spec, mjOBJ_GEOM, "geom")), 0);
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(spec, mjOBJ_FRAME, "frame")), 0);
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(spec, mjOBJ_MESH, "mesh")), 0);
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(spec, mjOBJ_ACTUATOR, "actuator")),
+            0);
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(spec, mjOBJ_SENSOR, "sensor")), 0);
+  ASSERT_THAT(mjs_firstElement(spec, mjOBJ_PLUGIN), IsNull());
+
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(model->nplugin, 0);
+
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
 TEST_F(MujocoTest, ErrorWhenCompilingOrphanedSpec) {
   static constexpr char xml[] = R"(
   <mujoco>
