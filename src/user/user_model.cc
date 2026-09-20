@@ -4782,8 +4782,21 @@ void mjCModel::FuseStatic(void) {
     // skip if body has joints or mocap
     if (!body->joints.empty() || body->mocap) { continue; }
 
-    //------------- add mass and inertia (if parent not world)
-    if (body->parent && body->parent->name != "world" && body->mass >= mjMINVAL) {
+    // skip if body has a plugin, its passive forces are specific to the body
+    if (body->plugin.active) { continue; }
+
+    // skip if body has a sleep policy, so that it is rejected as it is without fusing
+    if (body->sleep != mjSLEEP_AUTO) { continue; }
+
+    // mass is fused with the parent's (if parent not world)
+    bool fusemass = par->name != "world" && body->mass >= mjMINVAL;
+
+    // skip if gravcomp is different, it applies to the mass of each body separately
+    if (fusemass && body->gravcomp != par->gravcomp) { continue; }
+
+    //------------- add mass and inertia
+
+    if (fusemass) {
       par->AccumulateInertia(body);
 
       // make the fused inertia explicit, unless recompiling infers it from the fused geoms

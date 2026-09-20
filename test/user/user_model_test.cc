@@ -25,6 +25,7 @@
 #include <gtest/gtest.h>
 #include <absl/strings/str_format.h>
 #include <mujoco/mjmodel.h>
+#include <mujoco/mjplugin.h>
 #include <mujoco/mujoco.h>
 #include "src/xml/xml_numeric_format.h"
 #include "test/compare_model.h"
@@ -780,10 +781,14 @@ TEST_F(FuseStaticTest, FuseStaticLightInBody) {
 }
 
 // expect equal global poses of same-named elements, equal joint-space inertia
+// and equal unconstrained acceleration of a moving model
 static void ExpectEquivalent(const MjModelPtr& m1, const MjModelPtr& m2) {
+  ASSERT_EQ(m1->nv, m2->nv);
   ASSERT_EQ(m1->nC, m2->nC);
   MjDataPtr d1 = MakeData(m1);
   MjDataPtr d2 = MakeData(m2);
+  mju_fill(d1->qvel, 1, m1->nv);
+  mju_fill(d2->qvel, 1, m2->nv);
   mj_forward(m1.get(), d1.get());
   mj_forward(m2.get(), d2.get());
 
@@ -830,6 +835,13 @@ static void ExpectEquivalent(const MjModelPtr& m1, const MjModelPtr& m2) {
   mju_scl(d2->M, d2->M, scale, m2->nC);
   EXPECT_THAT(AsVector(d1->M, m1->nC),
               Pointwise(MjNear(1e-6, 1e-6), AsVector(d2->M, m2->nC)));
+
+  // so are the bias and passive forces
+  scale = 1 / mju_norm(d2->qacc_smooth, m2->nv);
+  mju_scl(d1->qacc_smooth, d1->qacc_smooth, scale, m1->nv);
+  mju_scl(d2->qacc_smooth, d2->qacc_smooth, scale, m2->nv);
+  EXPECT_THAT(AsVector(d1->qacc_smooth, m1->nv),
+              Pointwise(MjNear(2e-6, 1e-5), AsVector(d2->qacc_smooth, m2->nv)));
 }
 
 // expect the fused model to be equivalent to the model which is not fused,
@@ -981,6 +993,120 @@ TEST_F(FuseStaticTest, FuseStaticAlignFree) {
   ASSERT_THAT(fuse.get(), NotNull());
   ASSERT_THAT(no_fuse.get(), NotNull());
   ExpectEquivalent(fuse, no_fuse);
+}
+
+// gravcomp applies to the mass of each body, fused masses have equal gravcomp
+TEST_F(FuseStaticTest, FuseStaticGravcomp) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="%s"/>
+    <worldbody>
+      <body name="fixed" gravcomp="1">
+        <geom name="fixed" size=".1"/>
+      </body>
+      <body name="moving" pos="0 0 1" gravcomp="%s">
+        <joint name="hinge" axis="0 1 0"/>
+        <geom name="moving" size=".1"/>
+        <body name="massless" gravcomp="2">
+          <site name="massless"/>
+        </body>
+        <body name="static" pos="1 0 0" gravcomp="%s">
+          <geom name="static" size=".1"/>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  struct Case {
+    const char* parent;
+    const char* child;
+    int nbody;
+  };
+
+  // bodies which are fixed to the world or massless are always fused
+  const Case cases[] = {
+      {"0", ".5", 3}, {".5", "0", 3}, {".5", "2", 3}, {".5", ".5", 2}};
+  for (const Case& c : cases) {
+    SCOPED_TRACE(absl::StrFormat("parent %s child %s", c.parent, c.child));
+    std::string fuse_xml = absl::StrFormat(xml, "true", c.parent, c.child);
+    MjModelPtr fuse = LoadModelFromString(fuse_xml);
+    ASSERT_THAT(fuse.get(), NotNull());
+    EXPECT_EQ(fuse->nbody, c.nbody);
+    ExpectCoherentFuse(fuse_xml,
+                       absl::StrFormat(xml, "false", c.parent, c.child),
+                       c.nbody == 2 ? 1e-5 : 0);
+  }
+}
+
+// a body with a plugin is not fused, the plugin's forces are specific to it
+TEST_F(FuseStaticTest, FuseStaticPlugin) {
+  // passive plugin applying an upward force to the center of mass of its bodies
+  mjpPlugin plugin;
+  mjp_defaultPlugin(&plugin);
+  plugin.name = "mujoco.test.lift";
+  plugin.capabilityflags |= mjPLUGIN_PASSIVE;
+  plugin.nstate = +[](const mjModel* m, int instance) { return 0; };
+  plugin.compute = +[](const mjModel* m, mjData* d, int instance, int type) {
+    for (int i = 1; i < m->nbody; i++) {
+      if (m->body_plugin[i] == instance) {
+        mjtNum force[3] = {0, 0, 10}, torque[3] = {0};
+        mj_applyFT(m, d, force, torque, d->xipos + 3 * i, i, d->qfrc_passive);
+      }
+    }
+  };
+  mjp_registerPlugin(&plugin);
+
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="%s"/>
+    <extension>
+      <plugin plugin="mujoco.test.lift"/>
+    </extension>
+    <worldbody>
+      <body name="moving" pos="0 0 1">
+        <joint name="hinge" axis="0 1 0"/>
+        <geom name="moving" size=".1"/>
+        <body name="static" pos="1 0 0">
+          <geom name="static" size=".1"/>
+          <plugin plugin="mujoco.test.lift"/>
+        </body>
+        <body name="fused" pos="0 1 0">
+          <geom name="fused" size=".1"/>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  std::string fuse_xml = absl::StrFormat(xml, "true");
+  MjModelPtr fuse = LoadModelFromString(fuse_xml);
+  ASSERT_THAT(fuse.get(), NotNull());
+  EXPECT_EQ(fuse->nbody, 3);
+  ExpectCoherentFuse(fuse_xml, absl::StrFormat(xml, "false"), 1e-5);
+}
+
+// the sleep policy of a static body is an error, with or without fusing
+TEST_F(FuseStaticTest, FuseStaticSleepPolicy) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="%s"/>
+    <worldbody>
+      <body>
+        <joint/>
+        <geom size=".1"/>
+        <body sleep="never">
+          <geom size=".1"/>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  for (const char* fusestatic : {"false", "true"}) {
+    std::array<char, 1024> error;
+    MjModelPtr m = LoadModelFromString(absl::StrFormat(xml, fusestatic),
+                                       error.data(), error.size());
+    EXPECT_THAT(m.get(), IsNull()) << "fusestatic " << fusestatic;
+    EXPECT_THAT(error.data(), HasSubstr("sleep policy only allowed"));
+  }
 }
 
 // ------------- test discardvisual --------------------------------------------

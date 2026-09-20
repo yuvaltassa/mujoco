@@ -933,11 +933,16 @@ has any effect. The settings here are global and apply to the entire model.
 
    - They are referenced by another element in the model.
    - They contain a site which is referenced by a :ref:`force<sensor-force>` or :ref:`torque<sensor-torque>` sensor.
+   - They are :ref:`mocap<body-mocap>` bodies.
+   - They have a :ref:`plugin<body-plugin>`.
+   - They have mass and a :ref:`gravcomp<body-gravcomp>` which is different from their parent's, unless the parent is
+     the world.
 
    This optimization is particularly useful when importing URDF models which often have many dummy bodies, but can also
    be used to optimize MJCF models. After optimization, the new model has identical kinematics and dynamics as the
    original but is faster to simulate. Fusing modifies the :ref:`mjSpec`: a fused body is replaced by a
-   :ref:`frame<frame>` in its parent, so recompiling or saving the spec yields the fused model.
+   :ref:`frame<frame>` in its parent, so recompiling or saving the spec yields the fused model. The name and
+   :ref:`user<body-user>` data of a fused body are discarded.
 
 .. _compiler-inertiafromgeom:
 

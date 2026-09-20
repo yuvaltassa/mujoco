@@ -78,6 +78,11 @@ Bug fixes
   the elements and child bodies of fused bodies and lost their explicit inertia; elements and child bodies nested in a
   frame of a fused body were read from freed memory and dropped from saved XML; cameras and lights of fused bodies
   were misplaced; and under :ref:`alignfree<compiler-alignfree>`, so were the cameras and lights of aligned bodies.
+- :ref:`fusestatic<compiler-fusestatic>` no longer fuses bodies whose :ref:`gravcomp<body-gravcomp>` is different from
+  their parent's, or which have a :ref:`plugin<body-plugin>`. Previously, the fused mass took on the gravity
+  compensation of the parent and the forces of the plugin were lost, changing the dynamics of the model. The invalid
+  :ref:`sleep<body-sleep>` policy of a static body is now an error with :at:`fusestatic` too, rather than being
+  silently discarded.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
