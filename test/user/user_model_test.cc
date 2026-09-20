@@ -1030,6 +1030,56 @@ TEST_F(FuseStaticTest, FuseStaticGravcomp) {
   }
 }
 
+// fluid forces apply to the inertia and ellipsoid geoms of each body, which are
+// not fused in a fluid
+TEST_F(FuseStaticTest, FuseStaticFluid) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="%s"/>
+    <option %s/>
+    <worldbody>
+      <body name="fixed">
+        <geom name="fixed" size=".1"/>
+      </body>
+      <body name="moving" pos="0 0 1">
+        <joint name="hinge" axis="0 1 0"/>
+        <geom name="moving" size=".1"/>
+        <body name="massless" pos="0 0 1">
+          <site name="massless"/>
+        </body>
+        <body name="static" pos="1 0 0">
+          <geom name="static" size=".1" %s/>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  struct Case {
+    const char* option;
+    const char* geom;
+    int nbody;
+  };
+
+  // bodies which are fixed to the world or have no mass and no ellipsoid geoms
+  // are always fused
+  const Case cases[] = {
+      {"", "", 2},
+      {R"(density="1000")", "", 3},
+      {R"(viscosity="1")", "", 3},
+      {R"(density="1000")", R"(mass="0")", 2},
+      {R"(density="1000")", R"(mass="0" fluidshape="ellipsoid")", 3}};
+  for (const Case& c : cases) {
+    SCOPED_TRACE(absl::StrFormat("option '%s' geom '%s'", c.option, c.geom));
+    std::string fuse_xml = absl::StrFormat(xml, "true", c.option, c.geom);
+    MjModelPtr fuse = LoadModelFromString(fuse_xml);
+    ASSERT_THAT(fuse.get(), NotNull());
+    EXPECT_EQ(fuse->nbody, c.nbody);
+    ExpectCoherentFuse(fuse_xml,
+                       absl::StrFormat(xml, "false", c.option, c.geom),
+                       c.nbody == 2 ? 1e-5 : 0);
+  }
+}
+
 // a body with a plugin is not fused, the plugin's forces are specific to it
 TEST_F(FuseStaticTest, FuseStaticPlugin) {
   // passive plugin applying an upward force to the center of mass of its bodies

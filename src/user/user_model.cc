@@ -4391,6 +4391,9 @@ static bool infersinertia(const mjCBody* body) {
 
 // fuse static bodies with their parent
 void mjCModel::FuseStatic(void) {
+  // fluid forces are enabled
+  bool fluid = option.density != 0 || option.viscosity != 0;
+
   for (int i = 1; i < bodies_.size(); i++) {
     // check if the body can be fused
     if (!bodies_[i]->name.empty()) {
@@ -4435,6 +4438,12 @@ void mjCModel::FuseStatic(void) {
 
     // skip if gravcomp is different, it applies to the mass of each body separately
     if (fusemass && body->gravcomp != par->gravcomp) { continue; }
+
+    // skip if in a fluid, forces apply to the inertia and ellipsoid geoms of each body separately
+    if (fluid && par->name != "world") {
+      auto ellipsoid = [](const mjCGeom* geom) { return geom->fluid_ellipsoid > 0; };
+      if (fusemass || std::any_of(body->geoms.begin(), body->geoms.end(), ellipsoid)) { continue; }
+    }
 
     //------------- add mass and inertia
 
