@@ -137,8 +137,8 @@ void MapFrame(std::vector<T*>& parent,
               mjCFrame*        frame,
               mjCBody*         parent_body) {
   std::for_each(child.begin(), child.end(), [frame, parent_body](T* element) {
-    if (!element->frame) { element->SetFrame(frame); }
     element->SetParent(parent_body);
+    if (!element->frame) { element->SetFrame(frame); }
   });
   parent.insert(parent.end(), child.begin(), child.end());
   child.clear();
@@ -2143,6 +2143,7 @@ mjCFrame* mjCBody::ToFrame() {
   }
 
   mjCFrame* newframe = parent->AddFrame(frame);
+  newframe->SetParent(parent);
   mjuu_copyvec(newframe->spec.pos, spec.pos, 3);
   mjuu_copyvec(newframe->spec.quat, spec.quat, 4);
   newframe->spec.alt = spec.alt;

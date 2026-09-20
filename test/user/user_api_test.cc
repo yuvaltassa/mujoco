@@ -2246,6 +2246,16 @@ TEST_F(MujocoTest, BodyToFrameNestedFrames) {
   mj_deleteModel(model);
 }
 
+TEST_F(MujocoTest, BodyToFrameParent) {
+  mjSpec* spec = mj_makeSpec();
+  mjsBody* parent = mjs_addBody(mjs_findBody(spec, "world"), 0);
+  mjsBody* child = mjs_addBody(parent, 0);
+  mjsFrame* frame = mjs_bodyToFrame(&child);
+  ASSERT_THAT(frame, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(mjs_getParent(frame->element), parent);
+  mj_deleteSpec(spec);
+}
+
 TEST_F(MujocoTest, BodyToFrameWorld) {
   mjSpec* spec = mj_makeSpec();
   mjsBody* world = mjs_findBody(spec, "world");
