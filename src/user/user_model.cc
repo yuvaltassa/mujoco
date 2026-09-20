@@ -4641,10 +4641,15 @@ void mjCModel::StoreKeyframes(mjCModel* dest) {
 
 //------------------------------- FUSE STATIC ------------------------------------------------------
 
+// append source to dest, set ids and update the name map of elements whose id has changed
 template <class T>
-static void makelistid(std::vector<T*>& dest, std::vector<T*>& source) {
+static void makelistid(std::vector<T*>& dest, std::vector<T*>& source, mjKeyMap& ids) {
   for (int i = 0; i < source.size(); i++) {
-    source[i]->id = (int)dest.size();
+    int id = (int)dest.size();
+    if (source[i]->id != id) {
+      source[i]->id        = id;
+      ids[source[i]->name] = id;
+    }
     dest.push_back(source[i]);
   }
 }
@@ -4672,11 +4677,11 @@ void mjCModel::FuseReindex(mjCBody* body) {
     body->bodies[i]->weldid = (weld_root ? body->bodies[i]->id : body->weldid);
   }
 
-  makelistid(joints_, body->joints);
-  makelistid(geoms_, body->geoms);
-  makelistid(sites_, body->sites);
-  makelistid(cameras_, body->cameras);
-  makelistid(lights_, body->lights);
+  makelistid(joints_, body->joints, ids[mjOBJ_JOINT]);
+  makelistid(geoms_, body->geoms, ids[mjOBJ_GEOM]);
+  makelistid(sites_, body->sites, ids[mjOBJ_SITE]);
+  makelistid(cameras_, body->cameras, ids[mjOBJ_CAMERA]);
+  makelistid(lights_, body->lights, ids[mjOBJ_LIGHT]);
   frames_.insert(frames_.end(), body->frames.begin(), body->frames.end());
 
   // process children recursively
@@ -4753,6 +4758,13 @@ void mjCModel::FuseStatic(void) {
   bool fluid = option.density != 0 || option.viscosity != 0;
 
   for (int i = 1; i < bodies_.size(); i++) {
+    // get body and parent
+    mjCBody* body = bodies_[i];
+    mjCBody* par  = body->parent;
+
+    // skip if body has joints or mocap
+    if (!body->joints.empty() || body->mocap) { continue; }
+
     // check if the body can be fused
     if (!bodies_[i]->name.empty()) {
       ids[mjOBJ_BODY].erase(bodies_[i]->name);
@@ -4778,13 +4790,6 @@ void mjCModel::FuseStatic(void) {
       // put body back the body name in the map
       ids[mjOBJ_BODY].insert({bodies_[i]->name, i});
     }
-
-    // get body and parent
-    mjCBody* body = bodies_[i];
-    mjCBody* par  = body->parent;
-
-    // skip if body has joints or mocap
-    if (!body->joints.empty() || body->mocap) { continue; }
 
     // skip if body has a plugin, its passive forces are specific to the body
     if (body->plugin.active) { continue; }
@@ -4909,8 +4914,12 @@ void mjCModel::FuseStatic(void) {
 
     //------------- re-index bodies, joints, geoms, sites
 
-    // body ids
-    for (int j = 0; j < bodies_.size(); j++) { bodies_[j]->id = j; }
+    // remove the fused body from the name map, update the bodies which follow it
+    ids[mjOBJ_BODY].erase(body->name);
+    for (int j = i; j < bodies_.size(); j++) {
+      bodies_[j]->id                    = j;
+      ids[mjOBJ_BODY][bodies_[j]->name] = j;
+    }
 
     // everything else
     joints_.clear();
@@ -4935,9 +4944,6 @@ void mjCModel::FuseStatic(void) {
 
     //------------- delete body (without deleting children)
 
-    // remove body name from map
-    if (!body->name.empty()) { ids[mjOBJ_BODY].erase(body->name); }
-
     // delete allocation
     body->bodies.clear();
     delete body;
@@ -4945,9 +4951,6 @@ void mjCModel::FuseStatic(void) {
     // check index i again (we have a new body at this index)
     i--;
   }
-
-  // remove empty names
-  ProcessList_(ids, bodies_, mjOBJ_BODY, /*checkrepeat=*/true);
 
   // body ids have changed, update the target bodies of cameras and lights
   ResolveReferences(cameras_);

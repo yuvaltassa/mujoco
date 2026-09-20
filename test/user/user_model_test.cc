@@ -776,6 +776,74 @@ TEST_F(FuseStaticTest, FuseStaticFlexReferencedBody) {
   }
 }
 
+// fusing a body changes the ids of the bodies which follow it
+TEST_F(FuseStaticTest, FuseStaticBodyIdsAfterFuse) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="true"/>
+    <worldbody>
+      <body><geom size=".1"/></body>
+      <body name="B"><geom size=".1"/></body>
+      <body name="C"><freejoint/><geom size=".1"/></body>
+    </worldbody>
+    <sensor><framepos objtype="body" objname="C"/></sensor>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size());
+  ASSERT_THAT(m.get(), NotNull()) << error.data();
+  EXPECT_EQ(m->nbody, 2) << "Expecting a world body and the moving body";
+  EXPECT_EQ(m->sensor_objid[0], mj_name2id(m.get(), mjOBJ_BODY, "C"));
+}
+
+// fusing a body which follows a sibling moves its elements ahead of the
+// sibling's, references by name keep their objects
+TEST_F(FuseStaticTest, FuseStaticElementIdsAfterFuse) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="true"/>
+    <worldbody>
+      <body name="moving">
+        <freejoint/>
+        <geom name="moving" size=".1"/>
+        <site name="moving"/>
+        <camera name="moving"/>
+        <light name="moving"/>
+      </body>
+      <body pos="1 0 0">
+        <geom name="static" size=".2"/>
+        <site name="static"/>
+        <camera name="static"/>
+        <light name="static"/>
+      </body>
+    </worldbody>
+    <sensor>
+      <framepos objtype="geom" objname="moving"/>
+      <framepos objtype="site" objname="moving"/>
+      <framepos objtype="camera" objname="moving"/>
+    </sensor>
+    <custom>
+      <tuple name="tuple"><element objtype="light" objname="moving"/></tuple>
+    </custom>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size());
+  ASSERT_THAT(m.get(), NotNull()) << error.data();
+  ASSERT_EQ(m->nbody, 2) << "Static body should be fused";
+
+  // the fused elements precede the elements of the moving body
+  EXPECT_EQ(mj_name2id(m.get(), mjOBJ_GEOM, "moving"), 1);
+  EXPECT_EQ(mj_name2id(m.get(), mjOBJ_SITE, "moving"), 1);
+  EXPECT_EQ(mj_name2id(m.get(), mjOBJ_CAMERA, "moving"), 1);
+  EXPECT_EQ(mj_name2id(m.get(), mjOBJ_LIGHT, "moving"), 1);
+
+  EXPECT_EQ(m->sensor_objid[0], 1);
+  EXPECT_EQ(m->sensor_objid[1], 1);
+  EXPECT_EQ(m->sensor_objid[2], 1);
+  EXPECT_EQ(m->tuple_objid[0], 1);
+}
+
 TEST_F(FuseStaticTest, FuseStaticCameraInBody) {
   static constexpr char xml[] = R"(
   <mujoco>
