@@ -50,6 +50,11 @@ Bug fixes
   :at:`zaxis`. Previously only :at:`quat` was copied to the frame and the other specifiers were silently dropped.
 - :ref:`mjs_bodyToFrame` now returns ``NULL`` on failure, with the message available from :ref:`mjs_getError`.
   Previously errors were thrown through the C API, and converting the world body crashed.
+- Fixed the merging of :ref:`inertial<body-inertial>` elements in :ref:`mjs_bodyToFrame`. The inertial of the converted
+  body was silently dropped if the spec had never been compiled. After a compilation, the merged parent could no longer
+  be compiled ("fullinertia and diagonal inertia cannot both be specified"), and converting a body without an inertial
+  element corrupted the inertial of its parent. The merge now also accounts for :at:`fullinertia`, for orientation
+  alternatives and for frames enclosing the converted body.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
