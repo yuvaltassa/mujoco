@@ -28,9 +28,9 @@ and explicit contact pairs. The flex hammock with an attached humanoid agrees to
 with a converged solver and to $10^{-8}$ with its own 30-iteration CG settings; the mesh-based
 3x3x3 cube agrees to $10^{-10}$, the precision of `float` mesh vertices.
 
-Status: both prerequisites are implemented on the fork branch `frames-roundtrip`: frames
-round-trip through save (0572fd554), and frame edits survive recompilation (157644687), a
-bug the prototype surfaced (section 11).
+Status: both prerequisites are implemented on the fork branch `frames-roundtrip`, in this
+order: frame edits survive recompilation, a bug the prototype surfaced (section 11), and
+frames round-trip through save.
 
 ## 2. User-facing scope of v1
 
@@ -423,9 +423,12 @@ Table-independent, so that a wrong exponent cannot certify itself:
 - **Frames must recompile.** Found with the prototype: `mjCFrame::compiled` was set by the
   first compile and never reset, so editing a frame's `pos` or `quat` afterwards was silently
   ignored by later compiles. This defeated "a parameter, not an operation" for the attributes
-  frames already have. Fixed on `frames-roundtrip` (157644687), with a regression test.
+  frames already have. Fixed on `frames-roundtrip`, with a regression test. The save commit
+  depends on it: alignment now adjusts the compiled pose of a body's frames, which must be
+  recomputed by every compile.
 - **Free-joint alignment** is the other transform baked on save: the writer emits aligned
-  poses and drops the joint's `align`. Under the writer contract it should write the
+  poses and drops the joint's `align`. (Frames inside an aligned body are now carried along
+  by the alignment, so they stay in place and their contents keep authored poses.) Under the writer contract it should write the
   unaligned values and `align`. Structurally alignment is a compiler-generated frame, so it
   can later move into the same pass; scale must precede it (`ipos` is a length), which the
   lifecycle above guarantees.
