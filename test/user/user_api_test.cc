@@ -2179,6 +2179,15 @@ TEST_F(MujocoTest, BodyToFrameOrientation) {
   mj_deleteModel(model);
 }
 
+TEST_F(MujocoTest, BodyToFrameWorld) {
+  mjSpec* spec = mj_makeSpec();
+  mjsBody* world = mjs_findBody(spec, "world");
+  EXPECT_THAT(mjs_bodyToFrame(&world), IsNull());
+  EXPECT_THAT(world, NotNull());
+  EXPECT_THAT(mjs_getError(spec), HasSubstr("world body"));
+  mj_deleteSpec(spec);
+}
+
 TEST_F(MujocoTest, BodyToFrameWithInertial) {
   static constexpr char xml_child[] = R"(
     <mujoco>
