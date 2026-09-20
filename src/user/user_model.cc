@@ -622,9 +622,7 @@ void mjCModel::RemoveFromTree(const mjCFrame& frame) {
 
   // delete the plugins created by the removed elements
   for (mjCBody* child : bodies) { DeleteSubtreePlugin(child); }
-  for (mjCGeom* geom : geoms) {
-    if (geom->plugin.active && geom->plugin.name->empty()) { *this -= geom->plugin.element; }
-  }
+  for (mjCGeom* geom : geoms) { DeleteImplicitPlugin(geom->plugin); }
 }
 
 
@@ -699,6 +697,8 @@ mjCModel& mjCModel::operator+=(mjCDef& subtree) {
 
 // remove default class from array
 mjCModel& mjCModel::operator-=(const mjCDef& subtree) {
+  if (subtree.model != this) { throw mjCError(nullptr, "default is not in this model"); }
+
   // check we aren't trying to remove the 'main' default
   if (subtree.id == 0) { throw mjCError(0, "cannot remove the global default ('main')"); }
 
@@ -754,16 +754,47 @@ void deletefromlist(std::vector<T*>* list, mjsElement* element) {
 }
 
 
+// return true if the element was deleted, by itself or along with a body that contains it
+bool mjCModel::IsDetached(const mjCBase* element) const {
+  for (; element; element = element->GetParent()) {
+    if (std::find(detached_.begin(), detached_.end(), element) != detached_.end()) { return true; }
+  }
+  return false;
+}
+
+
+// delete the implicit plugin instance of an element, if it is still in the model
+void mjCModel::DeleteImplicitPlugin(const mjsPlugin& plugin) {
+  if (!plugin.active || !plugin.name->empty()) { return; }
+  if (std::find(plugins_.begin(), plugins_.end(), plugin.element) != plugins_.end()) {
+    *this -= plugin.element;
+  }
+}
+
+
 // recursively delete all plugins in the subtree
 void mjCModel::DeleteSubtreePlugin(mjCBody* subtree) {
-  mjsPlugin* plugin = &(subtree->spec.plugin);
-  if (plugin->active && plugin->name->empty()) { *this -= plugin->element; }
+  DeleteImplicitPlugin(subtree->spec.plugin);
   for (auto* body : subtree->Bodies()) { DeleteSubtreePlugin(body); }
 }
 
 
 // remove the element from the model
 void mjCModel::operator-=(mjsElement* el) {
+  // check before modifying anything: deleted elements are released with the model, so an element
+  // that is still owned elsewhere, or that is deleted twice, would be released twice
+
+  // meta elements other than frames, and elements owned by other elements, cannot be deleted
+  bool haslist = el->elemtype < mjNOBJECT && object_lists_[el->elemtype];
+  if (!haslist && el->elemtype != mjOBJ_FRAME) {
+    throw mjCError(nullptr, "elements of this type cannot be deleted");
+  }
+
+  mjCBase* base = static_cast<mjCBase*>(el);
+  if (base->model != this) { throw mjCError(nullptr, "element is not in this model"); }
+  if (base == bodies_[0]) { throw mjCError(nullptr, "the world body cannot be deleted"); }
+  if (IsDetached(base)) { throw mjCError(nullptr, "element was already deleted"); }
+
   if (el->elemtype == mjOBJ_BODY) {
     mjCBody* body  = static_cast<mjCBody*>(el);
     *this         -= *body;
@@ -775,18 +806,8 @@ void mjCModel::operator-=(mjsElement* el) {
     *this           -= *frame;
   }
 
-  detached_.push_back(static_cast<mjCBase*>(el));
+  detached_.push_back(base);
   ResetTreeLists();
-
-  if (el->elemtype != mjOBJ_DEFAULT) {
-    if (static_cast<mjCBase*>(el)->model != this) {
-      throw mjCError(nullptr, "element is not in this model");
-    }
-  } else {
-    if (static_cast<mjCDef*>(el)->model != this) {
-      throw mjCError(nullptr, "default is not in this model");
-    }
-  }
 
   switch (el->elemtype) {
     case mjOBJ_BODY: {
@@ -799,14 +820,9 @@ void mjCModel::operator-=(mjsElement* el) {
     case mjOBJ_FRAME:
       break;  // removed above, frames are meta elements and have no object list
 
-    case mjOBJ_DEFAULT:
-      MakeTreeLists();  // rebuild lists that were reset at the beginning of the function
-      throw mjCError(nullptr, "defaults cannot be deleted, use detach instead");
-      break;
-
     case mjOBJ_GEOM: {
       mjCGeom* geom = static_cast<mjCGeom*>(el);
-      if (geom->plugin.active && geom->plugin.name->empty()) { *this -= geom->plugin.element; }
+      DeleteImplicitPlugin(geom->plugin);
       deletefromlist(&(geom->body->geoms), el);
       break;
     }
@@ -829,25 +845,21 @@ void mjCModel::operator-=(mjsElement* el) {
 
     case mjOBJ_MESH: {
       mjCMesh* mesh = static_cast<mjCMesh*>(el);
-      if (mesh->plugin.active && mesh->plugin.name->empty()) { *this -= mesh->plugin.element; }
+      DeleteImplicitPlugin(mesh->plugin);
       deletefromlist(object_lists_[mjOBJ_MESH], el);
       break;
     }
 
     case mjOBJ_ACTUATOR: {
       mjCActuator* actuator = static_cast<mjCActuator*>(el);
-      if (actuator->plugin.active && actuator->plugin.name->empty()) {
-        *this -= actuator->plugin.element;
-      }
+      DeleteImplicitPlugin(actuator->plugin);
       deletefromlist(object_lists_[mjOBJ_ACTUATOR], el);
       break;
     }
 
     case mjOBJ_SENSOR: {
       mjCSensor* sensor = static_cast<mjCSensor*>(el);
-      if (sensor->plugin.active && sensor->plugin.name->empty()) {
-        *this -= sensor->plugin.element;
-      }
+      DeleteImplicitPlugin(sensor->plugin);
       deletefromlist(object_lists_[mjOBJ_SENSOR], el);
       break;
     }

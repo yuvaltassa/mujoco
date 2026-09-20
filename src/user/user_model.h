@@ -539,6 +539,12 @@ class mjCModel : public mjCModel_, private mjSpec {
   // delete all plugins created by the subtree
   void DeleteSubtreePlugin(mjCBody* subtree);
 
+  // delete the implicit plugin instance of an element, if it is still in the model
+  void DeleteImplicitPlugin(const mjsPlugin& plugin);
+
+  // return true if the element was deleted, by itself or along with a body that contains it
+  bool IsDetached(const mjCBase* element) const;
+
   // expand all keyframes in the model
   void ExpandAllKeyframes();
 

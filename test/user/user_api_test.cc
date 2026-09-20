@@ -2005,7 +2005,7 @@ void TestDeleteFrame(bool compile) {
 
   // deleting the frame again is an error
   EXPECT_EQ(mjs_delete(spec, frame->element), -1);
-  EXPECT_THAT(mjs_getError(spec), HasSubstr("frame is not in this model"));
+  EXPECT_THAT(mjs_getError(spec), HasSubstr("element was already deleted"));
 
   // compare with expected XML
   mjModel* m_deleted = mj_compile(spec, 0);
@@ -3488,6 +3488,189 @@ TEST_F(MujocoTest, DetachDefault) {
   EXPECT_THAT(main, NotNull());
 
   mj_deleteVFS(vfs.get());
+  mj_deleteSpec(spec);
+}
+
+TEST_F(MujocoTest, DeleteTwice) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="body">
+        <joint name="joint"/>
+        <geom name="geom" size=".1"/>
+        <geom size=".1"/>
+        <body name="child">
+          <geom name="in_child" size=".1"/>
+          <body name="grandchild">
+            <geom size=".1"/>
+          </body>
+        </body>
+      </body>
+    </worldbody>
+
+    <sensor>
+      <jointpos name="sensor" joint="joint"/>
+    </sensor>
+  </mujoco>)";
+
+  std::array<char, 1024> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+
+  // an element owned by a body, an element owned by the model and a subtree
+  mjsElement* geom = mjs_findElement(spec, mjOBJ_GEOM, "geom");
+  mjsElement* sensor = mjs_findElement(spec, mjOBJ_SENSOR, "sensor");
+  mjsElement* child = mjs_findElement(spec, mjOBJ_BODY, "child");
+  mjsElement* in_child = mjs_findElement(spec, mjOBJ_GEOM, "in_child");
+  mjsElement* grandchild = mjs_findElement(spec, mjOBJ_BODY, "grandchild");
+  EXPECT_EQ(mjs_delete(spec, geom), 0);
+  EXPECT_EQ(mjs_delete(spec, sensor), 0);
+  EXPECT_EQ(mjs_delete(spec, child), 0);
+
+  // deleting again is an error, also for the elements deleted along with a body
+  for (mjsElement* element : {geom, sensor, child, in_child, grandchild}) {
+    EXPECT_EQ(mjs_delete(spec, element), -1);
+    EXPECT_THAT(mjs_getError(spec), HasSubstr("element was already deleted"));
+  }
+
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(model->nbody, 2);
+  EXPECT_EQ(model->ngeom, 1);
+  EXPECT_EQ(model->nsensor, 0);
+
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+TEST_F(MujocoTest, DeleteElementOfOtherSpec) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <default>
+      <default class="class"/>
+    </default>
+
+    <worldbody>
+      <body name="body">
+        <joint name="joint"/>
+        <geom name="geom" size=".1"/>
+      </body>
+    </worldbody>
+
+    <sensor>
+      <jointpos joint="joint"/>
+    </sensor>
+  </mujoco>)";
+
+  std::array<char, 1024> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjSpec* other = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(other, NotNull()) << er.data();
+
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(other, mjOBJ_GEOM, "geom")), -1);
+  EXPECT_THAT(mjs_getError(spec), HasSubstr("element is not in this model"));
+  EXPECT_EQ(mjs_delete(spec, mjs_findElement(other, mjOBJ_BODY, "body")), -1);
+  EXPECT_THAT(mjs_getError(spec), HasSubstr("element is not in this model"));
+  EXPECT_EQ(mjs_delete(spec, mjs_findDefault(other, "class")->element), -1);
+  EXPECT_THAT(mjs_getError(spec), HasSubstr("default is not in this model"));
+
+  // neither spec was modified
+  EXPECT_THAT(mjs_findDefault(spec, "class"), NotNull());
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  mjModel* other_model = mj_compile(other, 0);
+  ASSERT_THAT(other_model, NotNull()) << mjs_getError(other);
+  mjtNum tol = 0;
+  std::string field = "";
+  EXPECT_LE(CompareModel(model, other_model, field), tol)
+      << "Models are different!\n"
+      << "Different field: " << field << '\n';
+
+  mj_deleteModel(model);
+  mj_deleteModel(other_model);
+  mj_deleteSpec(spec);
+  mj_deleteSpec(other);
+}
+
+TEST_F(MujocoTest, DeleteUndeletableElement) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <site name="a"/>
+      <site name="b" pos="1 0 0"/>
+    </worldbody>
+
+    <tendon>
+      <spatial name="tendon">
+        <site site="a"/>
+        <site site="b"/>
+      </spatial>
+    </tendon>
+  </mujoco>)";
+
+  std::array<char, 1024> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+
+  EXPECT_EQ(mjs_delete(spec, mjs_findBody(spec, "world")->element), -1);
+  EXPECT_THAT(mjs_getError(spec),
+              HasSubstr("the world body cannot be deleted"));
+
+  // the spec and the wraps of a tendon are not in a list of the model
+  mjsElement* tendon = mjs_findElement(spec, mjOBJ_TENDON, "tendon");
+  mjsWrap* wrap = mjs_getWrap(mjs_asTendon(tendon), 0);
+  for (mjsElement* element : {spec->element, wrap->element}) {
+    EXPECT_EQ(mjs_delete(spec, element), -1);
+    EXPECT_THAT(mjs_getError(spec),
+                HasSubstr("elements of this type cannot be deleted"));
+  }
+
+  mjModel* model = mj_compile(spec, 0);
+  EXPECT_THAT(model, NotNull()) << mjs_getError(spec);
+
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+TEST_F(MujocoTest, DeletePluginBeforeElement) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <extension>
+      <plugin plugin="mujoco.pid"/>
+    </extension>
+
+    <worldbody>
+      <body>
+        <joint name="joint"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+
+    <actuator>
+      <plugin name="actuator" joint="joint" plugin="mujoco.pid"/>
+    </actuator>
+  </mujoco>)";
+
+  std::array<char, 1024> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(model->nplugin, 1);
+
+  // the plugin instance created by the actuator is not deleted a second time
+  mjsElement* actuator = mjs_findElement(spec, mjOBJ_ACTUATOR, "actuator");
+  EXPECT_EQ(mjs_delete(spec, mjs_asActuator(actuator)->plugin.element), 0);
+  EXPECT_EQ(mjs_delete(spec, actuator), 0);
+
+  mjModel* newmodel = mj_compile(spec, 0);
+  ASSERT_THAT(newmodel, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(newmodel->nu, 0);
+  EXPECT_EQ(newmodel->nplugin, 0);
+
+  mj_deleteModel(model);
+  mj_deleteModel(newmodel);
   mj_deleteSpec(spec);
 }
 

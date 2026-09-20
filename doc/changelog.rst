@@ -49,6 +49,10 @@ Bug fixes
 - :ref:`mjs_delete` now deletes a :ref:`frame<body-frame>` together with everything inside it, along with all the
   elements that reference a deleted element, as it does for a body. Previously, deleting a frame silently did nothing
   and corrupted memory when the spec was deleted.
+- :ref:`mjs_delete` now returns an error and leaves the spec unchanged when the element was already deleted, belongs
+  to another spec, or cannot be deleted (the world body, the spec itself, a tendon wrap). Previously such calls led to
+  memory errors when the spec was deleted, for example after ``spec.delete(geom)`` was called twice in Python, and
+  deleting an element of another spec left the spec unable to compile.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------

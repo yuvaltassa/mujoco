@@ -986,7 +986,7 @@ class SpecsTest(absltest.TestCase):
     self.assertEqual(model.ngeom, 1)
     np.testing.assert_array_equal(model.geom_pos, [[0, 0, 0]])
 
-    with self.assertRaisesRegex(ValueError, 'frame is not in this model'):
+    with self.assertRaisesRegex(ValueError, 'element was already deleted'):
       spec.delete(frame)
 
   def test_plugin(self):
@@ -1481,6 +1481,34 @@ class SpecsTest(absltest.TestCase):
         ValueError, 'Cannot delete element from an attached mjSpec.'
     ):
       child.delete(geom)
+
+  def test_delete_errors(self):
+    xml = """
+      <mujoco>
+        <worldbody>
+          <body name="body">
+            <geom name="geom" size=".1"/>
+            <geom size=".1"/>
+          </body>
+        </worldbody>
+      </mujoco>
+    """
+    spec = mujoco.MjSpec.from_string(xml)
+    other = mujoco.MjSpec.from_string(xml)
+
+    with self.assertRaisesRegex(ValueError, 'element is not in this model'):
+      spec.delete(other.geom('geom'))
+    with self.assertRaisesRegex(ValueError, 'the world body cannot be deleted'):
+      spec.delete(spec.worldbody)
+
+    geom = spec.geom('geom')
+    spec.delete(geom)
+    with self.assertRaisesRegex(ValueError, 'element was already deleted'):
+      spec.delete(geom)
+
+    # only the geom was deleted
+    self.assertEqual(spec.compile().ngeom, 1)
+    self.assertEqual(other.compile().ngeom, 2)
 
   def test_attach_valid_child_lists(self):
     xml1 = """
