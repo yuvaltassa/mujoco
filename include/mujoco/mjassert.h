@@ -90,6 +90,7 @@ MJ_ASSERT_SIZE(mjtConstraint, 4);
 MJ_ASSERT_SIZE(mjtConstraintState, 4);
 MJ_ASSERT_SIZE(mjtWarning, 4);
 MJ_ASSERT_SIZE(mjtStatus, 4);
+MJ_ASSERT_SIZE(mjtOnWarn, 4);
 MJ_ASSERT_SIZE(mjtTimer, 4);
 MJ_ASSERT_SIZE(mjtSleepState, 4);
 

@@ -239,7 +239,7 @@ mjtStatus mj_inverseSkip(const mjModel* m, mjData* d,
 
   // position-dependent
   if (skipstage < mjSTAGE_POS) {
-    mjSTAGE(mj_invPosition(m, d));
+    mjSTAGE_(mj_invPosition(m, d), mj_freeStack(d));
     if (!skipsensor) {
       mj_sensorPos(m, d);
     }
@@ -370,7 +370,7 @@ mjtStatus mj_compareFwdInv(const mjModel* m, mjData* d) {
   mju_copy(save_efc_force, d->efc_force, nefc);
 
   // run inverse dynamics, do not update position and velocity, do not recompute sensors and energy
-  mjSTAGE(mj_inverseSkip(m, d, mjSTAGE_VEL, 1));
+  mjSTAGE_(mj_inverseSkip(m, d, mjSTAGE_VEL, 1), mj_freeStack(d));
 
   // compute statistics
   mju_sub(dif, save_qfrc_constraint, d->qfrc_constraint, nv);

@@ -519,6 +519,17 @@ adjust it properly through the XML.
 :at:`ccd_tolerance`: :at-val:`real, "1e-6"`
    Tolerance threshold used for early termination of the convex collision algorithm.
 
+.. _option-onwarn:
+
+:at:`onwarn`: :at-val:`[auto, continue, stop], "auto"`
+   Response to :ref:`simulation warnings<siSimWarning>`. In the default :at-val:`auto` mode the engine applies the
+   per-warning automatic recovery and continues: divergence (bad values in ``qpos``, ``qvel`` or ``qacc``) resets the
+   state to defaults, bad controls are zeroed, contacts and constraints that do not fit in memory are dropped, and
+   near-singular inertia pivots are clamped. In :at-val:`continue` mode the state is not reset; control zeroing,
+   dropping and pivot clamping still apply. In :at-val:`stop` mode the top-level pipeline function ends at the first
+   warning without rolling back, leaving ``mjData`` partially updated for inspection; the outputs of the stopped call
+   are not valid. In all three modes the warning is counted in ``mjData.warning`` and reported in ``mjData.status``.
+
 .. _option-sleep_tolerance:
 
 :at:`sleep_tolerance`: :at-val:`real, "1e-3"`
@@ -681,7 +692,9 @@ from its default.
 .. _option-flag-autoreset:
 
 :at:`autoreset`: :at-val:`[disable, enable], "enable"`
-   This flag disables the automatic resetting of the simulation state when numerical issues are detected.
+   Deprecated in favor of :ref:`onwarn<option-onwarn>`, and will be removed in a future release. Disabling this flag
+   withholds the state resets of :at:`onwarn` :at-val:`auto`, which then behaves as :at-val:`continue`; the flag has
+   no effect under the other :at:`onwarn` settings. Loading a model that specifies it prints a warning.
 
 .. _option-flag-override:
 

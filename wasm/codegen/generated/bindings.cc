@@ -4281,6 +4281,10 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .value("mjOBJ_FRAME", mjOBJ_FRAME)
     .value("mjOBJ_DEFAULT", mjOBJ_DEFAULT)
     .value("mjOBJ_MODEL", mjOBJ_MODEL);
+  enum_<mjtOnWarn>("mjtOnWarn")
+    .value("mjONWARN_AUTO", mjONWARN_AUTO)
+    .value("mjONWARN_CONTINUE", mjONWARN_CONTINUE)
+    .value("mjONWARN_STOP", mjONWARN_STOP);
   enum_<mjtOrientation>("mjtOrientation")
     .value("mjORIENTATION_QUAT", mjORIENTATION_QUAT)
     .value("mjORIENTATION_AXISANGLE", mjORIENTATION_AXISANGLE)
@@ -5474,6 +5478,7 @@ EMSCRIPTEN_BINDINGS(mujoco_bindings) {
     .property("o_margin", &MjOption::o_margin, &MjOption::set_o_margin)
     .property("o_solimp", &MjOption::o_solimp)
     .property("o_solref", &MjOption::o_solref)
+    .property("onwarn", &MjOption::onwarn, &MjOption::set_onwarn)
     .property("sdf_initpoints", &MjOption::sdf_initpoints, &MjOption::set_sdf_initpoints)
     .property("sdf_iterations", &MjOption::sdf_iterations, &MjOption::set_sdf_iterations)
     .property("sleep_tolerance", &MjOption::sleep_tolerance, &MjOption::set_sleep_tolerance)

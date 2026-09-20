@@ -156,12 +156,27 @@ mjtStatus mj_stepSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor
 }
 
 
-// compute qfrc_inverse, optionally subtracting qfrc_actuator
-static mjNODISCARD mjtStatus inverseSkip(const mjModel* m, mjData* d, mjtStage stage,
-                                         int skipsensor, int flg_actuation, mjtNum* force) {
-  mjtStatus status = mj_inverseSkip(m, d, stage, skipsensor);
+// mj_stepSkip, composed into the status of a finite-difference driver: keep the first warning,
+// and run nothing once the driver has stopped
+static mjNODISCARD mjtStatus stepSkip(const mjModel* m, mjData* d, mjtStatus status,
+                                      int skipstage, int skipsensor) {
+  if (mji_stop(m, status)) {
+    return status;
+  }
+  return mji_join(status, mj_stepSkip(m, d, skipstage, skipsensor));
+}
+
+
+// compute qfrc_inverse, optionally subtracting qfrc_actuator; composed as in stepSkip
+static mjNODISCARD mjtStatus inverseSkip(const mjModel* m, mjData* d, mjtStatus status,
+                                         mjtStage stage, int skipsensor, int flg_actuation,
+                                         mjtNum* force) {
+  if (mji_stop(m, status)) {
+    return status;
+  }
+  status = mji_join(status, mj_inverseSkip(m, d, stage, skipsensor));
   mju_copy(force, d->qfrc_inverse, m->nv);
-  if (flg_actuation) {
+  if (flg_actuation && !mji_stop(m, status)) {
     status = mji_join(status, mj_fwdActuation(m, d));
     mju_subFrom(force, d->qfrc_actuator, m->nv);
   }
@@ -338,7 +353,7 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
   getState(m, d, state, NULL);
 
   // step input
-  status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor));
+  status = stepSkip(m, d, status, mjSTAGE_NONE, skipsensor);
 
   // save output
   getState(m, d, next, sensor);
@@ -357,7 +372,7 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
         d->ctrl[i] += eps;
 
         // step, get nudged output
-        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor));
+        status = stepSkip(m, d, status, mjSTAGE_VEL, skipsensor);
         getState(m, d, next_plus, sensor_plus);
 
         // reset
@@ -372,11 +387,16 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
         d->ctrl[i] -= eps;
 
         // step, get nudged output
-        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor));
+        status = stepSkip(m, d, status, mjSTAGE_VEL, skipsensor);
         getState(m, d, next_minus, sensor_minus);
 
         // reset
         mj_setState(m, d, fullstate, restore_spec);
+      }
+
+      // stop: no differences from an evaluation that ended at a warning
+      if (mji_stop(m, status)) {
+        break;
       }
 
       // difference states
@@ -400,7 +420,7 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
       d->act[i] += eps;
 
       // step, get nudged output
-      status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor));
+      status = stepSkip(m, d, status, mjSTAGE_VEL, skipsensor);
       getState(m, d, next_plus, sensor_plus);
 
       // reset
@@ -412,11 +432,16 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
         d->act[i] -= eps;
 
         // step, get nudged output
-        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_VEL, skipsensor));
+        status = stepSkip(m, d, status, mjSTAGE_VEL, skipsensor);
         getState(m, d, next_minus, sensor_minus);
 
         // reset
         mj_setState(m, d, fullstate, restore_spec);
+      }
+
+      // stop: no differences from an evaluation that ended at a warning
+      if (mji_stop(m, status)) {
+        break;
       }
 
       // difference states
@@ -447,7 +472,7 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
       d->qvel[i] += eps;
 
       // step, get nudged output
-      status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_POS, skipsensor));
+      status = stepSkip(m, d, status, mjSTAGE_POS, skipsensor);
       getState(m, d, next_plus, sensor_plus);
 
       // reset
@@ -459,11 +484,16 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
         d->qvel[i] -= eps;
 
         // step, get nudged output
-        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_POS, skipsensor));
+        status = stepSkip(m, d, status, mjSTAGE_POS, skipsensor);
         getState(m, d, next_minus, sensor_minus);
 
         // reset
         mj_setState(m, d, fullstate, restore_spec);
+      }
+
+      // stop: no differences from an evaluation that ended at a warning
+      if (mji_stop(m, status)) {
+        break;
       }
 
       // difference states
@@ -496,7 +526,7 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
       mj_integratePos(m, d->qpos, dpos, eps);
 
       // step, get nudged output
-      status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor));
+      status = stepSkip(m, d, status, mjSTAGE_NONE, skipsensor);
       getState(m, d, next_plus, sensor_plus);
 
       // reset
@@ -510,11 +540,16 @@ mjNODISCARD mjtStatus mjd_stepFD(const mjModel* m, mjData* d, mjtNum eps, mjtBoo
         mj_integratePos(m, d->qpos, dpos, -eps);
 
         // step, get nudged output
-        status = mji_join(status, mj_stepSkip(m, d, mjSTAGE_NONE, skipsensor));
+        status = stepSkip(m, d, status, mjSTAGE_NONE, skipsensor);
         getState(m, d, next_minus, sensor_minus);
 
         // reset
         mj_setState(m, d, fullstate, restore_spec);
+      }
+
+      // stop: no differences from an evaluation that ended at a warning
+      if (mji_stop(m, status)) {
+        break;
       }
 
       // difference states
@@ -596,11 +631,13 @@ mjtStatus mjd_transitionFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_
                                        BT, DsDq, DsDv, DsDa, DT));
 
 
-  // transpose
-  if (A) mju_transpose(A, AT, ndx, ndx);
-  if (B) mju_transpose(B, BT, nu, ndx);
-  if (C) mju_transpose(C, CT, ndx, ns);
-  if (D) mju_transpose(D, DT, nu, ns);
+  // transpose, unless the call stopped and the Jacobians are not valid
+  if (!mji_stop(m, status)) {
+    if (A) mju_transpose(A, AT, ndx, ndx);
+    if (B) mju_transpose(B, BT, nu, ndx);
+    if (C) mju_transpose(C, CT, ndx, ns);
+    if (D) mju_transpose(D, DT, nu, ns);
+  }
 
   mj_freeStack(d);
   return mji_report(d, status);
@@ -656,7 +693,7 @@ mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_act
   mju_copy(pos, d->qpos, nq);
 
   // center point outputs
-  status = mji_join(status, inverseSkip(m, d, mjSTAGE_NONE, skipsensor, flg_actuation, force));
+  status = inverseSkip(m, d, status, mjSTAGE_NONE, skipsensor, flg_actuation, force);
   if (sensor) mju_copy(sensor, d->sensordata, ns);
   if (mass) mju_copy(mass, d->M, nC);
 
@@ -668,10 +705,15 @@ mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_act
       d->qacc[i] += eps;
 
       // inverse dynamics, get force output
-      status = mji_join(status, inverseSkip(m, d, mjSTAGE_VEL, skipsensor, flg_actuation, force_plus));
+      status = inverseSkip(m, d, status, mjSTAGE_VEL, skipsensor, flg_actuation, force_plus);
 
       // restore
       d->qacc[i] = tmp;
+
+      // stop: no differences from an evaluation that ended at a warning
+      if (mji_stop(m, status)) {
+        break;
+      }
 
       // row of force Jacobian
       if (DfDa) diff(DfDa + i*nv, force, force_plus, eps, nv);
@@ -689,10 +731,15 @@ mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_act
       d->qvel[i] += eps;
 
       // inverse dynamics, get force output
-      status = mji_join(status, inverseSkip(m, d, mjSTAGE_POS, skipsensor, flg_actuation, force_plus));
+      status = inverseSkip(m, d, status, mjSTAGE_POS, skipsensor, flg_actuation, force_plus);
 
       // restore
       d->qvel[i] = tmp;
+
+      // stop: no differences from an evaluation that ended at a warning
+      if (mji_stop(m, status)) {
+        break;
+      }
 
       // row of force Jacobian
       if (DfDv) diff(DfDv + i*nv, force, force_plus, eps, nv);
@@ -712,10 +759,15 @@ mjtStatus mjd_inverseFD(const mjModel* m, mjData* d, mjtNum eps, mjtBool flg_act
       mj_integratePos(m, d->qpos, dpos, eps);
 
       // inverse dynamics, get force output
-      status = mji_join(status, inverseSkip(m, d, mjSTAGE_NONE, skipsensor, flg_actuation, force_plus));
+      status = inverseSkip(m, d, status, mjSTAGE_NONE, skipsensor, flg_actuation, force_plus);
 
       // restore
       mju_copy(d->qpos, pos, nq);
+
+      // stop: no differences from an evaluation that ended at a warning
+      if (mji_stop(m, status)) {
+        break;
+      }
 
       // row of force Jacobian
       if (DfDq) diff(DfDq + i*nv, force, force_plus, eps, nv);

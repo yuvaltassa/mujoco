@@ -60,11 +60,14 @@ mjtStatus mj_checkPos(const mjModel* m, mjData* d) {
   for (int i=0; i < nq; i++) {
     if (mju_isBad(qpos[i])) {
       status = mji_join(status, mj_warning(d, mjWARN_BADQPOS, i));
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      if (mji_autoreset(m)) {
         mj_resetData(m, d);
+
+        // restore the warning statistics wiped by the reset; the status is a local,
+        // so the reset cannot touch it
+        d->warning[mjWARN_BADQPOS].number++;
+        d->warning[mjWARN_BADQPOS].lastinfo = i;
       }
-      d->warning[mjWARN_BADQPOS].number++;
-      d->warning[mjWARN_BADQPOS].lastinfo = i;
       return mji_report(d, status);
     }
   }
@@ -83,11 +86,14 @@ mjtStatus mj_checkVel(const mjModel* m, mjData* d) {
 
     if (mju_isBad(d->qvel[i])) {
       status = mji_join(status, mj_warning(d, mjWARN_BADQVEL, i));
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      if (mji_autoreset(m)) {
         mj_resetData(m, d);
+
+        // restore the warning statistics wiped by the reset; the status is a local,
+        // so the reset cannot touch it
+        d->warning[mjWARN_BADQVEL].number++;
+        d->warning[mjWARN_BADQVEL].lastinfo = i;
       }
-      d->warning[mjWARN_BADQVEL].number++;
-      d->warning[mjWARN_BADQVEL].lastinfo = i;
       return mji_report(d, status);
     }
   }
@@ -106,12 +112,15 @@ mjtStatus mj_checkAcc(const mjModel* m, mjData* d) {
 
     if (mju_isBad(d->qacc[i])) {
       status = mji_join(status, mj_warning(d, mjWARN_BADQACC, i));
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+      if (mji_autoreset(m)) {
         mj_resetData(m, d);
-      }
-      d->warning[mjWARN_BADQACC].number++;
-      d->warning[mjWARN_BADQACC].lastinfo = i;
-      if (!mjDISABLED(mjDSBL_AUTORESET)) {
+
+        // restore the warning statistics wiped by the reset; the status is a local,
+        // so the reset cannot touch it
+        d->warning[mjWARN_BADQACC].number++;
+        d->warning[mjWARN_BADQACC].lastinfo = i;
+
+        // recompute forward dynamics from the reset state
         status = mji_join(status, mj_forward(m, d));
       }
       return mji_report(d, status);
@@ -413,6 +422,15 @@ mjtStatus mj_fwdActuation(const mjModel* m, mjData* d) {
   for (int i=0; i < nu; i++) {
     if (mju_isBad(ctrl[i])) {
       status = mji_join(status, mj_warning(d, mjWARN_BADCTRL, i));
+
+      // stop: return before applying controls
+      if (m->opt.onwarn == mjONWARN_STOP) {
+        mj_freeStack(d);
+        TM_END(mjTIMER_ACTUATION);
+        return mji_report(d, status);
+      }
+
+      // auto/continue: zero all controls and proceed
       mju_zero(ctrl, nu);
       break;
     }
@@ -1588,6 +1606,11 @@ mjtStatus mj_EulerSkip(const mjModel* m, mjData* d, int skipfactor) {
                                m->M_rownnz, m->M_rowadr, m->M_colind, dof_awake_ind);
       if (clamped >= 0) {
         status = mji_join(status, mj_warning(d, mjWARN_INERTIA, clamped));
+        if (m->opt.onwarn == mjONWARN_STOP) {
+          mj_freeStack(d);
+          TM_END(mjTIMER_ADVANCE);
+          return status;
+        }
       }
     }
 
@@ -1708,6 +1731,16 @@ mjtStatus mj_RungeKutta(const mjModel* m, mjData* d, int N) {
 
     // evaluate F[i], 1: do not recompute sensors and energy
     status = mji_join(status, mj_forwardSkip(m, d, mjSTAGE_NONE, 1));
+
+    // stop: restore state and time, return
+    if (mji_stop(m, status)) {
+      d->time = time;
+      mju_copy(d->qpos, X[0], nq);
+      mju_copy(d->qvel, X[0]+nq, nv);
+      mju_copy(d->act, X[0]+nq+nv, na);
+      mj_freeStack(d);
+      return mji_report(d, status);
+    }
 
     mju_copy(F[i], d->qacc, nv);
     if (na) {
@@ -1888,6 +1921,11 @@ mjtStatus mj_implicitSkip(const mjModel* m, mjData* d, int skipfactor) {
     // warn if a near-singular pivot was clamped
     if (clamped >= 0) {
       status = mji_join(status, mj_warning(d, mjWARN_INERTIA, clamped));
+      if (m->opt.onwarn == mjONWARN_STOP) {
+        mj_freeStack(d);
+        TM_END(mjTIMER_ADVANCE);
+        return status;
+      }
     }
   }
 

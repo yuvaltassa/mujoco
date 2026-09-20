@@ -96,6 +96,9 @@
             :ref:`ccd_iterations<option-ccd_iterations>`
 
          .. grid-item::
+            :ref:`onwarn<option-onwarn>`
+
+         .. grid-item::
             :ref:`sdf_iterations<option-sdf_iterations>`
 
          .. grid-item::

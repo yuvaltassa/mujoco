@@ -556,6 +556,16 @@ macro :ref:`mjOK` tests the status; per-warning statistics remain in ``mjData.wa
 .. mujoco-include:: mjtStatus
 
 
+.. _mjtOnWarn:
+
+mjtOnWarn
+~~~~~~~~~
+
+Response to :ref:`simulation warnings<siDiagnostics>`, set by the :ref:`onwarn<option-onwarn>` option.
+
+.. mujoco-include:: mjtOnWarn
+
+
 .. _mjtTimer:
 
 mjtTimer

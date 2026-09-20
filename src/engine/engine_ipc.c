@@ -1072,6 +1072,19 @@ mjtStatus mj_ipc(const mjModel* m, mjData* d) {
         ipc_efcRestore(d, &saved);
         for (int i=0; i < mjNISLAND; i++) d->solver_niter[i] += niter[i];
         d->nefc = savednefc;
+        // stop: the step ends at the solve that warned, with the warm start and the
+        // position-dependent fields back at the pre-step state, and both frames released
+        if (mji_stop(m, status)) {
+          mju_copy(d->qacc_warmstart, ws_entry, m->nv);
+          if (na_artic) {
+            mju_copy(d->qpos, qn_a, m->nq);
+            mj_kinematics(m, d);
+            mj_comPos(m, d);
+          }
+          mj_freeStack(d);
+          mj_freeStack(d);
+          return status;
+        }
         // the proposal: the solve's acceleration as a tangent on the owned dofs, and its points
         for (int i=0; i < m->nv; i++)
           wprop[i] = own[i] ? d->qvel[i] + h * d->qacc[i] : 0;

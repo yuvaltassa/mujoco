@@ -746,6 +746,12 @@ struct MjOption {
   void set_ccd_iterations(int value) {
     ptr_->ccd_iterations = value;
   }
+  int onwarn() const {
+    return ptr_->onwarn;
+  }
+  void set_onwarn(int value) {
+    ptr_->onwarn = value;
+  }
   int disableflags() const {
     return ptr_->disableflags;
   }

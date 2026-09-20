@@ -1052,7 +1052,7 @@ TEST_F(MjcfSdfFileFormatPluginTest, TestPhysicsScenePrimGravity) {
 TEST_F(MjcfSdfFileFormatPluginTest, TestPhysicsScenePrimDisableFlags) {
   auto stage = OpenStage(R"(
     <mujoco model="test">
-      <option>
+      <option onwarn="continue">
         <flag
           constraint="disable"
           equality="disable"
@@ -1071,7 +1071,6 @@ TEST_F(MjcfSdfFileFormatPluginTest, TestPhysicsScenePrimDisableFlags) {
           midphase="disable"
           nativeccd="disable"
           eulerdamp="disable"
-          autoreset="disable"
           island="disable"
         />
       </option>

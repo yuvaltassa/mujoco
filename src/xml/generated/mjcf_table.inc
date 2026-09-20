@@ -36,7 +36,7 @@ std::vector<const char*> MJCF[] = {
     {"option", "*", "timestep", "impratio", "tolerance", "ls_tolerance", "noslip_tolerance",
         "ccd_tolerance", "sleep_tolerance", "gravity", "wind", "magnetic", "density", "viscosity",
         "o_margin", "o_solref", "o_solimp", "o_friction", "integrator", "cone", "jacobian",
-        "solver", "iterations", "ls_iterations", "noslip_iterations", "ccd_iterations",
+        "solver", "iterations", "ls_iterations", "noslip_iterations", "ccd_iterations", "onwarn",
         "sdf_iterations", "sdf_initpoints", "actuatorgroupdisable"},
     {"<"},
         {"flag", "?", "constraint", "equality", "frictionloss", "limit", "contact", "spring",

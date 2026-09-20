@@ -343,6 +343,11 @@ STRUCTS: Mapping[str, StructDecl] = dict([
                  doc='maximum number of convex collision solver iterations',
              ),
              StructFieldDecl(
+                 name='onwarn',
+                 type=ValueType(name='int'),
+                 doc='response to simulation warnings (mjtOnWarn)',
+             ),
+             StructFieldDecl(
                  name='disableflags',
                  type=ValueType(name='int'),
                  doc='bit flags for disabling standard features',

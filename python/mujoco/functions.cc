@@ -128,6 +128,9 @@ PYBIND11_MODULE(_functions, pymodule, pybind11::mod_gil_not_used()) {
               if (!status) {
                 status = step_status;
               }
+              if (status && m_ptr->opt.onwarn == mjONWARN_STOP) {
+                break;
+              }
             }
             d_ptr->status = status;
             return status;

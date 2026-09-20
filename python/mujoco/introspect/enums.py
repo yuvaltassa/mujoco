@@ -619,6 +619,16 @@ ENUMS: Mapping[str, EnumDecl] = dict([
              ('mjSTATUS_BADCTRL', 7),
          ]),
      )),
+    ('mjtOnWarn',
+     EnumDecl(
+         name='mjtOnWarn',
+         declname='enum mjtOnWarn',
+         values=dict([
+             ('mjONWARN_AUTO', 0),
+             ('mjONWARN_CONTINUE', 1),
+             ('mjONWARN_STOP', 2),
+         ]),
+     )),
     ('mjtTimer',
      EnumDecl(
          name='mjtTimer',

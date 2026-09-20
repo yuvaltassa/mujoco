@@ -39,11 +39,11 @@ class StepControl {
     kPaused,
 
 
-    // Simulation diverged with autoreset enabled.
+    // Simulation diverged under onwarn=auto and was reset.
     kAutoReset,
 
-    // Simulation diverged with autoreset disabled.
-    // Note: Consider reporting mjData warning diagnostics in kDivergedWarnings.
+    // The step stopped at a simulation warning under onwarn=stop, or the simulation diverged
+    // under onwarn=continue; the warning is in mjData.status or kDivergedWarnings.
     kDiverged,
   };
 

@@ -102,7 +102,7 @@ TEST_F(StatusTest, WithoutResetTheFirstWarningIsReported) {
   MjModelPtr model = LoadModelFromString(kModelXml, error, sizeof(error));
   ASSERT_THAT(model.get(), NotNull()) << error;
   MjDataPtr data = MakeData(model);
-  model->opt.disableflags |= mjDSBL_AUTORESET;
+  model->opt.onwarn = mjONWARN_CONTINUE;
 
   // inject bad qvel: the step proceeds, bad velocity begets bad acceleration
   data->qvel[0] = kNaN;
@@ -110,8 +110,8 @@ TEST_F(StatusTest, WithoutResetTheFirstWarningIsReported) {
 
   // the status names the first warning, both are counted
   EXPECT_EQ(data->status, mjSTATUS_BADQVEL);
-  EXPECT_GT(data->warning[mjWARN_BADQVEL].number, 0);
-  EXPECT_GT(data->warning[mjWARN_BADQACC].number, 0);
+  EXPECT_EQ(data->warning[mjWARN_BADQVEL].number, 1);
+  EXPECT_EQ(data->warning[mjWARN_BADQACC].number, 1);
 
   // no reset: time advanced, state remains bad
   EXPECT_GT(data->time, 0);
@@ -182,14 +182,14 @@ TEST_F(StatusTest, StatusBelongsToTheOutermostCall) {
   MjModelPtr model = LoadModelFromString(kModelXml, error, sizeof(error));
   ASSERT_THAT(model.get(), NotNull()) << error;
   MjDataPtr data = MakeData(model);
-  model->opt.disableflags |= mjDSBL_AUTORESET;
+  model->opt.onwarn = mjONWARN_CONTINUE;
 
   // mj_step: mj_checkVel warns, the forward stages that follow do not clear the
   // warning, mj_checkAcc warns again and the status keeps the first
   data->qvel[0] = kNaN;
   mj_step(model.get(), data.get());
   EXPECT_EQ(data->status, mjSTATUS_BADQVEL);
-  EXPECT_GT(data->warning[mjWARN_BADQACC].number, 0);
+  EXPECT_EQ(data->warning[mjWARN_BADQACC].number, 1);
 
   // called directly, each stage starts from a clean status
   mj_forward(model.get(), data.get());
@@ -297,12 +297,12 @@ TEST_F(StatusTest, ReportingFunctionsReturnTheirStatus) {
       {"mj_projectConstraint", mj_projectConstraint},
   };
 
-  // healthy, and with a bad velocity, with and without the automatic reset;
-  // implicitfast: mj_implicit requires it, the other entries accept any
-  // integrator
+  // healthy, and with a bad velocity under each policy (exercising the
+  // unwinding paths); implicitfast: mj_implicit requires it, the other entries
+  // accept any integrator
   model->opt.integrator = mjINT_IMPLICITFAST;
-  for (int autoreset : {1, 0}) {
-    model->opt.disableflags = autoreset ? 0 : mjDSBL_AUTORESET;
+  for (int onwarn : {mjONWARN_AUTO, mjONWARN_CONTINUE, mjONWARN_STOP}) {
+    model->opt.onwarn = onwarn;
     for (int bad = 0; bad < 2; bad++) {
       for (const Entry& entry : entries) {
         mj_resetData(m, d);
@@ -311,7 +311,7 @@ TEST_F(StatusTest, ReportingFunctionsReturnTheirStatus) {
         }
         // the value a call returns is the value it recorded in the data
         EXPECT_EQ(entry.fn(m, d), (mjtStatus)d->status)
-            << entry.name << " autoreset=" << autoreset << " bad=" << bad;
+            << entry.name << " onwarn=" << onwarn << " bad=" << bad;
       }
       mj_resetData(m, d);
       if (bad) {

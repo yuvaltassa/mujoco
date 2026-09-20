@@ -45,6 +45,7 @@
     X   ( int,    ls_iterations,     1      )  \
     X   ( int,    noslip_iterations, 1      )  \
     X   ( int,    ccd_iterations,    1      )  \
+    X   ( int,    onwarn,            1      )  \
     X   ( int,    disableflags,      1      )  \
     X   ( int,    enableflags,       1      )  \
     X   ( int,    disableactuator,   1      )  \

@@ -481,6 +481,7 @@ typedef struct mjOption_ {        // physics options
   int ls_iterations;              // maximum number of CG/Newton linesearch iterations
   int noslip_iterations;          // maximum number of noslip solver iterations
   int ccd_iterations;             // maximum number of convex collision solver iterations
+  int onwarn;                     // response to simulation warnings (mjtOnWarn)
   int disableflags;               // bit flags for disabling standard features
   int enableflags;                // bit flags for enabling optional features
   int disableactuator;            // bit flags for disabling actuators by group id
@@ -2405,7 +2406,7 @@ typedef enum mjtDisableBit {      // disable default feature bitflags
   mjDSBL_SENSOR       = 1<<13,    // sensors
   mjDSBL_MIDPHASE     = 1<<14,    // mid-phase collision filtering
   mjDSBL_EULERDAMP    = 1<<15,    // implicit integration of joint damping in Euler integrator
-  mjDSBL_AUTORESET    = 1<<16,    // automatic reset when numerical issues are detected
+  mjDSBL_AUTORESET    = 1<<16,    // deprecated, see onwarn: automatic reset on divergence
   mjDSBL_NATIVECCD    = 1<<17,    // native convex collision detection
   mjDSBL_ISLAND       = 1<<18,    // constraint island discovery
   mjDSBL_MULTICCD     = 1<<19,    // multiple CCD contact points
@@ -2835,6 +2836,11 @@ typedef enum mjtStatus {            // status of a pipeline call, stored in mjDa
   mjSTATUS_BADQACC,                 // bad number in qacc
   mjSTATUS_BADCTRL                  // bad number in ctrl
 } mjtStatus;
+typedef enum mjtOnWarn {            // response to simulation warnings
+  mjONWARN_AUTO = 0,                // apply per-warning automatic recovery and continue
+  mjONWARN_CONTINUE,                // record the warning and continue without resetting the state
+  mjONWARN_STOP                     // stop: return from the top-level call
+} mjtOnWarn;
 typedef enum mjtTimer {             // internal timers
   // main api
   mjTIMER_STEP           = 0,       // step

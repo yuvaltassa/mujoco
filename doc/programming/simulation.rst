@@ -167,13 +167,17 @@ the intermediate results of the computation.
 To make the above discussion clearer, we provide the internal implementation of :ref:`mj_step`, :ref:`mj_step1` and
 :ref:`mj_step2`, omitting some code that computes timing diagnostics. The stages that can raise a :ref:`simulation
 warning<siSimWarning>` return an :ref:`mjtStatus`, and the functions that call them do so through the internal macro
-``mjSTAGE``, which runs a stage and keeps the first warning reported:
+``mjSTAGE``, which runs a stage, keeps the first warning reported and, under :ref:`onwarn<option-onwarn>`
+:at-val:`stop`, returns from the calling function at that stage:
 
 .. code-block:: C
 
    #define mjSTAGE(call) {                                    \
      mjtStatus stage = (call);                                \
      if (!status) status = stage;                             \
+     if (status && m->opt.onwarn == mjONWARN_STOP) {          \
+       return d->status = status;                             \
+     }                                                        \
    }
 
 The main simulation function is
@@ -211,8 +215,9 @@ The main simulation function is
      return d->status = status;
    }
 
-The checking functions reset the simulation automatically if any numerical values have become invalid or too large.
-The control callback (if any) is called from within the forward dynamics function.
+Under the default :ref:`onwarn<option-onwarn>` setting, the checking functions reset the simulation if any numerical
+values have become invalid or too large; the other settings are described under :ref:`simulation
+warnings<siSimWarning>`. The control callback (if any) is called from within the forward dynamics function.
 
 Next we show the implementation of the two-part stepping approach, although the specifics will make sense only after
 we explain the :ref:`forward dynamics <siForward>` later. Note that the control callback is now called directly, since
@@ -928,8 +933,9 @@ MuJoCo reports problems through three distinct mechanisms, in decreasing order o
 - **Errors** are fatal by contract: the engine cannot continue. Unless a handler intercepts control, the process
   terminates.
 - **Simulation warnings** are recoverable runtime events that leave the physics impaired: divergence, dropped
-  contacts or constraints, zeroed controls, clamped inertia pivots. They are counted in ``mjData.warning`` and
-  reported by the pipeline functions, in their return value and in ``mjData.status``.
+  contacts or constraints, zeroed controls, clamped inertia pivots. They are counted in ``mjData.warning``, reported
+  by pipeline functions in ``mjData.status``, and the engine's response is selected by the
+  :ref:`onwarn<option-onwarn>` option.
 - **Log messages** are stateless text with a severity :ref:`level<mjtLogLevel>`, routed through a single
   configurable handler. Here "warning" is a severity label, not an event.
 
@@ -959,8 +965,13 @@ When the simulator detects a condition that is not a terminal error but leaves t
 indexed by the enum type :ref:`mjtWarning`: divergence (invalid or unacceptably large values in ``qpos``, ``qvel``,
 ``qacc`` or ``ctrl``), insufficient memory for contacts or constraints, and near-singular inertia. Simulation
 warnings are counted events with defined recovery, not merely messages: bad controls are zeroed, contacts and
-constraints that do not fit in memory are dropped, near-singular inertia pivots are clamped, and a diverged state is
-reset, unless the :ref:`autoreset<option-flag-autoreset>` flag is disabled.
+constraints that do not fit in memory are dropped, near-singular inertia pivots are clamped, and — under the
+default :ref:`onwarn<option-onwarn>` setting — a diverged state is reset. The :ref:`onwarn<option-onwarn>` option
+selects among three responses: :at-val:`auto` applies these recoveries and continues, :at-val:`continue` records
+the warning without resetting, and :at-val:`stop` ends the top-level call at the first warning. The stopped call does
+not roll back: ``mjData`` is left partially updated for inspection, with the stages after the warning not run, and the
+outputs of the call, including the derivatives computed by :ref:`mjd_transitionFD` and :ref:`mjd_inverseFD`, are not
+valid.
 
 Simulation warnings are reported in three ways. First, the pipeline functions that can raise one return an
 :ref:`mjtStatus`: ``mjSTATUS_OK`` (0) means that no simulation warning was recorded, and a positive value names the
@@ -1164,8 +1175,8 @@ in the diagnostics section at the beginning of mjData.
 The first diagnostic is the :ref:`simulation warning<siSimWarning>` statistics: the array ``mjData.warning``
 contains one :ref:`mjWarningStat` data structure per warning type, indicating how many times each warning type has
 been triggered since the last reset and any information about the warning (usually the index of the problematic
-model element); the counters are cleared upon reset. The warning events themselves and their recovery are described in
-:ref:`Simulation warnings<siSimWarning>`.
+model element); the counters are cleared upon reset. The warning events themselves, their recovery and the
+:ref:`onwarn<option-onwarn>` policy are described in :ref:`Simulation warnings<siSimWarning>`.
 
 When a model needs to be optimized for high-speed simulation, it is important to know where in the pipeline the CPU
 time is spent. This can in turn suggest which parts of the model to simplify or how to design the user application.

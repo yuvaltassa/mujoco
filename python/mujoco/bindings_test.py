@@ -646,6 +646,16 @@ class MuJoCoBindingsTest(parameterized.TestCase):
     # the functions that cannot raise a simulation warning return nothing
     self.assertIsNone(mujoco.mj_kinematics(self.model, self.data))
 
+  def test_mj_step_stop(self):
+    # under the stop policy the steps of an nstep call end at the first warning:
+    # the state is not advanced, and the warning is detected once
+    self.model.opt.onwarn = mujoco.mjtOnWarn.mjONWARN_STOP
+    self.data.qpos[0] = float('nan')
+    self.assertEqual(mujoco.mj_step(self.model, self.data, nstep=5),
+                     mujoco.mjtStatus.mjSTATUS_BADQPOS)
+    self.assertEqual(self.data.time, 0)
+    self.assertEqual(self.data.warning[mujoco.mjtWarning.mjWARN_BADQPOS].number, 1)
+
   def test_abandoned_call_needs_a_reset(self):
     # an exception raised in a callback abandons the call in progress: the
     # exception leaves the engine without freeing the stack frames of the

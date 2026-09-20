@@ -414,6 +414,12 @@ void mjXReader::Option(XMLElement* section, mjSpec* s, mjOption* opt) {
     // clang-format on
 #undef READDSBL
 
+    // the autoreset flag is deprecated in favor of the onwarn option
+    if (elem->Attribute("autoreset")) {
+      mju_warning("the 'autoreset' flag is deprecated and will be removed, use the 'onwarn' option: "
+                  "autoreset=\"disable\" corresponds to onwarn=\"continue\"");
+    }
+
 #define READENBL(NAME, MASK)                              \
   if (MapValue(elem, NAME, &n, enable_map, 2)) {          \
     opt->enableflags        ^= (opt->enableflags & MASK); \

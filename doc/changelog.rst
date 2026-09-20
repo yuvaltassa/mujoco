@@ -31,6 +31,12 @@ Engine
 - The sparse Newton solver no longer aborts with a "rank-deficient sparse Hessian" error when rounding loses a pivot of
   its Hessian, as can happen in single precision with ill-conditioned inertia. The pivot is now clamped and its row
   decoupled, as in the dense factorization.
+- Added the :ref:`onwarn<option-onwarn>` option, selecting the engine's response to
+  :ref:`simulation warnings<siSimWarning>`: :at-val:`auto` (default) applies the per-warning automatic recovery as
+  before, :at-val:`continue` records the warning without resetting the state, and the new :at-val:`stop` mode stops
+  the top-level call at the first warning, leaving the state available for inspection. The
+  :ref:`autoreset<option-flag-autoreset>` flag is deprecated in favor of this option and will be removed in a future
+  release: disabling it withholds the resets of :at-val:`auto`, which then behaves as :at-val:`continue`.
 - The pipeline functions that can raise a simulation warning (:ref:`mj_step`, :ref:`mj_forward` and related) now
   return an :ref:`mjtStatus`: 0 when no simulation warning was recorded, otherwise the first warning raised. The
   same value is recorded in the new ``mjData.status``, and the new macro :ref:`mjOK` tests it.
@@ -46,6 +52,8 @@ Engine
 
 Bug fixes
 ^^^^^^^^^
+- A divergence detected while the state was not being reset (the :at:`autoreset` flag disabled) was counted twice in
+  ``mjData.warning``; it is now counted once.
 - Tendon :ref:`actuatorfrclimited<tendon-spatial-actuatorfrclimited>` now defaults to "auto" as documented.
   Previously the default was "false" and :at:`actuatorfrcrange` was silently ignored unless :at:`actuatorfrclimited`
   was set explicitly.

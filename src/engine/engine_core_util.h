@@ -182,8 +182,28 @@ static inline mjtStatus mji_report(mjData* d, mjtStatus status) {
   return (mjtStatus)(d->status = status);
 }
 
-// run a stage of a pipeline function and keep its status
-#define mjSTAGE(call) { status = mji_join(status, (call)); }
+// run a pipeline stage, keep its status, and return if a warning under the stop policy stopped
+// the call; mjSTAGE_ runs a cleanup before returning
+#define mjSTAGE_(call, cleanup)                                                   \
+  {                                                                               \
+    status = mji_join(status, (call));                                            \
+    if (mji_stop(m, status)) {                                                    \
+      cleanup;                                                                    \
+      return mji_report(d, status);                                               \
+    }                                                                             \
+  }
+#define mjSTAGE(call) mjSTAGE_(call, (void)0)
+
+// nonzero status under the stop policy: the pipeline call should unwind
+static inline int mji_stop(const mjModel* m, mjtStatus status) {
+  return status && m->opt.onwarn == mjONWARN_STOP;
+}
+
+// the auto policy resets a diverged state, unless the deprecated autoreset flag withholds it;
+// the flag has no effect under the other policies
+static inline int mji_autoreset(const mjModel* m) {
+  return m->opt.onwarn == mjONWARN_AUTO && !(m->opt.disableflags & mjDSBL_AUTORESET);
+}
 
 
 //-------------------------- effective-metric predicates ------------------------------------------
