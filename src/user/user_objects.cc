@@ -129,14 +129,15 @@ PNGImage PNGImage::Load(const mjCBase* obj, mjResource* resource, LodePNGColorTy
   return image;
 }
 
-// associate all child list elements with a frame and copy them to parent list, clear child list
+// associate all child list elements with a frame and copy them to parent list, clear child list;
+// elements that are already in a frame stay in it
 template <typename T>
 void MapFrame(std::vector<T*>& parent,
               std::vector<T*>& child,
               mjCFrame*        frame,
               mjCBody*         parent_body) {
   std::for_each(child.begin(), child.end(), [frame, parent_body](T* element) {
-    element->SetFrame(frame);
+    if (!element->frame) { element->SetFrame(frame); }
     element->SetParent(parent_body);
   });
   parent.insert(parent.end(), child.begin(), child.end());

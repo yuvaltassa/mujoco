@@ -55,6 +55,8 @@ Bug fixes
   be compiled ("fullinertia and diagonal inertia cannot both be specified"), and converting a body without an inertial
   element corrupted the inertial of its parent. The merge now also accounts for :at:`fullinertia`, for orientation
   alternatives and for frames enclosing the converted body.
+- :ref:`mjs_bodyToFrame` now keeps elements of the converted body in their :ref:`frames<body-frame>`. Previously
+  elements nested in a frame were moved out of it and lost its transformation.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
