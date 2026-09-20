@@ -2180,6 +2180,72 @@ TEST_F(MujocoTest, BodyToFrameOrientation) {
   mj_deleteModel(model);
 }
 
+TEST_F(MujocoTest, BodyToFrameNestedFrames) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="parent">
+        <body name="child" pos="1 0 0">
+          <frame pos="0 1 0" euler="0 0 90">
+            <joint pos="1 0 0" axis="1 0 0"/>
+            <geom size=".1" pos="1 0 0"/>
+            <camera pos="1 0 0"/>
+            <frame pos="0 0 1">
+              <site pos="1 0 0"/>
+              <light pos="1 0 0" dir="1 0 0"/>
+            </frame>
+            <body name="grandchild" pos="1 0 0">
+              <geom size=".1"/>
+            </body>
+          </frame>
+        </body>
+      </body>
+    </worldbody>
+  </mujoco>)";
+
+  static constexpr char xml_expected[] = R"(
+  <mujoco>
+    <worldbody>
+      <body name="parent">
+        <frame pos="1 0 0">
+          <frame pos="0 1 0" euler="0 0 90">
+            <joint pos="1 0 0" axis="1 0 0"/>
+            <geom size=".1" pos="1 0 0"/>
+            <camera pos="1 0 0"/>
+            <frame pos="0 0 1">
+              <site pos="1 0 0"/>
+              <light pos="1 0 0" dir="1 0 0"/>
+            </frame>
+            <body name="grandchild" pos="1 0 0">
+              <geom size=".1"/>
+            </body>
+          </frame>
+        </frame>
+      </body>
+    </worldbody>
+  </mujoco>)";
+
+  std::array<char, 1000> er;
+  mjSpec* spec = mj_parseXMLString(xml, 0, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjsBody* child = mjs_findBody(spec, "child");
+  ASSERT_THAT(child, NotNull());
+  ASSERT_THAT(mjs_bodyToFrame(&child), NotNull()) << mjs_getError(spec);
+
+  // elements in frames of the converted body stay in them
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  MjModelPtr expected = LoadModelFromString(xml_expected, er.data(), er.size());
+  ASSERT_THAT(expected.get(), NotNull()) << er.data();
+  std::string field = "";
+  EXPECT_LE(CompareModel(model, expected.get(), field), 0)
+      << "Expected and converted models are different!\n"
+      << "Different field: " << field << '\n';
+
+  mj_deleteSpec(spec);
+  mj_deleteModel(model);
+}
+
 TEST_F(MujocoTest, BodyToFrameWorld) {
   mjSpec* spec = mj_makeSpec();
   mjsBody* world = mjs_findBody(spec, "world");
