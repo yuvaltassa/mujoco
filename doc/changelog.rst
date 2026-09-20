@@ -61,6 +61,13 @@ Bug fixes
   :ref:`mj_deleteSpec` (:issue:`2882`).
 - Fixed an out-of-bounds read when parsing the header of a :ref:`GMSH file<gmsh-file-docs>` loaded by
   :ref:`flexcomp<body-flexcomp>`. Truncated headers are now reported as an error.
+- The eigensolver that finds principal axes of inertia in the compiler (for
+  :ref:`fullinertia<body-inertial-fullinertia>`, meshes, bodies with several geoms and
+  :ref:`fusestatic<compiler-fusestatic>`), and :ref:`mju_eig3`, now converge to machine precision whatever the scale of
+  the matrix. Previously the iteration stopped early: the inertia tensor recovered from ``body_iquat`` and
+  ``body_inertia`` was accurate to 1e-6 (``mju_eig3`` to 1e-3 in single precision) and products of inertia below 1e-12
+  were ignored, so small bodies fared worse. Compiled models change accordingly: inertia tensors by up to 1e-6, and the
+  principal axes of bodies and meshes with nearly equal moments of inertia, which are ill-defined, by more.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
