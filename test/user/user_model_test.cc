@@ -734,6 +734,47 @@ TEST_F(FuseStaticTest, FuseStaticForceSensorReferencedBody) {
   EXPECT_EQ(m->nbody, 3) << "Expecting a world body and two others";
 }
 
+TEST_F(FuseStaticTest, FuseStaticFlexReferencedBody) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <compiler fusestatic="true"/>
+
+    <worldbody>
+      <body>
+        <freejoint/>
+        <geom size="0.5"/>
+        <body name="not_referenced">
+          <geom size="0.1"/>
+        </body>
+        <body name="v0">
+          <geom size="0.1"/>
+        </body>
+        <body name="v1" pos="1 0 0">
+          <geom size="0.1"/>
+        </body>
+        <body name="v2" pos="0 1 0">
+          <geom size="0.1"/>
+        </body>
+      </body>
+    </worldbody>
+
+    <deformable>
+      <flex name="flex" dim="2" body="v0 v1 v2" element="0 1 2"/>
+    </deformable>
+  </mujoco>
+  )";
+  std::array<char, 1024> error;
+  MjModelPtr m = LoadModelFromString(xml, error.data(), error.size());
+  ASSERT_THAT(m.get(), NotNull()) << error.data();
+  EXPECT_EQ(m->nbody, 5) << "Expecting world, a moving body and 3 flex bodies";
+  EXPECT_EQ(mj_name2id(m.get(), mjOBJ_BODY, "not_referenced"), -1);
+  for (int i = 0; i < 3; i++) {
+    std::string name = absl::StrFormat("v%d", i);
+    EXPECT_EQ(m->flex_vertbodyid[i],
+              mj_name2id(m.get(), mjOBJ_BODY, name.c_str()));
+  }
+}
+
 TEST_F(FuseStaticTest, FuseStaticCameraInBody) {
   static constexpr char xml[] = R"(
   <mujoco>

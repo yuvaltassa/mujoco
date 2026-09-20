@@ -51,6 +51,11 @@ Bug fixes
   the elements and child bodies of fused bodies and lost their explicit inertia; elements and child bodies nested in a
   frame of a fused body were read from freed memory and dropped from saved XML; cameras and lights of fused bodies
   were misplaced; and under :ref:`alignfree<compiler-alignfree>`, so were the cameras and lights of aligned bodies.
+- :ref:`fusestatic<compiler-fusestatic>` no longer fuses static bodies which are referenced by a
+  :ref:`flex<deformable-flex>`. Previously such models failed to compile with an "unknown body" error. This affected
+  any :ref:`flexcomp<body-flexcomp>` which is :ref:`rigid<body-flexcomp-rigid>`, has :ref:`pinned<flexcomp-pin>`
+  vertices or has "trilinear" or "quadratic" :ref:`dofs<body-flexcomp-dof>`, if its parent was a static body other
+  than the world.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
