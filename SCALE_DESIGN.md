@@ -28,8 +28,9 @@ and explicit contact pairs. The flex hammock with an attached humanoid agrees to
 with a converged solver and to $10^{-8}$ with its own 30-iteration CG settings; the mesh-based
 3x3x3 cube agrees to $10^{-10}$, the precision of `float` mesh vertices.
 
-Status: frames round-trip through save (fork branch `frames-roundtrip`, 0572fd554). One more
-prerequisite surfaced, a frame recompile bug (section 11).
+Status: both prerequisites are implemented on the fork branch `frames-roundtrip`: frames
+round-trip through save (0572fd554), and frame edits survive recompilation (157644687), a
+bug the prototype surfaced (section 11).
 
 ## 2. User-facing scope of v1
 
@@ -419,10 +420,10 @@ Table-independent, so that a wrong exponent cannot certify itself:
 - **Frames round-trip through save.** Done (`frames-roundtrip`). Contract: the writer emits
   authored values and authored structure; the compiler re-derives what it derives. Every
   authored frame persists, named or not.
-- **Frames must recompile.** Found with the prototype: `mjCFrame::compiled` is set in the
-  constructor and never reset, so editing a frame's `pos` or `quat` after a first compile is
-  silently ignored by later compiles. This defeats "a parameter, not an operation" for the
-  attributes frames already have, and must be fixed first.
+- **Frames must recompile.** Found with the prototype: `mjCFrame::compiled` was set by the
+  first compile and never reset, so editing a frame's `pos` or `quat` afterwards was silently
+  ignored by later compiles. This defeated "a parameter, not an operation" for the attributes
+  frames already have. Fixed on `frames-roundtrip` (157644687), with a regression test.
 - **Free-joint alignment** is the other transform baked on save: the writer emits aligned
   poses and drops the joint's `align`. Under the writer contract it should write the
   unaligned values and `align`. Structurally alignment is a compiler-generated frame, so it
@@ -459,8 +460,8 @@ Table-independent, so that a wrong exponent cannot certify itself:
 
 ## 13. Order of work
 
-0. Frames as parameters: round-trip (done), the recompile fix, optionally alignment
-   un-baking.
+0. Frames as parameters: round-trip and the recompile fix (both done, pending import),
+   optionally alignment un-baking.
 1. `dim` facets in `mjcf.schema`, the units column, the coverage test. Self-contained and
    useful on its own; fixes the actuator conventions of section 6 in the documentation.
 2. `scale` and `scaling` on frames: gauges, the generated table and the custom functions
