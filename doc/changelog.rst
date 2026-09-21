@@ -68,6 +68,11 @@ Bug fixes
 - An :ref:`inertial<body-inertial>` element nested in a :ref:`frame<body-frame>` is now transformed by the frame, like
   all other child elements. Previously the frame was silently ignored and the inertial frame was read in body
   coordinates.
+- :ref:`mjs_delete` now deletes a :ref:`frame<body-frame>` together with everything inside it, along with all the
+  elements that reference a deleted element, as it does for a body. Previously, deleting a frame left it in the model
+  and corrupted memory. Fixed several bugs in :ref:`mjs_bodyToFrame`: orientation alternatives and nested frames of the
+  converted body were dropped, inertials were merged incorrectly, errors were thrown through the C API, and the new
+  frame had no parent body.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
