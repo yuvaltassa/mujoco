@@ -65,6 +65,9 @@ Bug fixes
   :ref:`mj_deleteSpec` (:issue:`2882`).
 - Fixed an out-of-bounds read when parsing the header of a :ref:`GMSH file<gmsh-file-docs>` loaded by
   :ref:`flexcomp<body-flexcomp>`. Truncated headers are now reported as an error.
+- An :ref:`inertial<body-inertial>` element nested in a :ref:`frame<body-frame>` is now transformed by the frame, like
+  all other child elements. Previously the frame was silently ignored and the inertial frame was read in body
+  coordinates.
 
 Version 3.13.0 (September 8, 2026)
 ----------------------------------
