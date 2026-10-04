@@ -53,6 +53,9 @@
 
 static const int MAX_ARRAY_SIZE = INT_MAX;
 
+// tree_asleep value for fully awake tree
+static const int kAwake = -(1+mjMINAWAKE);
+
 
 //----------------------------------- static utility functions -------------------------------------
 
@@ -1115,10 +1118,9 @@ void mj_makeRawData(mjData** dest, const mjModel* m) {
   // clear nplugin (overwritten by _initPlugin)
   d->nplugin = 0;
 
-  // set awake array sizes to default (all awake)
-  d->ntree_awake = m->ntree;
-  d->nbody_awake = d->nparent_awake = m->nbody;
-  d->nv_awake = m->nv;
+  // set all trees awake, treat static bodies as awake: plugin init can call mj_kinematics
+  mju_fillInt(d->tree_asleep, kAwake, m->ntree);
+  mj_updateSleepInit(m, d, /*flg_staticawake*/ 1);
 
   // copy pointer if allocated here
   if (allocate) {
@@ -1468,8 +1470,6 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
   if (m->qpos0) {
     mju_copy(d->qpos, m->qpos0, m->nq);
   }
-
-  static int kAwake = -(1+mjMINAWAKE);  // tree_asleep value for fully awake tree
 
   // set all trees to awake
   mju_fillInt(d->tree_asleep, kAwake, m->ntree);

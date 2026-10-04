@@ -14,6 +14,8 @@ Engine
   wrapping near wrap onset and for inside wrapping. Thanks to :github:user:`M-Colley` for reporting and analyzing the
   issues in :doc:`MJWarp <mjwarp/index>` issues `1713 <https://github.com/google-deepmind/mujoco_warp/issues/1713>`__
   and `1714 <https://github.com/google-deepmind/mujoco_warp/issues/1714>`__.
+- Fixed an intermittent fatal error ("invalid sleep state index") in :ref:`mj_makeData` when :ref:`sleeping<Sleeping>`
+  is enabled and a plugin computes kinematics during initialization, as the ``mujoco.elasticity.cable`` plugin does.
 
 Compiler
 ^^^^^^^^
