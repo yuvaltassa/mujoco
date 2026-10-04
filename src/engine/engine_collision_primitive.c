@@ -649,16 +649,152 @@ int mjraw_SphereTriangle(mjPreContact* con, mjtNum margin,
 }
 
 
+// angle below which two edges, or an edge and a face, are considered parallel
+#ifdef mjUSESINGLE
+  #define mjEDGE_PARALLEL 3e-4f
+#else
+  #define mjEDGE_PARALLEL 1e-8
+#endif
+
+
+// box edges : segment with radius, end points (a, b) of the segment are in box local frame
+static int boxEdgeSegment(mjPreContact* con, int maxcon, mjtNum margin, const mjtNum* pos,
+                          const mjtNum* mat, const mjtNum* size, const mjtNum a[3],
+                          const mjtNum b[3], mjtNum r) {
+  int cnt = 0;
+  mjtNum bound = r + margin;
+  mjtNum dir[3] = {b[0]-a[0], b[1]-a[1], b[2]-a[2]};
+  mjtNum len2 = mju_dot3(dir, dir);
+
+  // separation of segment and box along the box axes; exit if too large
+  mjtNum sepmax = -mjMAXVAL;
+  for (int j = 0; j < 3; j++) {
+    mjtNum sep = 0.5*(mju_abs(a[j]+b[j]) - mju_abs(dir[j])) - size[j];
+    if (sep > bound) {
+      return 0;
+    }
+    sepmax = mju_max(sepmax, sep);
+  }
+
+  // separation along the common normals of the segment and the box axes; exit if too large
+  mjtNum nrm[3][2], offset[3];
+  int parallel[3];
+  for (int k = 0; k < 3; k++) {
+    int k1 = (k+1) % 3, k2 = (k+2) % 3;
+
+    // common normal: cross product of box axis k and segment; skip if parallel
+    mjtNum n1 = -dir[k2], n2 = dir[k1];
+    mjtNum nrm2 = n1*n1 + n2*n2;
+    parallel[k] = (nrm2 <= mjEDGE_PARALLEL*mjEDGE_PARALLEL*len2);
+    if (parallel[k]) {
+      continue;
+    }
+    mjtNum scl = 1/mju_sqrt(nrm2);
+    n1 *= scl;
+    n2 *= scl;
+
+    // orient the normal away from the box center
+    offset[k] = n1*a[k1] + n2*a[k2];
+    if (offset[k] < 0) {
+      n1 = -n1;
+      n2 = -n2;
+      offset[k] = -offset[k];
+    }
+    nrm[k][0] = n1;
+    nrm[k][1] = n2;
+
+    mjtNum sep = offset[k] - size[k1]*mju_abs(n1) - size[k2]*mju_abs(n2);
+    if (sep > bound) {
+      return 0;
+    }
+    sepmax = mju_max(sepmax, sep);
+  }
+
+  // slack for comparing separations, which are equal when the segment is parallel to a box face
+  mjtNum septol = mjEDGE_PARALLEL*(size[0] + size[1] + size[2]);
+
+  for (int k = 0; k < 3; k++) {
+    if (parallel[k]) {
+      continue;
+    }
+    int k1 = (k+1) % 3, k2 = (k+2) % 3;
+    mjtNum n1 = nrm[k][0], n2 = nrm[k][1];
+
+    // box edge supporting the normal, and its neighbor across the box face nearest to the normal
+    mjtNum q[3] = {0, 0, 0};
+    q[k1] = n1 >= 0 ? size[k1] : -size[k1];
+    q[k2] = n2 >= 0 ? size[k2] : -size[k2];
+    for (int j = 0; j < 2; j++) {
+      if (j == 1) {
+        int kn = mju_abs(n1) >= mju_abs(n2) ? k2 : k1;
+        q[kn] = -q[kn];
+      }
+
+      // separation of box edge and segment along the normal
+      mjtNum dist = offset[k] - n1*q[k1] - n2*q[k2];
+      if (dist > bound) {
+        continue;
+      }
+
+      // segment is inside the box: this should be the direction of least penetration
+      if (dist < 0 && dist < sepmax - septol) {
+        continue;
+      }
+
+      // closest points should be in the interior of the segment and of the box edge
+      mjtNum t = ((q[k1]-a[k1])*dir[k1] + (q[k2]-a[k2])*dir[k2]) /
+                 (dir[k1]*dir[k1] + dir[k2]*dir[k2]);
+      if (t <= 0 || t >= 1) {
+        continue;
+      }
+      mjtNum local[3] = {a[0] + t*dir[0], a[1] + t*dir[1], a[2] + t*dir[2]};
+      if (mju_abs(local[k]) >= size[k]) {
+        continue;
+      }
+
+      // create contact
+      if (cnt < maxcon) {
+        // normal in global frame (from Box to Segment)
+        mjtNum nrm_local[3];
+        nrm_local[k] = 0;
+        nrm_local[k1] = n1;
+        nrm_local[k2] = n2;
+        mju_mulMatVec3(con[cnt].normal, mat, nrm_local);
+
+        // distance
+        con[cnt].dist = dist - r;
+
+        // position: p - nrm * (r + dist/2)
+        mjtNum p[3];
+        mju_mulMatVec3(p, mat, local);
+        mju_addTo3(p, pos);
+        mjtNum offs = r + con[cnt].dist * 0.5;
+        mji_addScl3(con[cnt].pos, p, con[cnt].normal, -offs);
+
+        // frame details
+        mju_zero3(con[cnt].tangent);
+
+        cnt++;
+      }
+    }
+  }
+
+  return cnt;
+}
+
+
 // box : triangle with radius
 int mjraw_BoxTriangle(mjPreContact* con, mjtNum margin, const mjtNum* pos,
                       const mjtNum* mat, const mjtNum* size, const mjtNum* t1,
                       const mjtNum* t2, const mjtNum* t3, mjtNum rt) {
   int cnt = 0;
   const mjtNum* vert[3] = {t1, t2, t3};
+  mjtNum vlocal[3][3];
 
   for (int i = 0; i < 3; i++) {
     // map vertex to box local frame
-    mjtNum diff[3], local[3];
+    mjtNum diff[3];
+    mjtNum* local = vlocal[i];
     mju_sub3(diff, vert[i], pos);
     mju_mulMatTVec3(local, mat, diff);
 
@@ -738,6 +874,16 @@ int mjraw_BoxTriangle(mjPreContact* con, mjtNum margin, const mjtNum* pos,
     }
   }
 
+  // no vertex or corner contacts: check box edges against triangle edges
+  // TODO(team): triangle edges can pass through box edges if a vertex or a corner is in contact;
+  //             edge contacts next to those contacts make pinching between two boxes unstable
+  if (!cnt) {
+    for (int i = 0; i < 3; i++) {
+      cnt += boxEdgeSegment(con + cnt, mjMAXCONPAIR - cnt, margin, pos, mat, size,
+                            vlocal[i], vlocal[(i+1) % 3], rt);
+    }
+  }
+
   return cnt;
 }
 
@@ -800,6 +946,55 @@ int mjraw_CapsuleTriangle(mjPreContact* con, mjtNum margin, const mjtNum* pos,
     mji_add3(con[cnt].pos, closest, vert[i]);
     mji_addToScl3(con[cnt].pos, vec, radius - rt);
     mju_scl3(con[cnt].pos, con[cnt].pos, 0.5);
+
+    cnt++;
+    if (cnt >= mjMAXCONPAIR) return cnt;
+  }
+
+  // Check triangle edges against capsule axis (Segment-Segment)
+  for (int i = 0; i < 3; i++) {
+    const mjtNum* v1 = vert[i];
+    const mjtNum* v2 = vert[(i+1) % 3];
+    mjtNum edge[3], dif[3], nrm[3], tmp[3];
+    mju_sub3(edge, v2, v1);
+    mju_sub3(dif, v1, p1);
+
+    // common normal: cross product of capsule axis and triangle edge; skip if parallel
+    mji_cross(nrm, axis, edge);
+    mjtNum nrm2 = mju_dot3(nrm, nrm);
+    if (nrm2 <= mjEDGE_PARALLEL*mjEDGE_PARALLEL*mju_dot3(edge, edge)) {
+      continue;
+    }
+
+    // distance between the two lines
+    mjtNum scl = 1/mju_sqrt(nrm2);
+    mjtNum dist = mju_dot3(dif, nrm)*scl;
+    if (mju_abs(dist) > radius + rt + margin) {
+      continue;
+    }
+
+    // closest points should be in the interior of the capsule axis and of the triangle edge
+    mji_cross(tmp, dif, edge);
+    mjtNum s = mju_dot3(nrm, tmp) / nrm2;
+    if (s <= 0 || s >= 2*len) {
+      continue;
+    }
+    mji_cross(tmp, dif, axis);
+    mjtNum t = mju_dot3(nrm, tmp) / nrm2;
+    if (t <= 0 || t >= 1) {
+      continue;
+    }
+
+    // con->dist
+    con[cnt].dist = mju_abs(dist) - radius - rt;
+
+    // Frame: normal from Capsule to Triangle.
+    mji_scl3(con[cnt].normal, nrm, dist < 0 ? -scl : scl);
+    mju_zero3(con[cnt].tangent);
+
+    // Position: midway between surfaces
+    mji_addScl3(con[cnt].pos, p1, axis, s);
+    mji_addToScl3(con[cnt].pos, con[cnt].normal, radius + 0.5*con[cnt].dist);
 
     cnt++;
     if (cnt >= mjMAXCONPAIR) return cnt;

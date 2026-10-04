@@ -40,6 +40,13 @@ Engine
 - Added the :ref:`enclosed<sensor-insidesite-enclosed>` attribute to :ref:`insidesite<sensor-insidesite>` sensors,
   measuring how much an object juts out of a site (using directed Hausdorff distance) and reporting signed clearance/protrusion.
 
+Bug fixes
+^^^^^^^^^
+- Fixed missed collisions of 2D flexes with box and capsule geoms: a geom lying between the vertices of the flex was not
+  detected, so a cloth fell through a bar narrower than the spacing of its vertices. The edges of flex triangles now
+  collide with the axis of a capsule, and with the edges of a box when no vertex of the triangle or corner of the box is
+  in contact. This was a regression in version 3.5.0.
+
 Version 3.14.0 (September 22, 2026)
 -----------------------------------
 

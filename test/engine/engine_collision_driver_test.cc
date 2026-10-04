@@ -383,6 +383,53 @@ TEST_F(MjCollisionTest, PinchingSucceeds) {
   EXPECT_GT(avg_z, 0.2) << "Cloth slipped out of gripper!";
 }
 
+// A box or capsule which lies between the vertices of a coarse cloth touches
+// only the edges of the cloth.
+TEST_F(MjCollisionTest, ClothEdgesCollideWithThinBar) {
+  constexpr char xml[] = R"(
+  <mujoco>
+    <option timestep="0.002"/>
+    <worldbody>
+      <geom name="box" type="box" size=".02 .3 .02"/>
+      <geom name="capsule" type="capsule" size=".02 .3" pos="1 0 0" euler="90 0 0"/>
+      <flexcomp name="on_box" type="grid" count="4 4 1" spacing=".1 .1 .1" dim="2" mass="1" pos="0 0 .024" radius=".005">
+        <edge equality="true"/>
+      </flexcomp>
+      <flexcomp name="on_capsule" type="grid" count="4 4 1" spacing=".1 .1 .1" dim="2" mass="1" pos="1 0 .024" radius=".005">
+        <edge equality="true"/>
+      </flexcomp>
+    </worldbody>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr m = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(m.get(), NotNull()) << error;
+  MjDataPtr d = MakeData(m);
+  ASSERT_THAT(d, NotNull());
+
+  // each cloth is 4 mm above its bar: the edges touch the bar from above
+  mj_forward(m.get(), d.get());
+  int ncon[2] = {0, 0};
+  for (int i = 0; i < d->ncon; i++) {
+    const mjContact& con = d->contact[i];
+    ASSERT_GE(con.geom[0], 0);
+    EXPECT_EQ(con.flex[1], con.geom[0]);
+    EXPECT_NEAR(con.dist, -0.001, MjTol(1e-15, 1e-8));
+    EXPECT_NEAR(con.frame[2], 1, MjTol(1e-15, 1e-6));
+    ncon[con.geom[0]]++;
+  }
+  EXPECT_GT(ncon[0], 0);
+  EXPECT_GT(ncon[1], 0);
+
+  // the bars hold the cloths
+  for (int i = 0; i < 500; i++) {
+    mj_step(m.get(), d.get());
+  }
+  for (int i = 0; i < m->nflexvert; i++) {
+    EXPECT_GT(d->flexvert_xpos[3 * i + 2], -0.2);
+  }
+}
+
 TEST_F(MjCollisionTest, MarginSumming) {
   // Two spheres with size 0.1, placed 0.21 apart (distance of 0.01).
   // With margin summing, margin1 + margin2 = 0.00999 + 0.00999 = 0.01998 > 0.01
