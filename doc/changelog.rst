@@ -14,6 +14,9 @@ Engine
   wrapping near wrap onset and for inside wrapping. Thanks to :github:user:`M-Colley` for reporting and analyzing the
   issues in :doc:`MJWarp <mjwarp/index>` issues `1713 <https://github.com/google-deepmind/mujoco_warp/issues/1713>`__
   and `1714 <https://github.com/google-deepmind/mujoco_warp/issues/1714>`__.
+- Fixed a fatal error in :ref:`mj_island` (``no tree found for constraint``) with dense Jacobians, when the first row of
+  a flex contact was exactly zero, as when a flex vertex on a hinge axis touches a plane. Constraint islands now
+  contain all the bodies of a contact whatever the values of its Jacobian, as they did with sparse Jacobians.
 
 Compiler
 ^^^^^^^^

@@ -374,8 +374,8 @@ static int mj_vertBodyWeight(const mjModel* m, const mjData* d, int f, int* v,
 
 // compute bodies and weights of one side of a contact, return #bodies
 //   the weights interpolate the side at the contact point; weight can be NULL
-static int mj_contactBodyWeight(const mjModel* m, const mjData* d, const mjContact* con,
-                                int side, int* body, mjtNum* weight) {
+int mj_contactBodyWeight(const mjModel* m, const mjData* d, const mjContact* con, int side,
+                         int* body, mjtNum* weight) {
   // geom
   if (con->geom[side] >= 0) {
     body[0] = m->geom_bodyid[con->geom[side]];

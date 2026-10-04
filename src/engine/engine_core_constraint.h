@@ -62,6 +62,11 @@ void mj_instantiateEquality(const mjModel* m, mjData* d);
 // frictionless and frictional contacts
 void mj_instantiateContact(const mjModel* m, mjData* d);
 
+// compute bodies and weights of one side of a contact, return #bodies
+//   the weights interpolate the side at the contact point; weight can be NULL
+int mj_contactBodyWeight(const mjModel* m, const mjData* d, const mjContact* con, int side,
+                         int* body, mjtNum* weight);
+
 // compute Jacobian for contact, return number of DOFs affected
 //
 // Arguments:
