@@ -1461,12 +1461,18 @@ static void set0(mjModel* m, mjData* d) {
       continue;
     }
 
-    // damping is 0 or negative (interpreted as regular "kv"): skip
-    if (biasprm[2] <= 0) {
+    // positive biasprm[2] is a damping ratio, which actuator_dampratio holds from then on
+    if (biasprm[2] > 0) {
+      m->actuator_dampratio[i] = biasprm[2];
+    }
+
+    // no damping ratio, biasprm[2] is a regular "kv": skip
+    mjtNum dampratio = m->actuator_dampratio[i];
+    if (dampratio <= 0) {
       continue;
     }
 
-    // === interpret biasprm[2] > 0 as dampratio for position-like actuators
+    // === compute biasprm[2] from the damping ratio
 
     // "reflected" inertia: 1 / (J * inv(M) * J')
     mjtNum mass = 0;
@@ -1485,13 +1491,50 @@ static void set0(mjModel* m, mjData* d) {
 
     // damping = dampratio * 2 * sqrt(kp * mass)
     mjtNum kp = is_pid ? -biasprm[1] : gainprm[0];
-    mjtNum damping = biasprm[2] * 2 * mju_sqrt(kp * mass);
+    mjtNum damping = dampratio * 2 * mju_sqrt(kp * mass);
 
     // set biasprm[2] to negative damping
     biasprm[2] = -damping;
   }
 
   mj_freeStack(d);
+}
+
+
+// set the stiffness and damping of joints with a spring-damper, from dof_invweight0
+static void setSpringDamper(mjModel* m) {
+  for (int i=0; i < m->njnt; i++) {
+    mjtNum timeconst = m->jnt_springdamper[2*i];
+    mjtNum dampratio = m->jnt_springdamper[2*i+1];
+
+    // no spring-damper: skip
+    if (timeconst <= 0 || dampratio <= 0) {
+      continue;
+    }
+
+    // number of dofs
+    int ndim = 1;
+    if (m->jnt_type[i] == mjJNT_FREE) {
+      ndim = 6;
+    } else if (m->jnt_type[i] == mjJNT_BALL) {
+      ndim = 3;
+    }
+
+    // average inertia (dof_invweight0 of a free joint differs for translation and rotation)
+    int adr = m->jnt_dofadr[i];
+    mjtNum inertia = 0;
+    for (int k=0; k < ndim; k++) {
+      inertia += m->dof_invweight0[adr+k];
+    }
+    inertia = ((mjtNum)ndim) / mju_max(mjMINVAL, inertia);
+
+    // stiffness and damping, as in the solref computation
+    m->jnt_stiffness[i] = inertia / mju_max(mjMINVAL, timeconst*timeconst*dampratio*dampratio);
+    mjtNum damping = 2 * inertia / mju_max(mjMINVAL, timeconst);
+    for (int k=0; k < ndim; k++) {
+      m->dof_damping[adr+k] = damping;
+    }
+  }
 }
 
 
@@ -1506,6 +1549,8 @@ static void updateBox(mjtNum* xmin, mjtNum* xmax, mjtNum* pos, mjtNum radius) {
 
 // compute stat; assume computations already executed in qpos0
 static void setStat(mjModel* m, mjData* d) {
+  // computed statistics, those which are not computed keep their last value
+  mjStatistic stat = m->statauto;
   mjtNum xmin[3] = {1E+10, 1E+10, 1E+10};
   mjtNum xmax[3] = {-1E+10, -1E+10, -1E+10};
   mjtNum rbound;
@@ -1551,12 +1596,12 @@ static void setStat(mjModel* m, mjData* d) {
   }
 
   // compute center
-  mju_add3(m->stat.center, xmin, xmax);
-  mju_scl3(m->stat.center, m->stat.center, 0.5);
+  mju_add3(stat.center, xmin, xmax);
+  mju_scl3(stat.center, stat.center, 0.5);
 
   // compute bounding box size
   if (xmax[0] > xmin[0])
-    m->stat.extent = mju_max(1E-5,
+    stat.extent = mju_max(1E-5,
                              mju_max(xmax[0]-xmin[0], mju_max(xmax[1]-xmin[1], xmax[2]-xmin[2])));
 
   // set body size to max com-joint distance
@@ -1604,10 +1649,10 @@ static void setStat(mjModel* m, mjData* d) {
 
   // compute meansize, make sure all sizes are above min
   if (m->nbody > 1) {
-    m->stat.meansize = 0;
+    stat.meansize = 0;
     for (int i=1; i < m->nbody; i++) {
       body[i] = mju_max(body[i], 1E-5);
-      m->stat.meansize += body[i]/(m->nbody-1);
+      stat.meansize += body[i]/(m->nbody-1);
     }
   }
 
@@ -1628,25 +1673,48 @@ static void setStat(mjModel* m, mjData* d) {
   }
 
   // fix extent if too small compared to meanbody
-  m->stat.extent = mju_max(m->stat.extent, 2 * m->stat.meansize);
+  stat.extent = mju_max(stat.extent, 2 * stat.meansize);
 
   // compute meanmass
   if (m->nbody > 1) {
-    m->stat.meanmass = 0;
+    stat.meanmass = 0;
     for (int i=1; i < m->nbody; i++) {
-      m->stat.meanmass += m->body_mass[i];
+      stat.meanmass += m->body_mass[i];
     }
-    m->stat.meanmass /= (m->nbody-1);
+    stat.meanmass /= (m->nbody-1);
   }
 
   // compute meaninertia
   if (m->nv) {
-    m->stat.meaninertia = 0;
+    stat.meaninertia = 0;
     for (int i=0; i < m->nv; i++) {
-      m->stat.meaninertia += d->M[m->M_rowadr[i] + m->M_rownnz[i] - 1];
+      stat.meaninertia += d->M[m->M_rowadr[i] + m->M_rownnz[i] - 1];
     }
-    m->stat.meaninertia /= m->nv;
+    stat.meaninertia /= m->nv;
   }
+
+  // a statistic which differs from the one last computed was given, by the compiler or the user,
+  // and is kept; the others are computed
+  mjStatistic* given = &m->stat;
+  const mjStatistic* last = &m->statauto;
+  if (given->meaninertia == last->meaninertia) {
+    given->meaninertia = stat.meaninertia;
+  }
+  if (given->meanmass == last->meanmass) {
+    given->meanmass = stat.meanmass;
+  }
+  if (given->meansize == last->meansize) {
+    given->meansize = stat.meansize;
+  }
+  if (given->extent == last->extent) {
+    given->extent = stat.extent;
+  }
+  if (given->center[0] == last->center[0] &&
+      given->center[1] == last->center[1] &&
+      given->center[2] == last->center[2]) {
+    mju_copy3(given->center, stat.center);
+  }
+  m->statauto = stat;
 
   mj_freeStack(d);
 }
@@ -1661,10 +1729,15 @@ static void setSpring(mjModel* m, mjData* d) {
   mj_tendon(m, d);
   mj_transmission(m, d);
 
-  // copy if model spring length is -1
+  // spring length range computed in qpos_spring
   for (int i=0; i < m->ntendon; i++) {
+    // a range of (-1, -1) is computed, which tendon_springauto holds from then on
     if (m->tendon_lengthspring[2*i] == -1 && m->tendon_lengthspring[2*i+1] == -1) {
-      // explicit springlength unused, set equal to ten_length
+      m->tendon_springauto[i] = 1;
+    }
+
+    // set equal to ten_length
+    if (m->tendon_springauto[i]) {
       m->tendon_lengthspring[2*i] = m->tendon_lengthspring[2*i+1] = d->ten_length[i];
     }
   }
@@ -1879,6 +1952,9 @@ void mj_setConst(mjModel* m, mjData* d) {
 
   // set quantities that depend on qpos0
   set0(m, d);
+
+  // set joint stiffness and damping from spring-dampers
+  setSpringDamper(m);
 
   // compute statistics
   setStat(m, d);

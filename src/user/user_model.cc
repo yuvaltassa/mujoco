@@ -158,16 +158,6 @@ mjCModel::mjCModel() {
   texturedir_.clear();
   spec_modelname_ = "MuJoCo Model";
 
-  //------------------------ auto-computed statistics
-#ifndef MEMORY_SANITIZER
-  // initializing as best practice, but want MSAN to catch uninitialized use
-  meaninertia_auto = 0;
-  meanmass_auto    = 0;
-  meansize_auto    = 0;
-  extent_auto      = 0;
-  center_auto[0] = center_auto[1] = center_auto[2] = 0;
-#endif
-
   deepcopy_ = false;
   nplugin   = 0;
   Clear();
@@ -2396,41 +2386,6 @@ void mjCModel::SetSizes() {
 }
 
 
-// automatic stiffness and damping computation
-void mjCModel::AutoSpringDamper(mjModel* m) {
-  // process all joints
-  for (int n = 0; n < m->njnt; n++) {
-    // get joint dof address and number of dimensions
-    int adr  = m->jnt_dofadr[n];
-    int ndim = mjCJoint::nv((mjtJoint)m->jnt_type[n]);
-
-    // get timeconst and dampratio from joint specification
-    mjtNum timeconst = (mjtNum)joints_[n]->springdamper[0];
-    mjtNum dampratio = (mjtNum)joints_[n]->springdamper[1];
-
-    // skip joint if either parameter is non-positive
-    if (timeconst <= 0 || dampratio <= 0) { continue; }
-
-    // get average inertia (dof_invweight0 in free joint is different for tran and rot)
-    mjtNum inertia = 0;
-    for (int i = 0; i < ndim; i++) { inertia += m->dof_invweight0[adr + i]; }
-    inertia = ((mjtNum)ndim) / std::max(mjMINVAL, inertia);
-
-    // compute stiffness and damping (same as solref computation)
-    mjtNum stiffness = inertia / std::max(mjMINVAL, timeconst * timeconst * dampratio * dampratio);
-    mjtNum damping   = 2 * inertia / std::max(mjMINVAL, timeconst);
-
-    // save stiffness and damping in the private mjsJoints
-    joints_[n]->stiffness[0] = stiffness;
-    joints_[n]->damping[0]   = damping;
-
-    // assign
-    m->jnt_stiffness[n] = stiffness;
-    for (int i = 0; i < ndim; i++) { m->dof_damping[adr + i] = damping; }
-  }
-}
-
-
 // arguments for lengthrange thread function
 struct _LRThreadArg {
   mjModel*       m;
@@ -2824,6 +2779,7 @@ void mjCModel::CopyTree(mjModel* m) {
       mjuu_copyvec(m->jnt_axis + 3 * jid, pj->axis, 3);
       m->jnt_stiffness[jid] = (mjtNum)pj->stiffness[0];
       mjuu_copyvec(m->jnt_stiffnesspoly + mjNPOLY * jid, pj->stiffness + 1, mjNPOLY);
+      mjuu_copyvec(m->jnt_springdamper + 2 * jid, pj->springdamper, 2);
       mjuu_copyvec(m->jnt_range + 2 * jid, pj->range, 2);
       mjuu_copyvec(m->jnt_actfrcrange + 2 * jid, pj->actfrcrange, 2);
       mjuu_copyvec(m->jnt_solref + mjNREF * jid, pj->solref_limit, mjNREF);
@@ -6306,20 +6262,10 @@ void mjCModel::TryCompile(mjModel*& m, mjData*& d, const mjVFS* vfs) {
   // set constant fields
   mj_setConst(m, d);
 
-  // automatic spring-damper adjustment
-  AutoSpringDamper(m);
-
   // actuator lengthrange computation
   LengthRange(m, d);
 
-  // save automatically-computed statistics, to disambiguate when saving
-  extent_auto      = m->stat.extent;
-  meaninertia_auto = m->stat.meaninertia;
-  meanmass_auto    = m->stat.meanmass;
-  meansize_auto    = m->stat.meansize;
-  mjuu_copyvec(center_auto, m->stat.center, 3);
-
-  // override model statistics if defined by user
+  // override model statistics if defined by user, mj_setConst keeps them
   if (mjuu_defined(stat.extent)) m->stat.extent = (mjtNum)stat.extent;
   if (mjuu_defined(stat.meaninertia)) m->stat.meaninertia = (mjtNum)stat.meaninertia;
   if (mjuu_defined(stat.meanmass)) m->stat.meanmass = (mjtNum)stat.meanmass;
@@ -6721,22 +6667,27 @@ void mjCModel::BackValues(const mjModel* m, bool tospec, bool write) {
 
   // statistics: the model was given the value which is set, or else the one computed for it
   auto statistic =
-      [&](mjtNum* value, mjtNum* element, const mjtNum* model, const double* computed, int n) {
+      [&](mjtNum* value, mjtNum* element, const mjtNum* model, const mjtNum* computed, int n) {
         bool isset   = mjuu_defined(element[0]);
         bool changed = false;
         for (int i = 0; i < n; i++) {
-          changed |= model[i] != (isset ? element[i] : static_cast<mjtNum>(computed[i]));
+          changed |= model[i] != (isset ? element[i] : computed[i]);
         }
         if (changed && write) {
           std::copy_n(model, n, element);
           if (tospec) { std::copy_n(model, n, value); }
         }
       };
-  statistic(&spec.stat.meaninertia, &stat.meaninertia, &m->stat.meaninertia, &meaninertia_auto, 1);
-  statistic(&spec.stat.meanmass, &stat.meanmass, &m->stat.meanmass, &meanmass_auto, 1);
-  statistic(&spec.stat.meansize, &stat.meansize, &m->stat.meansize, &meansize_auto, 1);
-  statistic(&spec.stat.extent, &stat.extent, &m->stat.extent, &extent_auto, 1);
-  statistic(spec.stat.center, stat.center, m->stat.center, center_auto, 3);
+  const mjStatistic& computed = m->statauto;
+  statistic(&spec.stat.meaninertia,
+            &stat.meaninertia,
+            &m->stat.meaninertia,
+            &computed.meaninertia,
+            1);
+  statistic(&spec.stat.meanmass, &stat.meanmass, &m->stat.meanmass, &computed.meanmass, 1);
+  statistic(&spec.stat.meansize, &stat.meansize, &m->stat.meansize, &computed.meansize, 1);
+  statistic(&spec.stat.extent, &stat.extent, &m->stat.extent, &computed.extent, 1);
+  statistic(spec.stat.center, stat.center, m->stat.center, computed.center, 3);
 
   // joint and dof
   for (int i = 0; i < njnt; i++) {
@@ -6795,18 +6746,17 @@ void mjCModel::BackValues(const mjModel* m, bool tospec, bool write) {
     shared("the solver parameters of the friction loss of a joint", m->dof_solref, mjNREF);
     shared("the solver parameters of the friction loss of a joint", m->dof_solimp, mjNIMP);
 
-    // stiffness and damping: springdamper computes both, so a change of either takes its place
-    bool spring = copy(pj->spec.stiffness, pj->stiffness, m->jnt_stiffness + i);
-    bool damper = copy(pj->spec.damping, pj->damping, m->dof_damping + dofadr);
-    if ((spring || damper) &&
-        tospec &&
-        write &&
-        pj->springdamper[0] > 0 &&
-        pj->springdamper[1] > 0) {
-      pj->spec.stiffness[0] = pj->stiffness[0];
-      pj->spec.damping[0]   = pj->damping[0];
-      pj->springdamper[0] = pj->springdamper[1] = 0;
-      pj->spec.springdamper[0] = pj->spec.springdamper[1] = 0;
+    // stiffness and damping: those of a joint with a spring-damper are computed from it by
+    // mj_setConst, and are not given in the spec
+    copy(pj->spec.springdamper, pj->springdamper, m->jnt_springdamper + 2 * i, 2);
+    if (pj->springdamper[0] > 0 && pj->springdamper[1] > 0) {
+      if (write) {
+        Back(pj->stiffness, m->jnt_stiffness + i);
+        Back(pj->damping, m->dof_damping + dofadr);
+      }
+    } else {
+      copy(pj->spec.stiffness, pj->stiffness, m->jnt_stiffness + i);
+      copy(pj->spec.damping, pj->damping, m->dof_damping + dofadr);
     }
     copy(pj->spec.stiffness + 1, pj->stiffness + 1, m->jnt_stiffnesspoly + mjNPOLY * i, mjNPOLY);
     copy(pj->spec.damping + 1, pj->damping + 1, m->dof_dampingpoly + mjNPOLY * dofadr, mjNPOLY);
@@ -7162,6 +7112,14 @@ void mjCModel::BackValues(const mjModel* m, bool tospec, bool write) {
     copy(&pt->spec.armature, &pt->armature, m->tendon_armature + i);
     copy(&pt->spec.frictionloss, &pt->frictionloss, m->tendon_frictionloss + i);
     copyvector(pt->spec_userdata_, pt->userdata_, m->tendon_user + nuser_tendon * i, nuser_tendon);
+
+    // spring length: one which mj_setConst computes in qpos_spring is given as {-1, -1}
+    bool length    = copy(pt->spec.springlength, pt->springlength, m->tendon_lengthspring + 2 * i, 2);
+    bool automatic = Differs(&pt->springauto_, m->tendon_springauto + i, 1);
+    if (automatic && write) { Back(&pt->springauto_, m->tendon_springauto + i); }
+    if ((length || automatic) && tospec && write && pt->springauto_) {
+      pt->spec.springlength[0] = pt->spec.springlength[1] = -1;
+    }
   }
 
   // actuators
@@ -7170,7 +7128,15 @@ void mjCModel::BackValues(const mjModel* m, bool tospec, bool write) {
 
     copy(pa->spec.dynprm, pa->dynprm, m->actuator_dynprm + mjNDYN * i, mjNDYN);
     copy(pa->spec.gainprm, pa->gainprm, m->actuator_gainprm + mjNGAIN * i, mjNGAIN);
-    copy(pa->spec.biasprm, pa->biasprm, m->actuator_biasprm + mjNBIAS * i, mjNBIAS);
+
+    // bias: the spec gives the damping ratio of a position-like actuator in place of the damping,
+    // which mj_setConst computes from it
+    bool bias      = copy(pa->spec.biasprm, pa->biasprm, m->actuator_biasprm + mjNBIAS * i, mjNBIAS);
+    bool dampratio = Differs(&pa->dampratio_, m->actuator_dampratio + i, 1);
+    if (dampratio && write) { Back(&pa->dampratio_, m->actuator_dampratio + i); }
+    if ((bias || dampratio) && tospec && write) {
+      pa->spec.biasprm[2] = pa->dampratio_ > 0 ? pa->dampratio_ : pa->biasprm[2];
+    }
 
     // control ranges, one for each input: pid has its own for the velocity and feedforward
     // inputs, and the other inputs share ctrlrange. A range which is inherited from the target

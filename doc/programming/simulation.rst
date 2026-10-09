@@ -721,6 +721,10 @@ Exceptions to the general rule that **real-valued** types **are safe to change**
    * - ``dof_armature``
      - Safe with :ref:`mj_setConst`.
      -
+   * - ``jnt_springdamper``
+     - Safe with :ref:`mj_setConst`.
+     - The stiffness and damping of a joint with a positive :ref:`springdamper<body-joint-springdamper>` are computed
+       from it by :ref:`mj_setConst`.
    * - ``geom_pos`` |br| ``geom_quat`` |br| ``geom_size``
      - Safe with :ref:`mj_setConst`.
      - The bounding volumes of geoms and bodies follow, and so does the added mass of geoms in the ellipsoid
@@ -744,9 +748,19 @@ Exceptions to the general rule that **real-valued** types **are safe to change**
    * - ``tendon_stiffness`` |br| ``tendon_damping``
      - Mostly safe.
      - Affects whether kinematic trees are allowed to sleep. If changing from/to zero, :ref:`mj_setConst` is required.
-   * - ``actuator_gainprm`` |br| ``actuator_biasprm``
+   * - ``tendon_lengthspring`` |br| ``tendon_springauto``
+     - Safe with :ref:`mj_setConst`.
+     - The spring length range of a tendon with ``tendon_springauto`` is computed by :ref:`mj_setConst` in
+       ``qpos_spring``. A range of (-1, -1) sets ``tendon_springauto``.
+   * - ``actuator_gainprm`` |br| ``actuator_biasprm`` |br| ``actuator_dampratio``
      - Mostly safe.
-     - For position-like actuators using :ref:`dampratio<actuator-position-dampratio>`, :ref:`mj_setConst` is required.
+     - The damping of a position-like actuator with a positive :ref:`dampratio<actuator-position-dampratio>` is computed
+       by :ref:`mj_setConst`, which is then required. A positive ``biasprm[2]`` is a damping ratio, which
+       :ref:`mj_setConst` moves to ``actuator_dampratio``.
+   * - ``stat``
+     - Safe.
+     - :ref:`mj_setConst` computes ``statauto``, and sets each statistic in ``stat`` which equals the one it computed
+       before. The others were given, by the :ref:`statistic<statistic>` element or by the user, and are kept.
    * - ``eq_data``
      - Safe with :ref:`mj_setConst`.
      - For connect and weld constraints, offsets are computed if not provided.

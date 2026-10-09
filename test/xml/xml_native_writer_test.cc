@@ -3003,8 +3003,7 @@ TEST_F(AsWrittenTest, SavesShortcuts) {
   EXPECT_EQ(SaveAndReadXml(spec), xml);
 
   // the canonical notation, which compiled values are always saved in, has
-  // every actuator as general; a damping ratio which compilation resolved into
-  // a gain is written rounded
+  // every actuator as general; a damping ratio is saved as the ratio
   for (bool compiled : {false, true}) {
     spec->compiler.savecompiled = compiled;
     spec->compiler.savecanonical = 1;
@@ -3026,8 +3025,7 @@ TEST_F(AsWrittenTest, SavesShortcuts) {
     mjModel* remodel = mj_compile(reloaded, nullptr);
     ASSERT_THAT(remodel, NotNull()) << mjs_getError(reloaded);
     std::string field;
-    EXPECT_LE(CompareModel(model, remodel, field), compiled ? 1e-6 : 0)
-        << field;
+    EXPECT_LE(CompareModel(model, remodel, field), 0) << field;
     mj_deleteModel(remodel);
     mj_deleteSpec(reloaded);
   }
@@ -3135,9 +3133,7 @@ TEST_F(AsWrittenTest, SavesShortcutDefaults) {
     mjModel* remodel = mj_compile(reloaded, nullptr);
     ASSERT_THAT(remodel, NotNull()) << mjs_getError(reloaded);
     std::string field;
-    EXPECT_LE(CompareModel(model, remodel, field), savecompiled ? 1e-6 : 0)
-        << field << "\n"
-        << saved;
+    EXPECT_LE(CompareModel(model, remodel, field), 0) << field << "\n" << saved;
 
     mj_deleteModel(remodel);
     mj_deleteSpec(reloaded);

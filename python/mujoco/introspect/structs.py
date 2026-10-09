@@ -1454,6 +1454,11 @@ STRUCTS: Mapping[str, StructDecl] = dict([
                  doc='model statistics',
              ),
              StructFieldDecl(
+                 name='statauto',
+                 type=ValueType(name='mjStatistic'),
+                 doc='statistics computed by mj_setConst',
+             ),
+             StructFieldDecl(
                  name='buffer',
                  type=PointerType(
                      inner_type=ValueType(name='void'),
@@ -1891,6 +1896,14 @@ STRUCTS: Mapping[str, StructDecl] = dict([
                  ),
                  doc='high-order stiffness coefficients',
                  array_extent=('njnt', 'mjNPOLY'),
+             ),
+             StructFieldDecl(
+                 name='jnt_springdamper',
+                 type=PointerType(
+                     inner_type=ValueType(name='mjtNum'),
+                 ),
+                 doc='spring-damper timeconst, dampratio',
+                 array_extent=('njnt', 2),
              ),
              StructFieldDecl(
                  name='jnt_range',
@@ -4229,6 +4242,14 @@ STRUCTS: Mapping[str, StructDecl] = dict([
                  array_extent=('ntendon',),
              ),
              StructFieldDecl(
+                 name='tendon_springauto',
+                 type=PointerType(
+                     inner_type=ValueType(name='mjtBool'),
+                 ),
+                 doc='is lengthspring computed in qpos_spring',
+                 array_extent=('ntendon',),
+             ),
+             StructFieldDecl(
                  name='tendon_width',
                  type=PointerType(
                      inner_type=ValueType(name='mjtNum'),
@@ -4531,6 +4552,14 @@ STRUCTS: Mapping[str, StructDecl] = dict([
                  ),
                  doc='bias parameters',
                  array_extent=('nactuator', 'mjNBIAS'),
+             ),
+             StructFieldDecl(
+                 name='actuator_dampratio',
+                 type=PointerType(
+                     inner_type=ValueType(name='mjtNum'),
+                 ),
+                 doc='damping ratio of position-like actuators',
+                 array_extent=('nactuator',),
              ),
              StructFieldDecl(
                  name='actuator_actlimited',

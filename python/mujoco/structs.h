@@ -570,6 +570,7 @@ class MjWrapper<raw::MjModel> : public WrapperBase<raw::MjModel> {
   MjOptionWrapper opt;
   MjVisualWrapper vis;
   MjStatisticWrapper stat;
+  MjStatisticWrapper statauto;
 
 #define X(dtype, var, dim0, dim1) py_array_or_tuple_t<dtype> var;
   MJMODEL_POINTERS

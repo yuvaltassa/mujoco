@@ -356,6 +356,7 @@ This is useful for example when the MJB is not available as a file on disk.)"));
   mjModel.def_readonly("opt", &MjModelWrapper::opt);
   mjModel.def_readonly("vis", &MjModelWrapper::vis);
   mjModel.def_readonly("stat", &MjModelWrapper::stat);
+  mjModel.def_readonly("statauto", &MjModelWrapper::statauto);
 
   mjModel.def_property(
       "flg_gravcomp",

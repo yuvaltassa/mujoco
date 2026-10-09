@@ -1797,7 +1797,8 @@ class mjCEquality : public mjCEquality_, private mjsEquality {
 
 class mjCTendon_ : public mjCBase {
  protected:
-  int matid;  // material id for rendering
+  int  matid;        // material id for rendering
+  bool springauto_;  // spring length computed in qpos_spring, as held by the model
 
   // variable-size data
   std::string         material_;
@@ -1948,6 +1949,7 @@ class mjCActuator_ : public mjCBase {
   int     historyadr_;        // address in data->history
   int     historynum_;        // number of elements in data->history
   bool    so3_;               // compiles to an SO3 transmission
+  double  dampratio_;         // damping ratio held by the model
   double  ctrlranges_[4][2];  // resolved per-input control ranges
   mjtByte ctrllimiteds_[4];   // resolved per-input limited flags
 

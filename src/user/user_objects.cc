@@ -6382,7 +6382,8 @@ mjCTendon::mjCTendon(mjCModel* _model, mjCDef* _def) {
   spec_material_.clear();
   spec_userdata_.clear();
   path.clear();
-  matid = -1;
+  matid       = -1;
+  springauto_ = false;
 
   // reset to default if given
   if (_def) { *this = _def->Tendon(); }
@@ -6927,12 +6928,13 @@ mjCActuator::mjCActuator(mjCModel* _model, mjCDef* _def) {
   historynum_ = 0;
 
   // input and output blocks, set by mjCModel; all actuator types are currently 1x1
-  ctrladr_  = -1;
-  ctrlnum_  = 1;
-  ctrlspec_ = 0;
-  outadr_   = -1;
-  outnum_   = 1;
-  so3_      = false;
+  ctrladr_   = -1;
+  ctrlnum_   = 1;
+  ctrlspec_  = 0;
+  outadr_    = -1;
+  outnum_    = 1;
+  so3_       = false;
+  dampratio_ = 0;
 }
 
 

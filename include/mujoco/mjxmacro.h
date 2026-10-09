@@ -333,6 +333,7 @@
     X   ( mjtNum,  jnt_axis,              njnt,          3                    ) \
     X   ( mjtNum,  jnt_stiffness,         njnt,          1                    ) \
     X   ( mjtNum,  jnt_stiffnesspoly,     njnt,          mjNPOLY              ) \
+    X   ( mjtNum,  jnt_springdamper,      njnt,          2                    ) \
     X   ( mjtNum,  jnt_range,             njnt,          2                    ) \
     X   ( mjtNum,  jnt_actfrcrange,       njnt,          2                    ) \
     X   ( mjtNum,  jnt_margin,            njnt,          1                    ) \
@@ -657,6 +658,7 @@
     X   ( int,     ten_J_colind,          nJten,         1                    ) \
     X   ( mjtBool, tendon_limited,        ntendon,       1                    ) \
     X   ( mjtBool, tendon_actfrclimited,  ntendon,       1                    ) \
+    X   ( mjtBool, tendon_springauto,     ntendon,       1                    ) \
     X   ( mjtNum,  tendon_width,          ntendon,       1                    ) \
     X   ( mjtNum,  tendon_solref_lim,     ntendon,       mjNREF               ) \
     X   ( mjtNum,  tendon_solimp_lim,     ntendon,       mjNIMP               ) \
@@ -694,6 +696,7 @@
     X   ( mjtNum,  actuator_dynprm,       nactuator,     mjNDYN               ) \
     X   ( mjtNum,  actuator_gainprm,      nactuator,     mjNGAIN              ) \
     X   ( mjtNum,  actuator_biasprm,      nactuator,     mjNBIAS              ) \
+    X   ( mjtNum,  actuator_dampratio,    nactuator,     1                    ) \
     X   ( mjtBool, actuator_actlimited,   nactuator,     1                    ) \
     X   ( mjtNum,  actuator_actrange,     nactuator,     2                    ) \
     X   ( mjtBool, actuator_actearly,     nactuator,     1                    ) \

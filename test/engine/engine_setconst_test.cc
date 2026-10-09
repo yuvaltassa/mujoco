@@ -762,6 +762,164 @@ TEST_F(SetConstTest, DampRatioInertia) {
   EXPECT_NEAR(m->actuator_biasprm[1 * mjNBIAS + 2], -6, MjTol(1e-10, 1e-6));
 }
 
+// The damping of a position-like actuator follows its damping ratio, which
+// mj_setConst takes from a positive biasprm[2] and keeps in actuator_dampratio.
+TEST_F(SetConstTest, DampRatioFollowsInertia) {
+  constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body>
+        <joint name="slider" type="slide"/>
+        <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+      </body>
+    </worldbody>
+    <actuator>
+      <position joint="slider" kp="4" dampratio="1"/>
+    </actuator>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr m = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(m.get(), NotNull()) << error;
+  MjDataPtr d(mj_makeData(m.get()));
+  mjtNum* biasprm = m->actuator_biasprm;
+
+  // damping = dampratio * 2 * sqrt(kp * mass)
+  EXPECT_EQ(m->actuator_dampratio[0], 1);
+  EXPECT_EQ(biasprm[2], -4);
+
+  // the damping follows the mass and the stiffness
+  m->body_mass[1] = 4;
+  mj_setConst(m.get(), d.get());
+  EXPECT_EQ(biasprm[2], -8);
+  m->actuator_gainprm[0] = 9;
+  biasprm[1] = -9;
+  mj_setConst(m.get(), d.get());
+  EXPECT_EQ(biasprm[2], -12);
+
+  // without a damping ratio, the damping is as given
+  m->actuator_dampratio[0] = 0;
+  biasprm[2] = -1;
+  mj_setConst(m.get(), d.get());
+  EXPECT_EQ(biasprm[2], -1);
+
+  // a positive biasprm[2] is a damping ratio
+  biasprm[2] = 0.5;
+  mj_setConst(m.get(), d.get());
+  EXPECT_EQ(m->actuator_dampratio[0], 0.5);
+  EXPECT_EQ(biasprm[2], -6);
+}
+
+// The stiffness and damping of a joint with a spring-damper follow its inertia.
+TEST_F(SetConstTest, SpringDamperFollowsInertia) {
+  constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body>
+        <joint type="slide" springdamper=".5 1"/>
+        <inertial pos="0 0 0" mass="1" diaginertia="1 1 1"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr m = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(m.get(), NotNull()) << error;
+  MjDataPtr d(mj_makeData(m.get()));
+
+  // stiffness = mass / (timeconst * dampratio)^2, damping = 2 * mass /
+  // timeconst
+  EXPECT_EQ(m->jnt_stiffness[0], 4);
+  EXPECT_EQ(m->dof_damping[0], 4);
+  m->body_mass[1] = 4;
+  mj_setConst(m.get(), d.get());
+  EXPECT_EQ(m->jnt_stiffness[0], 16);
+  EXPECT_EQ(m->dof_damping[0], 16);
+
+  // without a spring-damper, the stiffness and damping are as given
+  m->jnt_springdamper[0] = 0;
+  m->jnt_stiffness[0] = 1;
+  mj_setConst(m.get(), d.get());
+  EXPECT_EQ(m->jnt_stiffness[0], 1);
+}
+
+// The spring length of a tendon which has none follows the spring reference
+// configuration; mj_setConst takes a range of (-1, -1) for none and keeps it in
+// tendon_springauto.
+TEST_F(SetConstTest, SpringLengthFollowsReference) {
+  constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body>
+        <joint name="slider" type="slide" springref=".25"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+    <tendon>
+      <fixed stiffness="1">
+        <joint joint="slider" coef="2"/>
+      </fixed>
+    </tendon>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr m = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(m.get(), NotNull()) << error;
+  MjDataPtr d(mj_makeData(m.get()));
+  mjtNum* lengthspring = m->tendon_lengthspring;
+  EXPECT_EQ(m->tendon_springauto[0], 1);
+  EXPECT_THAT(AsVector(lengthspring, 2), ElementsAre(0.5, 0.5));
+
+  m->qpos_spring[0] = 0.5;
+  mj_setConst(m.get(), d.get());
+  EXPECT_THAT(AsVector(lengthspring, 2), ElementsAre(1, 1));
+
+  // a range which is given
+  m->tendon_springauto[0] = 0;
+  lengthspring[0] = 0.25;
+  mj_setConst(m.get(), d.get());
+  EXPECT_THAT(AsVector(lengthspring, 2), ElementsAre(0.25, 1));
+
+  // none
+  lengthspring[0] = lengthspring[1] = -1;
+  mj_setConst(m.get(), d.get());
+  EXPECT_EQ(m->tendon_springauto[0], 1);
+  EXPECT_THAT(AsVector(lengthspring, 2), ElementsAre(1, 1));
+}
+
+// Statistics which were given, by the model or the user, are kept; the others
+// follow the model.
+TEST_F(SetConstTest, GivenStatistics) {
+  constexpr char xml[] = R"(
+  <mujoco>
+    <statistic meansize="5"/>
+    <worldbody>
+      <body>
+        <freejoint/>
+        <geom size=".1" mass="1"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr m = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(m.get(), NotNull()) << error;
+  MjDataPtr d(mj_makeData(m.get()));
+  EXPECT_EQ(m->stat.meansize, 5);
+  EXPECT_NE(m->statauto.meansize, 5);
+  EXPECT_EQ(m->stat.meanmass, 1);
+  EXPECT_EQ(m->statauto.meanmass, 1);
+
+  m->body_mass[1] = 2;
+  m->geom_size[0] = 0.2;
+  m->stat.extent = 7;
+  mj_setConst(m.get(), d.get());
+  EXPECT_EQ(m->stat.meansize, 5);
+  EXPECT_EQ(m->stat.meanmass, 2);
+  EXPECT_EQ(m->statauto.meanmass, 2);
+  EXPECT_EQ(m->stat.extent, 7);
+}
+
 // The constant bending factor of M + K_bend is consumed only by bending-only
 // flexes: with stretching present the per-step factor replaces it, so a
 // singular M + K_bend must not be an error.

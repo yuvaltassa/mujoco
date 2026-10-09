@@ -355,6 +355,7 @@ typedef struct mjModel_ {
   mjOption opt;                   // physics options
   mjVisual vis;                   // visualization options
   mjStatistic stat;               // model statistics
+  mjStatistic statauto;           // statistics computed by mj_setConst
 
   // ------------------------------- buffers
 
@@ -424,6 +425,7 @@ typedef struct mjModel_ {
   mjtNum*   jnt_axis;             // local joint axis                         (njnt x 3)
   mjtNum*   jnt_stiffness;        // linear stiffness coefficient             (njnt x 1)
   mjtNum*   jnt_stiffnesspoly;    // high-order stiffness coefficients        (njnt x mjNPOLY)
+  mjtNum*   jnt_springdamper;     // spring-damper timeconst, dampratio       (njnt x 2)
   mjtNum*   jnt_range;            // joint limits                             (njnt x 2)
   mjtNum*   jnt_actfrcrange;      // range of total actuator force            (njnt x 2)
   mjtNum*   jnt_margin;           // min distance for limit detection         (njnt x 1)
@@ -750,6 +752,7 @@ typedef struct mjModel_ {
   int*      ten_J_colind;         // column indices in sparse Jacobian        (nJten x 1)
   mjtBool*  tendon_limited;       // does tendon have length limits           (ntendon x 1)
   mjtBool*  tendon_actfrclimited; // does tendon have actuator force limits   (ntendon x 1)
+  mjtBool*  tendon_springauto;    // is lengthspring computed in qpos_spring  (ntendon x 1)
   mjtNum*   tendon_width;         // width for rendering                      (ntendon x 1)
   mjtNum*   tendon_solref_lim;    // constraint solver reference: limit       (ntendon x mjNREF)
   mjtNum*   tendon_solimp_lim;    // constraint solver impedance: limit       (ntendon x mjNIMP)
@@ -792,6 +795,7 @@ typedef struct mjModel_ {
   mjtNum*   actuator_dynprm;      // dynamics parameters                      (nactuator x mjNDYN)
   mjtNum*   actuator_gainprm;     // gain parameters                          (nactuator x mjNGAIN)
   mjtNum*   actuator_biasprm;     // bias parameters                          (nactuator x mjNBIAS)
+  mjtNum*   actuator_dampratio;   // damping ratio of position-like actuators (nactuator x 1)
   mjtBool*  actuator_actlimited;  // is activation limited                    (nactuator x 1)
   mjtNum*   actuator_actrange;    // range of activations                     (nactuator x 2)
   mjtBool*  actuator_actearly;    // step activation before force             (nactuator x 1)

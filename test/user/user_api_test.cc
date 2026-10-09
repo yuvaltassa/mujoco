@@ -9071,6 +9071,188 @@ TEST_F(CopyBackTest, WritesVectors) {
   mj_deleteSpec(spec);
 }
 
+// the spring-damper of a joint is written, and the stiffness and damping which
+// mj_setConst computes from it are not
+TEST_F(CopyBackTest, WritesSpringDamper) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body>
+        <joint type="slide" springdamper=".5 1"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1000> er;
+  mjSpec* spec = mj_parseXMLString(xml, nullptr, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjModel* model = mj_compile(spec, nullptr);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  mjData* data = mj_makeData(model);
+  mjsJoint* joint = mjs_asJoint(mjs_firstElement(spec, mjOBJ_JOINT));
+
+  // a new spring-damper and mass, and the stiffness computed from them
+  model->jnt_springdamper[0] = 1;
+  model->body_mass[1] *= 2;
+  mj_setConst(model, data);
+  ASSERT_EQ(mj_copyBack(spec, model), 1) << mjs_getError(spec);
+  EXPECT_EQ(joint->springdamper[0], 1);
+  EXPECT_EQ(joint->stiffness[0], 0);
+  mjModel* again = mj_compile(spec, nullptr);
+  ASSERT_THAT(again, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(again->jnt_stiffness[0], model->jnt_stiffness[0]);
+  EXPECT_EQ(again->dof_damping[0], model->dof_damping[0]);
+  mj_deleteModel(again);
+
+  // no spring-damper, a stiffness
+  model->jnt_springdamper[0] = model->jnt_springdamper[1] = 0;
+  model->jnt_stiffness[0] = 3;
+  ASSERT_EQ(mj_copyBack(spec, model), 1) << mjs_getError(spec);
+  EXPECT_EQ(joint->springdamper[0], 0);
+  EXPECT_EQ(joint->stiffness[0], 3);
+
+  mj_deleteData(data);
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+// the spring length of a tendon is written, unless mj_setConst computes it in
+// qpos_spring; then it is written as none
+TEST_F(CopyBackTest, WritesSpringLength) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body>
+        <joint name="slider" type="slide"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+    <tendon>
+      <fixed stiffness="1">
+        <joint joint="slider" coef="1"/>
+      </fixed>
+    </tendon>
+  </mujoco>
+  )";
+  std::array<char, 1000> er;
+  mjSpec* spec = mj_parseXMLString(xml, nullptr, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjModel* model = mj_compile(spec, nullptr);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  mjsTendon* tendon = mjs_asTendon(mjs_firstElement(spec, mjOBJ_TENDON));
+
+  // a range which is given
+  model->tendon_springauto[0] = 0;
+  model->tendon_lengthspring[0] = 0.25;
+  model->tendon_lengthspring[1] = 0.5;
+  ASSERT_EQ(mj_copyBack(spec, model), 1) << mjs_getError(spec);
+  EXPECT_EQ(tendon->springlength[0], 0.25);
+  EXPECT_EQ(tendon->springlength[1], 0.5);
+  mjModel* again = mj_compile(spec, nullptr);
+  ASSERT_THAT(again, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(again->tendon_springauto[0], 0);
+  EXPECT_EQ(again->tendon_lengthspring[1], 0.5);
+  mj_deleteModel(again);
+
+  // none
+  model->tendon_springauto[0] = 1;
+  ASSERT_EQ(mj_copyBack(spec, model), 1) << mjs_getError(spec);
+  EXPECT_EQ(tendon->springlength[0], -1);
+  EXPECT_EQ(tendon->springlength[1], -1);
+
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+// statistics which mj_setConst computes are not written, those which were
+// given are
+TEST_F(CopyBackTest, WritesGivenStatistics) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <statistic meansize="5"/>
+    <worldbody>
+      <body>
+        <freejoint/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  std::array<char, 1000> er;
+  mjSpec* spec = mj_parseXMLString(xml, nullptr, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjModel* model = mj_compile(spec, nullptr);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  mjData* data = mj_makeData(model);
+
+  model->body_mass[1] *= 2;
+  model->stat.extent = 7;
+  mj_setConst(model, data);
+  ASSERT_EQ(mj_copyBack(spec, model), 1) << mjs_getError(spec);
+  EXPECT_EQ(spec->stat.meansize, 5);
+  EXPECT_EQ(spec->stat.extent, 7);
+  EXPECT_TRUE(std::isnan(spec->stat.meanmass));
+
+  mj_deleteData(data);
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+// the damping ratio of a position-like actuator is written in place of its
+// damping, which mj_setConst computes from it
+TEST_F(CopyBackTest, WritesDampRatio) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <body>
+        <joint name="slider" type="slide"/>
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+    <actuator>
+      <position joint="slider" kp="4" dampratio="1"/>
+    </actuator>
+  </mujoco>
+  )";
+  std::array<char, 1000> er;
+  mjSpec* spec = mj_parseXMLString(xml, nullptr, er.data(), er.size());
+  ASSERT_THAT(spec, NotNull()) << er.data();
+  mjModel* model = mj_compile(spec, nullptr);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+  mjData* data = mj_makeData(model);
+  mjsActuator* actuator =
+      mjs_asActuator(mjs_firstElement(spec, mjOBJ_ACTUATOR));
+
+  // a new ratio and stiffness
+  model->actuator_dampratio[0] = 2;
+  model->actuator_gainprm[0] = 9;
+  model->actuator_biasprm[1] = -9;
+  ASSERT_EQ(mj_copyBack(spec, model), 1) << mjs_getError(spec);
+  EXPECT_EQ(actuator->biasprm[2], 2);
+  mj_setConst(model, data);
+  mjModel* again = mj_compile(spec, nullptr);
+  ASSERT_THAT(again, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(again->actuator_dampratio[0], 2);
+  EXPECT_EQ(again->actuator_biasprm[2], model->actuator_biasprm[2]);
+  mj_deleteModel(again);
+
+  // no ratio, a damping
+  model->actuator_dampratio[0] = 0;
+  model->actuator_biasprm[2] = -3;
+  ASSERT_EQ(mj_copyBack(spec, model), 1) << mjs_getError(spec);
+  EXPECT_EQ(actuator->biasprm[2], -3);
+  again = mj_compile(spec, nullptr);
+  ASSERT_THAT(again, NotNull()) << mjs_getError(spec);
+  EXPECT_EQ(again->actuator_dampratio[0], 0);
+  EXPECT_EQ(again->actuator_biasprm[2], -3);
+
+  mj_deleteModel(again);
+  mj_deleteData(data);
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
 // compilation scales elevation data so that its lowest value is 0 and its
 // highest is 1: data which it would scale again cannot be copied back
 TEST_F(CopyBackTest, RefusesHeightFieldWhichIsScaledAgain) {

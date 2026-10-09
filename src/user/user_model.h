@@ -133,13 +133,6 @@ class mjCModel_ : public mjsElement {
   mjtSize nD;              // number of non-zeros in sparse dof-dof matrix
   mjtSize nJmom;           // number of non-zeros in sparse actuator_moment matrix
 
-  // statistics, as computed by mj_setConst
-  double meaninertia_auto;  // mean diagonal inertia, as computed by mj_setConst
-  double meanmass_auto;     // mean body mass, as computed by mj_setConst
-  double meansize_auto;     // mean body size, as computed by mj_setConst
-  double extent_auto;       // spatial extent, as computed by mj_setConst
-  double center_auto[3];    // center of model, as computed by mj_setConst
-
   // save qpos0, to recognize changed key_qpos in write
   std::vector<mjtNum> qpos0;
   std::vector<mjtNum> body_pos0;
@@ -436,7 +429,6 @@ class mjCModel : public mjCModel_, private mjSpec {
   void CheckEmptyNames();               // check empty names
   void SetSizes();                      // compute sizes
   void ComputeSparseSizes();            // compute nM, nD, nB, nC
-  void AutoSpringDamper(mjModel*);      // automatic stiffness and damping computation
   void LengthRange(mjModel*, mjData*);  // compute actuator lengthrange
   void CopyNames(mjModel*);             // copy names, compute name addresses
   void CopyPaths(mjModel*);             // copy paths, compute path addresses

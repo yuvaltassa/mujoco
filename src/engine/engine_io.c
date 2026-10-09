@@ -427,6 +427,7 @@ void mj_makeModel(mjModel** dest,
   mj_defaultOption(&m->opt);
   mj_defaultVisual(&m->vis);
   mj_defaultStatistic(&m->stat);
+  m->statauto = m->stat;
 
   // copy pointer if allocated here
   if (allocate) {
@@ -550,6 +551,7 @@ void mj_saveModel(const mjModel* m, const char* filename, void* buffer, mjtSize 
   bufwrite((void*)&m->opt, sizeof(mjOption), buffer_sz, buffer, &ptrbuf);
   bufwrite((void*)&m->vis, sizeof(mjVisual), buffer_sz, buffer, &ptrbuf);
   bufwrite((void*)&m->stat, sizeof(mjStatistic), buffer_sz, buffer, &ptrbuf);
+  bufwrite((void*)&m->statauto, sizeof(mjStatistic), buffer_sz, buffer, &ptrbuf);
   bufwrite(&m->flg_gravcomp, sizeof(mjtBool), buffer_sz, buffer, &ptrbuf);
   bufwrite(&m->flg_surfacevel, sizeof(mjtBool), buffer_sz, buffer, &ptrbuf);
   {
@@ -652,7 +654,7 @@ mjModel* mj_loadModelBuffer(const void* buffer, mjtSize buffer_sz) {
   }
 
   // read options and buffer
-  if (ptrbuf + sizeof(mjOption) + sizeof(mjVisual) + sizeof(mjStatistic) +
+  if (ptrbuf + sizeof(mjOption) + sizeof(mjVisual) + sizeof(mjStatistic) * 2 +
       sizeof(mjtBool) * 2 > buffer_sz) {
     mju_warning("Truncated model file - ran out of data while reading structs");
     return NULL;
@@ -660,6 +662,7 @@ mjModel* mj_loadModelBuffer(const void* buffer, mjtSize buffer_sz) {
   bufread((void*)&m->opt, sizeof(mjOption), buffer_sz, buffer, &ptrbuf);
   bufread((void*)&m->vis, sizeof(mjVisual), buffer_sz, buffer, &ptrbuf);
   bufread((void*)&m->stat, sizeof(mjStatistic), buffer_sz, buffer, &ptrbuf);
+  bufread((void*)&m->statauto, sizeof(mjStatistic), buffer_sz, buffer, &ptrbuf);
   bufread(&m->flg_gravcomp, sizeof(mjtBool), buffer_sz, buffer, &ptrbuf);
   bufread(&m->flg_surfacevel, sizeof(mjtBool), buffer_sz, buffer, &ptrbuf);
   {
@@ -711,7 +714,7 @@ mjtSize mj_sizeModel(const mjModel* m) {
     + sizeof(mjtSize)*getnsize()
     + sizeof(mjOption)
     + sizeof(mjVisual)
-    + sizeof(mjStatistic)
+    + sizeof(mjStatistic)*2
     + sizeof(mjtBool)*2);
 
   MJMODEL_POINTERS_PREAMBLE(m)

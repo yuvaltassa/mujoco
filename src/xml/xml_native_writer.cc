@@ -853,6 +853,7 @@ void mjXWriter::OneJoint(XMLElement*     elem,
   if (joint->type != mjJNT_FREE && joint->type != mjJNT_BALL) {
     WriteAttr(elem, "axis", 3, axis, def->Joint().spec.axis);
   }
+  WriteAttr(elem, "springdamper", 2, joint->springdamper, def->Joint().springdamper);
   if (joint->type != mjJNT_FREE) {
     WriteAttrKey(elem, "limited", FalseTrueAuto_map, 3, joint->limited, def->Joint().limited);
   }
@@ -1341,11 +1342,15 @@ void mjXWriter::OneTendon(XMLElement* elem, const mjCTendon* ptendon, mjCDef* de
   } else {
     WriteAttrTable(elem, tendon, &deftendon, kSpatialAttrs, kSpatialAttrsN);
   }
-  if (tendon->springlength[0] != tendon->springlength[1] ||
+
+  // a spring length which mj_setConst computes is saved as none
+  double springlength[2] = {tendon->springlength[0], tendon->springlength[1]};
+  if (!authored_ && base->springauto_) { springlength[0] = springlength[1] = -1; }
+  if (springlength[0] != springlength[1] ||
       deftendon.springlength[0] != deftendon.springlength[1]) {
-    WriteAttr(elem, "springlength", 2, tendon->springlength, deftendon.springlength);
+    WriteAttr(elem, "springlength", 2, springlength, deftendon.springlength);
   } else {
-    WriteAttr(elem, "springlength", 1, tendon->springlength, deftendon.springlength);
+    WriteAttr(elem, "springlength", 1, springlength, deftendon.springlength);
   }
   const string& material = Pick(authored_, base->spec.material, base->get_material());
   if (!fixed && material != Pick(authored_, deftendon.material, def->Tendon().get_material())) {
@@ -1415,6 +1420,14 @@ XMLElement* mjXWriter::OneActuator(XMLElement* section, const mjCActuator* pactu
   const mjCActuator* base     = pactuator;
   const mjsActuator* actuator = Values<mjsActuator>(pactuator);
   const mjsActuator& defact   = def->Actuator().spec;
+
+  // a damping which mj_setConst computes from a damping ratio is saved as the ratio
+  mjsActuator ratio;
+  if (!authored_ && base->dampratio_ > 0) {
+    ratio            = *actuator;
+    ratio.biasprm[2] = base->dampratio_;
+    actuator         = &ratio;
+  }
 
   // the tag: a plugin, the shortcut which gives the actuator back, or general
   mjXShortcut             s = {}, d = {};

@@ -49,6 +49,14 @@ Engine
   gap of geoms, to the inertial frames of bodies and to the size of height fields are then safe; previously contacts
   could be missed. :ref:`mj_setConst` also computes the constants of sleeping bodies, which it skipped, and resolves the
   automatic :ref:`sleep policy<body-sleep>` of trees anew.
+- :ref:`mj_setConst` consumed some of the values it computes from, so that a later call did not follow changes of the
+  model as compiling it again does. Added the fields of :ref:`mjModel` which keep them: ``actuator_dampratio``, the
+  :ref:`damping ratio<actuator-position-dampratio>` of position-like actuators, given as a positive ``biasprm[2]``;
+  ``jnt_springdamper``, the :ref:`springdamper<body-joint-springdamper>` of joints; ``tendon_springauto``, which marks
+  the tendons whose :ref:`spring length<tendon-spatial-springlength>` is computed in ``qpos_spring``; and ``statauto``,
+  the computed statistics, so that those in ``stat`` which were given are kept. A damping, stiffness or spring length
+  which :ref:`mj_setConst` computes from these fields overwrites one set in the model; set the field to zero to give
+  it directly.
 
 Compiler
 ^^^^^^^^

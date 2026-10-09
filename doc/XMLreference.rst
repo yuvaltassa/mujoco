@@ -1241,7 +1241,7 @@ compilation.
 This element is used to override model statistics computed by the compiler. These statistics are not only informational
 but are also used to scale various components of the rendering and perturbation. We provide an override mechanism in the
 XML because it is sometimes easier to adjust a small number of model statistics than a larger number of visual
-parameters.
+parameters. The computed statistics are held by ``mjModel.statauto``, and :ref:`mj_setConst` keeps the overrides.
 
 .. _statistic-meanmass:
 
@@ -2491,11 +2491,11 @@ rotations as unit quaternions.
 .. _body-joint-springdamper:
 
 :at:`springdamper`: :at-val:`real(2), "0 0"`
-   When both numbers are positive, the compiler will override any stiffness and damping values specified with the
-   attributes below, and will instead set them automatically so that the resulting mass-spring-damper for this joint has
-   the desired time constant (first value) and damping ratio (second value). This is done by taking into account the
-   joint inertia in the model reference configuration. Note that the format is the same as the solref parameter of the
-   constraint solver.
+   When both numbers are positive, any stiffness and damping values specified with the attributes below are overridden,
+   and are instead set automatically so that the resulting mass-spring-damper for this joint has the desired time
+   constant (first value) and damping ratio (second value). This is done by :ref:`mj_setConst`, taking into account the
+   joint inertia in the model reference configuration, from ``mjModel.jnt_springdamper``. Note that the format is the
+   same as the solref parameter of the constraint solver.
 
 .. _body-joint-solreflimit:
 
@@ -5399,8 +5399,8 @@ length X, as in the clip on the right of `this example model
 
 :at:`springlength`: :at-val:`real(2), "-1 -1"`
    Spring resting position, can take either one or two values. If one value is given, it corresponds to the length of
-   the tendon at rest. If it is ``-1``, the tendon resting length is determined from the model reference configuration
-   in ``mjModel.qpos0``.  |br| Note that the default value of ``-1``, which invokes the automatic length computation,
+   the tendon at rest. If it is ``-1``, the tendon resting length is determined by :ref:`mj_setConst` from the spring
+   reference configuration in ``mjModel.qpos_spring``, as marked by ``mjModel.tendon_springauto``.  |br| Note that the default value of ``-1``, which invokes the automatic length computation,
    was designed with :ref:`spatial<tendon-spatial>` tendons in mind, which can only have nonegative length. In order to
    set the :at:`springlength` of a :ref:`fixed<tendon-fixed>` tendon to ``-1``, use a nearby value like ``-0.99999``.
    |br| If two non-decreasing values are given, they define a `dead-band <https://en.wikipedia.org/wiki/Deadband>`_

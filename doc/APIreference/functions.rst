@@ -126,8 +126,14 @@ it:
   inertia of the other bodies still follows their geoms, including a size or pose which was copied.
 - A range whose ``limited`` attribute is "auto" keeps the limited state which it has in the model: the attribute is
   set if the new range would be inferred otherwise.
-- A stiffness or damping of a joint with :ref:`springdamper<body-joint-springdamper>`, and a control or activation
-  range which was inherited with :ref:`inheritrange<actuator-position-inheritrange>`, are written in its place.
+- A control or activation range which was inherited with :ref:`inheritrange<actuator-position-inheritrange>` is
+  written in its place.
+- The :ref:`springdamper<body-joint-springdamper>` of a joint, ``mjModel.jnt_springdamper``, is written, and the
+  stiffness and damping which :ref:`mj_setConst` computes from it are not; a springdamper of zero writes them.
+- The damping ratio of a position-like actuator, ``mjModel.actuator_dampratio``, is written in place of its damping,
+  which :ref:`mj_setConst` computes from it; a ratio of zero writes the damping.
+- The spring length of a tendon which :ref:`mj_setConst` computes, as marked by ``mjModel.tendon_springauto``, is
+  written as none, ``-1``.
 - Elevation data of a height field which was read from a file is written in place of the file.
 - The relative pose of a :ref:`weld<equality-weld>` between bodies which compilation computed stays computed, unless
   it was changed in the model or the anchor of the weld was; it is then written.
