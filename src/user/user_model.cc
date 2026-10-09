@@ -2740,10 +2740,6 @@ void mjCModel::CopyTree(mjModel* m) {
     m->body_gravcomp[i] = pb->gravcomp;
     mjuu_copyvec(m->body_user + nuser_body * i, pb->get_userdata().data(), nuser_body);
 
-    m->body_contype[i]     = pb->contype;
-    m->body_conaffinity[i] = pb->conaffinity;
-    m->body_margin[i]      = (mjtNum)pb->margin;
-
     // bounding volume hierarchy
     m->body_bvhadr[i] = pb->tree.Nbvh() ? bvh_adr : -1;
     m->body_bvhnum[i] = pb->tree.Nbvh();
@@ -2948,22 +2944,7 @@ void mjCModel::CopyTree(mjModel* m) {
       mjuu_copyvec(m->geom_user + nuser_geom * gid, pg->get_userdata().data(), nuser_geom);
       mjuu_copyvec(m->geom_rgba + 4 * gid, pg->rgba, 4);
 
-      // determine sameframe
-      const double* nulldouble = nullptr;
-      if (IsNullPose(m->geom_pos + 3 * gid, m->geom_quat + 4 * gid)) {
-        sameframe = mjSAMEFRAME_BODY;
-      } else if (IsNullPose(nullnum, m->geom_quat + 4 * gid)) {
-        sameframe = mjSAMEFRAME_BODYROT;
-      } else if (IsSamePose(pg->pos, pb->ipos, pg->quat, pb->iquat)) {
-        sameframe = mjSAMEFRAME_INERTIA;
-      } else if (IsSamePose(nulldouble, nulldouble, pg->quat, pb->iquat)) {
-        sameframe = mjSAMEFRAME_INERTIAROT;
-      } else {
-        sameframe = mjSAMEFRAME_NONE;
-      }
-      m->geom_sameframe[gid] = sameframe;
-
-      // compute rbound
+      // bounding sphere of a mesh or SDF geom, mj_setConst computes those of other geoms
       m->geom_rbound[gid] = (mjtNum)pg->GetRBound();
     }
 
@@ -2984,21 +2965,6 @@ void mjCModel::CopyTree(mjModel* m) {
       mjuu_copyvec(m->site_quat + 4 * sid, ps->quat, 4);
       mjuu_copyvec(m->site_user + nuser_site * sid, ps->userdata_.data(), nuser_site);
       mjuu_copyvec(m->site_rgba + 4 * sid, ps->rgba, 4);
-
-      // determine sameframe
-      const double* nulldouble = nullptr;
-      if (IsNullPose(m->site_pos + 3 * sid, m->site_quat + 4 * sid)) {
-        sameframe = mjSAMEFRAME_BODY;
-      } else if (IsNullPose(nullnum, m->site_quat + 4 * sid)) {
-        sameframe = mjSAMEFRAME_BODYROT;
-      } else if (IsSamePose(ps->pos, pb->ipos, ps->quat, pb->iquat)) {
-        sameframe = mjSAMEFRAME_INERTIA;
-      } else if (IsSamePose(nulldouble, nulldouble, ps->quat, pb->iquat)) {
-        sameframe = mjSAMEFRAME_INERTIAROT;
-      } else {
-        sameframe = mjSAMEFRAME_NONE;
-      }
-      m->site_sameframe[sid] = sameframe;
     }
 
     // loop over cameras for this body

@@ -14,6 +14,7 @@
 
 #include "engine/engine_setconst.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -191,6 +192,305 @@ static void setSameframe(mjModel* m) {
 }
 
 
+// minimum value in bound and fluid computations, must match the compiler's mjEPS
+static const double kBoundEps = 1e-14;
+
+
+// bounding box in (min, max) format and bounding sphere radius of a geom in its frame, return 0 for
+// mesh and SDF geoms, whose bounds are those of their mesh
+static int geomBound(const mjModel* m, int g, mjtNum aamm[6], mjtNum* rbound) {
+  const mjtNum* size = m->geom_size + 3*g;
+  switch ((mjtGeom) m->geom_type[g]) {
+  case mjGEOM_MESH:
+  case mjGEOM_SDF:
+    return 0;
+
+  case mjGEOM_HFIELD: {
+    const mjtNum* hsize = m->hfield_size + 4*m->geom_dataid[g];
+    aamm[0] = -hsize[0];
+    aamm[1] = -hsize[1];
+    aamm[2] = -hsize[3];
+    aamm[3] = hsize[0];
+    aamm[4] = hsize[1];
+    aamm[5] = hsize[2];
+    *rbound = mju_sqrt(hsize[0]*hsize[0] + hsize[1]*hsize[1] +
+                       mju_max(hsize[2]*hsize[2], hsize[3]*hsize[3]));
+    return 1;
+  }
+
+  case mjGEOM_PLANE:
+    aamm[0] = aamm[1] = aamm[2] = -mjMAXVAL;
+    aamm[3] = aamm[4] = mjMAXVAL;
+    aamm[5] = 0;
+    *rbound = 0;
+    return 1;
+
+  case mjGEOM_SPHERE:
+    aamm[3] = aamm[4] = aamm[5] = size[0];
+    *rbound = size[0];
+    break;
+
+  case mjGEOM_CAPSULE:
+    aamm[3] = aamm[4] = size[0];
+    aamm[5] = size[0] + size[1];
+    *rbound = size[0] + size[1];
+    break;
+
+  case mjGEOM_CYLINDER:
+    aamm[3] = aamm[4] = size[0];
+    aamm[5] = size[1];
+    *rbound = mju_sqrt(size[0]*size[0] + size[1]*size[1]);
+    break;
+
+  case mjGEOM_ELLIPSOID:
+    mju_copy3(aamm+3, size);
+    *rbound = mju_max(mju_max(size[0], size[1]), size[2]);
+    break;
+
+  case mjGEOM_BOX:
+    mju_copy3(aamm+3, size);
+    *rbound = mju_sqrt(size[0]*size[0] + size[1]*size[1] + size[2]*size[2]);
+    break;
+
+  default:
+    mju_copy3(aamm+3, size);
+    *rbound = 0;
+  }
+
+  // symmetric box
+  aamm[0] = -aamm[3];
+  aamm[1] = -aamm[4];
+  aamm[2] = -aamm[5];
+  return 1;
+}
+
+
+// set geom bounds, body collision masks and margins, and the bounding volumes of bodies
+static void setBound(mjModel* m, mjData* d) {
+  mj_markStack(d);
+
+  // bounding boxes and spheres of geoms whose bounds follow from their size
+  for (int i=0; i < m->ngeom; i++) {
+    mjtNum aamm[6], rbound;
+    if (geomBound(m, i, aamm, &rbound)) {
+      mjtNum* aabb = m->geom_aabb + 6*i;
+      for (int k=0; k < 3; k++) {
+        aabb[k] = (aamm[k+3] + aamm[k]) / 2;
+        aabb[k+3] = (aamm[k+3] - aamm[k]) / 2;
+      }
+      m->geom_rbound[i] = rbound;
+    }
+  }
+
+  // body collision masks and margins, accumulated over geoms
+  for (int i=0; i < m->nbody; i++) {
+    int contype = 0, conaffinity = 0;
+    mjtNum margin = 0;
+    for (int g=m->body_geomadr[i]; g < m->body_geomadr[i]+m->body_geomnum[i]; g++) {
+      contype |= m->geom_contype[g];
+      conaffinity |= m->geom_conaffinity[g];
+      margin = mju_max(margin, m->geom_margin[g] + m->geom_gap[g]);
+    }
+    m->body_contype[i] = contype;
+    m->body_conaffinity[i] = conaffinity;
+    m->body_margin[i] = margin;
+  }
+
+  // bounding volume hierarchies of bodies, in their inertial frames: refit the hierarchy made by the
+  // compiler, whose children follow their parents
+  int nbvhmax = 0;
+  for (int i=0; i < m->nbody; i++) {
+    nbvhmax = mjMAX(nbvhmax, m->body_bvhnum[i]);
+  }
+  mjtNum* node = mjSTACKALLOC(d, 6*mjMAX(1, nbvhmax), mjtNum);
+  int* inbvh = mjSTACKALLOC(d, mjMAX(1, m->ngeom), int);
+  mju_zeroInt(inbvh, m->ngeom);
+  for (int i=0; i < m->nbody; i++) {
+    int adr = m->body_bvhadr[i];
+    int num = m->body_bvhnum[i];
+    if (adr < 0) {
+      continue;
+    }
+    const mjtNum* ipos = m->body_ipos + 3*i;
+    const mjtNum* iquat = m->body_iquat + 4*i;
+    mjtNum qinv[4] = {iquat[0], -iquat[1], -iquat[2], -iquat[3]};
+
+    // bounds of nodes in (min, max) format, children before parents
+    for (int j=num-1; j >= 0; j--) {
+      mjtNum* aamm = node + 6*j;
+      int g = m->bvh_nodeid[adr+j];
+
+      // leaf: corners of the geom box, in the inertial frame
+      if (g >= 0) {
+        inbvh[g] = 1;
+        const mjtNum* aabb = m->geom_aabb + 6*g;
+        const mjtNum* gpos = m->geom_pos + 3*g;
+        const mjtNum* gquat = m->geom_quat + 4*g;
+        aamm[0] = aamm[1] = aamm[2] = mjMAXVAL;
+        aamm[3] = aamm[4] = aamm[5] = -mjMAXVAL;
+        for (int v=0; v < 8; v++) {
+          mjtNum vert[3], box[3];
+          vert[0] = aabb[0] + (v & 1 ? aabb[3] : -aabb[3]);
+          vert[1] = aabb[1] + (v & 2 ? aabb[4] : -aabb[4]);
+          vert[2] = aabb[2] + (v & 4 ? aabb[5] : -aabb[5]);
+          mju_rotVecQuat(box, vert, gquat);
+          box[0] += gpos[0] - ipos[0];
+          box[1] += gpos[1] - ipos[1];
+          box[2] += gpos[2] - ipos[2];
+          mju_rotVecQuat(vert, box, qinv);
+          for (int k=0; k < 3; k++) {
+            aamm[k] = mju_min(aamm[k], vert[k]);
+            aamm[k+3] = mju_max(aamm[k+3], vert[k]);
+          }
+        }
+      }
+
+      // internal node: union of its children
+      else {
+        const mjtNum* child1 = node + 6*m->bvh_child[2*(adr+j)];
+        const mjtNum* child2 = node + 6*m->bvh_child[2*(adr+j)+1];
+        for (int k=0; k < 3; k++) {
+          aamm[k] = mju_min(child1[k], child2[k]);
+          aamm[k+3] = mju_max(child1[k+3], child2[k+3]);
+        }
+      }
+    }
+
+    // store in (center, size) format, inflate flat boxes
+    for (int j=0; j < num; j++) {
+      const mjtNum* aamm = node + 6*j;
+      mjtNum* aabb = m->bvh_aabb + 6*(adr+j);
+      for (int k=0; k < 3; k++) {
+        mjtNum lo = aamm[k], hi = aamm[k+3];
+        if (mju_abs(lo - hi) < kBoundEps) {
+          lo -= kBoundEps;
+          hi += kBoundEps;
+        }
+        aabb[k] = (hi + lo) / 2;
+        aabb[k+3] = (hi - lo) / 2;
+      }
+    }
+  }
+
+  // colliding geoms must be in the hierarchy of their body, if it has one
+  for (int i=0; i < m->ngeom; i++) {
+    int b = m->geom_bodyid[i];
+    if (m->body_bvhadr[b] >= 0 && !inbvh[i] && (m->geom_contype[i] || m->geom_conaffinity[i])) {
+      mj_freeStack(d);
+      mjERROR("geom %d collides but was not compiled to collide, recompile the model", i);
+    }
+  }
+
+  mj_freeStack(d);
+}
+
+
+// 15-point Gauss-Kronrod quadrature of the added-mass coefficient of an ellipsoid with semi-axes
+// (dx, dy, dz) along dx: the integral over l in [0, inf) of dx*dy*dz / sqrt((dx^2 + l)^3 *
+// (dy^2 + l) * (dz^2 + l)), with the change of variables l = x^3 / (1-x)^2
+static double addedMassKappa(double dx, double dy, double dz) {
+  // K15 weights
+  static const double kronrod_w[15] = {
+    0.01146766, 0.03154605, 0.05239501, 0.07032663, 0.08450236,
+    0.09517529, 0.10221647, 0.10474107, 0.10221647, 0.09517529,
+    0.08450236, 0.07032663, 0.05239501, 0.03154605, 0.01146766
+  };
+
+  // l(x) at the K15 points x in [0, 1]
+  static const double kronrod_l[15] = {
+    7.865151709349917e-08, 1.7347976913907274e-05, 0.0003548008144506193,
+    0.002846636252924549, 0.014094260903596077, 0.053063261727396636,
+    0.17041978741317773, 0.5, 1.4036301548686991,
+    3.9353484827022642, 11.644841677041734, 39.53187807410903,
+    177.5711362220801, 1429.4772912937397, 54087.416549217705
+  };
+
+  // dl/dx at the K15 points
+  static const double kronrod_d[15] = {
+    5.538677720489877e-05, 0.002080868285293228, 0.016514126520723166,
+    0.07261900344370877, 0.23985243401862602, 0.6868318249020725,
+    1.8551129519182894, 5.0, 14.060031152313941,
+    43.28941239611009, 156.58546376397112, 747.9826085305024,
+    5827.4042950027115, 116754.0197944512, 25482945.327264845
+  };
+
+  double invdx2 = 1.0 / (dx*dx);
+  double invdy2 = 1.0 / (dy*dy);
+  double invdz2 = 1.0 / (dz*dz);
+
+  // l is non-dimensionalized by scale, since it enters as 1 + l/d^2
+  double scale = pow(dx*dx*dx*dy*dz, 0.4);
+  double kappa = 0;
+  for (int i=0; i < 15; i++) {
+    double lambda = scale * kronrod_l[i];
+    double denom = (1 + lambda*invdx2) *
+                   sqrt((1 + lambda*invdx2) * (1 + lambda*invdy2) * (1 + lambda*invdz2));
+    kappa += scale * kronrod_d[i] / denom * kronrod_w[i];
+  }
+  return kappa * invdx2;
+}
+
+
+// set the added mass and inertia of geoms in the ellipsoid fluid model, from their size
+static void setFluid(mjModel* m) {
+  for (int i=0; i < m->ngeom; i++) {
+    mjtNum* fluid = m->geom_fluid + mjNFLUID*i;
+    if (fluid[0] <= 0) {
+      continue;
+    }
+
+    // semi-axes of the equivalent ellipsoid
+    const mjtNum* size = m->geom_size + 3*i;
+    double dx, dy, dz;
+    switch ((mjtGeom) m->geom_type[i]) {
+    case mjGEOM_SPHERE:
+      dx = dy = dz = size[0];
+      break;
+    case mjGEOM_CAPSULE:
+      dx = dy = size[0];
+      dz = size[1] + size[0];
+      break;
+    case mjGEOM_CYLINDER:
+      dx = dy = size[0];
+      dz = size[1];
+      break;
+    default:
+      dx = size[0];
+      dy = size[1];
+      dz = size[2];
+    }
+
+    // volume of the equivalent ellipsoid
+    double volume = 4.0 / 3.0 * mjPI * dx * dy * dz;
+
+    // kappa is invariant to permutation of its last two arguments
+    double kx = addedMassKappa(dx, dy, dz);
+    double ky = addedMassKappa(dy, dz, dx);
+    double kz = addedMassKappa(dz, dx, dy);
+
+    // virtual moment of inertia factors: if (kz-ky) in the numerator is negative, so is the
+    // denominator, take absolute values of both and clip to kBoundEps
+    double yz = dy*dy - dz*dz;
+    double zx = dz*dz - dx*dx;
+    double xy = dx*dx - dy*dy;
+    double Ixfac = yz*yz * fabs(kz - ky) /
+                   mjMAX(kBoundEps, fabs(2*(dy*dy - dz*dz) + (dy*dy + dz*dz)*(ky - kz)));
+    double Iyfac = zx*zx * fabs(kx - kz) /
+                   mjMAX(kBoundEps, fabs(2*(dz*dz - dx*dx) + (dz*dz + dx*dx)*(kz - kx)));
+    double Izfac = xy*xy * fabs(ky - kx) /
+                   mjMAX(kBoundEps, fabs(2*(dx*dx - dy*dy) + (dx*dx + dy*dy)*(kx - ky)));
+
+    // virtual mass and inertia, entries 6-11 of the fluid coefficients
+    fluid[6] = volume * kx / mjMAX(kBoundEps, 2 - kx);
+    fluid[7] = volume * ky / mjMAX(kBoundEps, 2 - ky);
+    fluid[8] = volume * kz / mjMAX(kBoundEps, 2 - kz);
+    fluid[9] = volume * Ixfac / 5;
+    fluid[10] = volume * Iyfac / 5;
+    fluid[11] = volume * Izfac / 5;
+  }
+}
+
+
 // set fixed quantities (do not depend on qpos0)
 static void setFixed(mjModel* m, mjData* d) {
   mj_markStack(d);
@@ -340,6 +640,14 @@ static void setFixed(mjModel* m, mjData* d) {
   }
 
   // ----- apply compiler AUTO tree sleep policy
+
+  // resolve the AUTO policy anew: trees which a previous call resolved return to AUTO
+  for (int i=0; i < m->ntree; i++) {
+    int policy = m->tree_sleep_policy[i];
+    if (policy == mjSLEEP_AUTO_NEVER || policy == mjSLEEP_AUTO_ALLOWED) {
+      m->tree_sleep_policy[i] = mjSLEEP_AUTO;
+    }
+  }
 
   // actuators: trees with any actuated joint, site, body, or tendon do not auto-sleep
   for (int i=0; i < m->nactuator; i++) {
@@ -1556,8 +1864,18 @@ void mj_setConst(mjModel* m, mjData* d) {
     }
   }
 
+  // set geom and body bounds
+  setBound(m, d);
+
+  // set fluid added mass
+  setFluid(m);
+
   // set fixed quantities
   setFixed(m, d);
+
+  // computations below cover all bodies, sleeping or not
+  int enableflags = m->opt.enableflags;
+  m->opt.enableflags &= ~mjENBL_SLEEP;
 
   // set quantities that depend on qpos0
   set0(m, d);
@@ -1573,6 +1891,8 @@ void mj_setConst(mjModel* m, mjData* d) {
 
   // the vertex ordering of the metric's sparse factor
   mj_effCholSetConst(m, d);
+
+  m->opt.enableflags = enableflags;
 }
 
 
