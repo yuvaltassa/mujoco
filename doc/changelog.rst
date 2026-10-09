@@ -44,6 +44,7 @@ Engine
   :ref:`mju_user_malloc` returns memory that is not 64-byte aligned, as ``malloc`` often does. ``mjModel.nbuffer`` and
   ``mjData.nbuffer`` now include up to 63 bytes of leading padding, so arrays are 64-byte aligned regardless of the
   buffer address.
+- Fixed :ref:`adhesion<body-geom-adhesion>` having no effect in models loaded from MJB files or unpickled in Python.
 
 Compiler
 ^^^^^^^^

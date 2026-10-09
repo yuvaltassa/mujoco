@@ -371,6 +371,40 @@ TEST_F(EngineIoTest, MisalignedUserAllocator) {
   EXPECT_EQ(misaligned_nblock.load(), 0);
 }
 
+TEST_F(EngineIoTest, SaveLoadModelKeepsAdhesion) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <worldbody>
+      <geom type="box" size=".2 .2 .02" pos="0 0 1" gap=".05" adhesion="20"/>
+      <body pos="0 0 .93">
+        <freejoint/>
+        <geom type="box" size=".1 .1 .05" mass="1"/>
+      </body>
+    </worldbody>
+  </mujoco>
+  )";
+  char error[1024];
+  MjModelPtr model = LoadModelFromString(xml, error, sizeof(error));
+  ASSERT_THAT(model.get(), NotNull()) << error;
+  ASSERT_TRUE(model->flg_adhesion);
+
+  std::vector<char> mjb(mj_sizeModel(model.get()));
+  mj_saveModel(model.get(), nullptr, mjb.data(), mjb.size());
+  MjModelPtr loaded(mj_loadModelBuffer(mjb.data(), mjb.size()));
+  ASSERT_THAT(loaded.get(), NotNull());
+  EXPECT_TRUE(loaded->flg_adhesion);
+
+  // the box hangs from the adhesive ceiling, as with the original model
+  MjDataPtr data = MakeData(model);
+  MjDataPtr data_loaded = MakeData(loaded);
+  for (int i = 0; i < 500; i++) {
+    mj_step(model.get(), data.get());
+    mj_step(loaded.get(), data_loaded.get());
+  }
+  EXPECT_GT(data_loaded->qpos[2], 0.9);
+  ExpectBuffersEqual(model.get(), data.get(), data_loaded.get());
+}
+
 using ValidateReferencesTest = MujocoTest;
 
 TEST_F(ValidateReferencesTest, BodyReferences) {
