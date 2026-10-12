@@ -170,6 +170,9 @@ Bug fixes
 - :ref:`mjs_attach` and the :ref:`attach<body-attach>` element now apply the prefix and suffix to the name and
   material of skins and to the material of tendons and meshes. Attaching a model in which one of these has a
   material used to fail to compile.
+- A frame which :ref:`mjs_attach` attaches to a body is now posed relative to that body, as an attached body is
+  relative to its target frame. A frame nested in other frames of the child used to keep a pointer to them, which
+  took their pose from the child and crashed after they were deleted there.
 - :ref:`mjs_bodyToFrame` no longer loses inertia which is inferred from geoms when only one of the two bodies has
   an explicit inertial.
 - :ref:`mjs_delete` now deletes a :ref:`plugin instance<plugin-instance>` together with the last element that
