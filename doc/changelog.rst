@@ -141,7 +141,9 @@ Bug fixes
   orientation as ``euler``, ``axisangle``, ``xyaxes`` or ``zaxis``.
 - Saving MJCF no longer changes or loses the following: the order of the elements of a body which has
   :ref:`frames<frame>`, which gave the saved model other ids; ``class="main"`` inside another ``childclass``; the
-  :ref:`nchannel<asset-texture-nchannel>` of a texture; the names of energy sensors, which could not be loaded;
+  :ref:`nchannel<asset-texture-nchannel>` of a texture, and the :ref:`rgb1<asset-texture-rgb1>` of the faces which
+  the :ref:`gridlayout<asset-texture-gridlayout>` of a texture file leaves undefined; the
+  :ref:`maxhullvert<asset-mesh-maxhullvert>` of a mesh; the names of energy sensors, which could not be loaded;
   ``inertiafromgeom="false"``, and the inertia of the bodies of an attached model which has another
   ``inertiafromgeom``; the frame of the :ref:`surfacevel<body-geom-surfacevel>` of mesh geoms; the precision of
   mesh, flex, skin and height field data; and the empty cells of a :ref:`flexcomp<body-flexcomp>` with trilinear or

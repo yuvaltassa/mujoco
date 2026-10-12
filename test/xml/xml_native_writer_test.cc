@@ -23,6 +23,7 @@
 #include <clocale>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -40,6 +41,7 @@ namespace {
 
 using ::testing::DoubleNear;
 using ::testing::ElementsAre;
+using ::testing::ElementsAreArray;
 using ::testing::FloatEq;
 using ::testing::HasSubstr;
 using ::testing::Not;
@@ -2203,6 +2205,79 @@ TEST_F(XMLWriterTest, KeepsTextureChannels) {
 
   mj_deleteModel(model);
   mj_deleteSpec(spec);
+}
+
+// the faces which the gridlayout of a file texture leaves undefined keep rgb1
+TEST_F(XMLWriterTest, KeepsTextureRgb1OfUndefinedFaces) {
+  static constexpr char xml[] = R"(
+  <mujoco>
+    <asset>
+      <texture name="tex" type="cube" file="hfield.png" rgb1="0.2 0.4 0.6"
+               gridsize="2 2" gridlayout="R..."/>
+    </asset>
+  </mujoco>
+  )";
+  const std::string dir =
+      std::filesystem::path(GetTestDataFilePath(kNonRgbTextureXMLPath))
+          .remove_filename()
+          .string();
+
+  std::array<char, 1024> error;
+  mjSpec* spec = mj_parseXMLString(xml, 0, error.data(), error.size());
+  ASSERT_THAT(spec, NotNull()) << error.data();
+  mjs_setString(spec->modelfiledir, dir.c_str());
+  mjModel* model = mj_compile(spec, 0);
+  ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+
+  std::string saved_xml = SaveAndReadXml(spec);
+  EXPECT_THAT(saved_xml, HasSubstr("rgb1=\"0.2 0.4 0.6\""));
+  mjSpec* spec2 =
+      mj_parseXMLString(saved_xml.c_str(), 0, error.data(), error.size());
+  ASSERT_THAT(spec2, NotNull()) << error.data();
+  mjs_setString(spec2->modelfiledir, dir.c_str());
+  mjModel* model2 = mj_compile(spec2, 0);
+  ASSERT_THAT(model2, NotNull()) << mjs_getError(spec2);
+
+  ASSERT_EQ(model2->ntexdata, model->ntexdata);
+  EXPECT_THAT(std::vector<mjtByte>(model2->tex_data,
+                                   model2->tex_data + model2->ntexdata),
+              ElementsAreArray(model->tex_data, model->ntexdata));
+
+  mj_deleteModel(model2);
+  mj_deleteSpec(spec2);
+  mj_deleteModel(model);
+  mj_deleteSpec(spec);
+}
+
+// maxhullvert is saved, in mesh elements and in default classes
+TEST_F(XMLWriterTest, KeepsMeshMaxhullvert) {
+  for (const char* path : {"user/testdata/torus_maxhullvert.xml",
+                           "user/testdata/torus_maxhullvert_default.xml"}) {
+    const std::string xml_path = GetTestDataFilePath(path);
+    std::array<char, 1024> error;
+    mjSpec* spec = mj_parseXML(xml_path.c_str(), 0, error.data(), error.size());
+    ASSERT_THAT(spec, NotNull()) << error.data();
+    mjModel* model = mj_compile(spec, 0);
+    ASSERT_THAT(model, NotNull()) << mjs_getError(spec);
+
+    std::string saved_xml = SaveAndReadXml(spec);
+    EXPECT_THAT(saved_xml, HasSubstr("maxhullvert=")) << path;
+    mjSpec* spec2 =
+        mj_parseXMLString(saved_xml.c_str(), 0, error.data(), error.size());
+    ASSERT_THAT(spec2, NotNull()) << error.data();
+    mjs_setString(
+        spec2->modelfiledir,
+        std::filesystem::path(xml_path).remove_filename().string().c_str());
+    mjModel* model2 = mj_compile(spec2, 0);
+    ASSERT_THAT(model2, NotNull()) << mjs_getError(spec2);
+
+    EXPECT_EQ(model2->nmeshgraph, model->nmeshgraph) << path;
+
+    mj_deleteModel(model2);
+    mj_deleteSpec(spec2);
+    mj_deleteModel(model);
+    mj_deleteSpec(spec);
+  }
 }
 
 // ---------------- test CopyBack functionality (decompiler) ------------------
