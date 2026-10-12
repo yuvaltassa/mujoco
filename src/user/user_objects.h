@@ -1480,6 +1480,10 @@ class mjCSkin_ : public mjCBase {
 
   int              matid;   // material id
   std::vector<int> bodyid;  // body ids
+
+  // namespace of the attachments, applied to the bone names loaded from file
+  std::string bone_prefix_;
+  std::string bone_suffix_;
 };
 
 class mjCSkin : public mjCSkin_, private mjsSkin {
@@ -1505,6 +1509,7 @@ class mjCSkin : public mjCSkin_, private mjsSkin {
   const std::vector<float>&              get_bindquat() const { return bindquat_; }
   const std::vector<std::vector<int>>&   get_vertid() const { return vertid_; }
   const std::vector<std::vector<float>>& get_vertweight() const { return vertweight_; }
+  bool HasBoneNameSpace() const { return !bone_prefix_.empty() || !bone_suffix_.empty(); }
   void                                   del_material() {
     spec_material_.clear();
     material_.clear();

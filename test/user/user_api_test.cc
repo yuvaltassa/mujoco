@@ -5791,6 +5791,109 @@ TEST_F(MujocoTest, AttachMaterialReferences) {
   mj_deleteModel(models[1]);
 }
 
+TEST_F(MujocoTest, AttachSkinFromFile) {
+  static constexpr char xml_child[] = R"(
+  <mujoco>
+    <asset>
+      <skin file="skin.skn"/>
+    </asset>
+    <worldbody>
+      <body name="box">
+        <geom size=".1"/>
+      </body>
+    </worldbody>
+  </mujoco>)";
+
+  // a triangle with one bone on body "box", in SKN format
+  std::vector<char> skn;
+  auto put = [&skn](const auto& value) {
+    const char* bytes = reinterpret_cast<const char*>(&value);
+    skn.insert(skn.end(), bytes, bytes + sizeof(value));
+  };
+  for (int size : {3, 0, 1, 1}) put(size);  // nvert, ntexcoord, nface, nbone
+  for (float v : {0, 0, 0, 1, 0, 0, 0, 1, 0}) put(v);
+  for (int f : {0, 1, 2}) put(f);
+  char bodyname[40] = "box";
+  put(bodyname);
+  for (float b : {0, 0, 0, 1, 0, 0, 0}) put(b);  // bindpos, bindquat
+  put(3);
+  for (int id : {0, 1, 2}) put(id);
+  for (float w : {1, 1, 1}) put(w);
+
+  auto vfs = std::make_unique<mjVFS>();
+  mj_defaultVFS(vfs.get());
+  mj_addBufferVFS(vfs.get(), "skin.skn", skn.data(), skn.size());
+
+  // the bones loaded from file take the prefixes and suffixes of two nested
+  // attachments, by deep copy and by reference
+  std::array<char, 1000> er;
+  std::array<mjModel*, 2> models;
+  for (bool deepcopy : {true, false}) {
+    mjSpec* child = mj_parseXMLString(xml_child, 0, er.data(), er.size());
+    ASSERT_THAT(child, NotNull()) << er.data();
+    mjSpec* middle = mj_makeSpec();
+    mjSpec* parent = mj_makeSpec();
+    mjs_setDeepCopy(middle, deepcopy);
+    mjs_setDeepCopy(parent, deepcopy);
+    mjsBody* body = mjs_addBody(mjs_findBody(middle, "world"), 0);
+    mjs_setName(body->element, "middle");
+    mjsFrame* frame = mjs_addFrame(body, 0);
+    EXPECT_THAT(mjs_attach(frame->element, mjs_findBody(child, "box")->element,
+                           "a_", "_x"),
+                NotNull())
+        << mjs_getError(middle);
+    frame = mjs_addFrame(mjs_findBody(parent, "world"), 0);
+    EXPECT_THAT(mjs_attach(frame->element,
+                           mjs_findBody(middle, "middle")->element, "b_", "_y"),
+                NotNull())
+        << mjs_getError(parent);
+
+    mjModel* model = mj_compile(parent, vfs.get());
+    ASSERT_THAT(model, NotNull()) << mjs_getError(parent);
+    ASSERT_EQ(model->nskin, 1);
+    for (int i = 0; i < model->skin_bonenum[0]; i++) {
+      EXPECT_STREQ(mj_id2name(model, mjOBJ_BODY, model->skin_bonebodyid[i]),
+                   "b_a_box_x_y");
+    }
+
+    // the saved model has the bones as data, and loads without the file
+    std::string saved = SaveAndReadXml(parent);
+    EXPECT_EQ(saved.find("skin.skn"), std::string::npos);
+    MjModelPtr reloaded = LoadModelFromString(saved, er.data(), er.size());
+    ASSERT_THAT(reloaded, NotNull()) << er.data();
+    ASSERT_EQ(reloaded->nskin, 1);
+    ASSERT_EQ(reloaded->nskinbone, model->nskinbone);
+    ASSERT_EQ(reloaded->nskinvert, model->nskinvert);
+    for (int i = 0; i < model->nskinbone; i++) {
+      EXPECT_STREQ(
+          mj_id2name(reloaded.get(), mjOBJ_BODY, reloaded->skin_bonebodyid[i]),
+          "b_a_box_x_y");
+    }
+    for (int i = 0; i < 3 * model->nskinvert; i++) {
+      EXPECT_EQ(reloaded->skin_vert[i], model->skin_vert[i]);
+    }
+    for (int i = 0; i < model->nskinbonevert; i++) {
+      EXPECT_EQ(reloaded->skin_bonevertid[i], model->skin_bonevertid[i]);
+      EXPECT_EQ(reloaded->skin_bonevertweight[i],
+                model->skin_bonevertweight[i]);
+    }
+
+    models[deepcopy] = model;
+    mj_deleteSpec(parent);
+    mj_deleteSpec(middle);
+    mj_deleteSpec(child);
+  }
+
+  // deep copy and attachment by reference give the same model
+  std::string field = "";
+  EXPECT_LE(CompareModel(models[0], models[1], field), 0)
+      << "Different field: " << field;
+
+  mj_deleteModel(models[0]);
+  mj_deleteModel(models[1]);
+  mj_deleteVFS(vfs.get());
+}
+
 TEST_F(MujocoTest, InitTexture) {
   mjSpec* spec = mj_makeSpec();
   EXPECT_THAT(spec, NotNull());

@@ -169,7 +169,8 @@ Bug fixes
   :ref:`discardvisual<compiler-discardvisual>`.
 - :ref:`mjs_attach` and the :ref:`attach<body-attach>` element now apply the prefix and suffix to the name and
   material of skins and to the material of tendons and meshes. Attaching a model in which one of these has a
-  material used to fail to compile.
+  material used to fail to compile. The bones of a skin loaded from a :ref:`file<asset-skin-file>` now take the
+  prefix and suffix too, and such a skin is saved with its bone data rather than the file name.
 - :ref:`mjs_bodyToFrame` no longer loses inertia which is inferred from geoms when only one of the two bodies has
   an explicit inertial.
 - :ref:`mjs_delete` now deletes a :ref:`plugin instance<plugin-instance>` together with the last element that
