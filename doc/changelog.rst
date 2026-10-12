@@ -144,8 +144,8 @@ Bug fixes
   :ref:`nchannel<asset-texture-nchannel>` of a texture; the names of energy sensors, which could not be loaded;
   ``inertiafromgeom="false"``, and the inertia of the bodies of an attached model which has another
   ``inertiafromgeom``; the frame of the :ref:`surfacevel<body-geom-surfacevel>` of mesh geoms; the precision of
-  mesh, flex, skin and height field data; and the empty cells of a :ref:`flexcomp<body-flexcomp>` with trilinear or
-  quadratic dofs.
+  mesh, flex, skin and height field data; the content type of meshes which were loaded from the asset cache; and the
+  empty cells of a :ref:`flexcomp<body-flexcomp>` with trilinear or quadratic dofs.
 - :ref:`mj_saveXML` and :ref:`mj_saveXMLString` now save the compiled values of an :ref:`mjSpec` as
   :ref:`mj_saveLastXML` does, including those which are computed at the end of compilation, such as the damping
   which :ref:`dampratio<actuator-position-dampratio>` gives, and no longer lose the scaling of
