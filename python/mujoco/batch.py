@@ -54,6 +54,7 @@ installed as one makes the batch's calls raise ValueError.
 """
 
 import copy
+import functools
 from typing import Any, Dict, FrozenSet, Optional, Sequence, Tuple, Union
 
 import mujoco
@@ -110,12 +111,16 @@ class Batch:
   ):
     self._b = _batch.Batch(model, nsim, nthread, persistent)
     self.model = model
-    self._data = mujoco.MjData(model)  # field shapes and dtypes
     self._models = None  # caller models, kept alive while the batch runs on them
     self.state = self._b.state()
     self.warning = self._b.warning()
     self.status = self._b.status()
     self.status.flags.writeable = False
+
+  @functools.cached_property
+  def _data(self) -> mujoco.MjData:
+    """An MjData of the model, for field shapes and dtypes."""
+    return mujoco.MjData(self.model)
 
   def __getattr__(self, name: str) -> np.ndarray:
     # consulted only for names Batch does not have: MjData fields, as bind()
