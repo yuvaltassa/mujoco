@@ -356,7 +356,10 @@ TEST_F(BatchTest, ErrorKeepsFailingSimulation) {
     EXPECT_EQ(mjb_step(b, nullptr, 0, 3, mjSTAGE_NONE), 1);
     EXPECT_NE(mjb_status(b)[2], 0);
     EXPECT_EQ(mjb_status(b)[0], 0);
-    EXPECT_THAT(std::string(mjb_error(b, 2)), Not(testing::IsEmpty()));
+    // as MuJoCo formats it: the raising function, then the message
+    std::string error = mjb_error(b, 2);
+    EXPECT_EQ(error.rfind("mj_", 0), 0) << error;
+    EXPECT_THAT(error, HasSubstr(": "));
     EXPECT_STREQ(mjb_error(b, 0), "");
     EXPECT_EQ(std::vector<mjtNum>(batch.Row(2), batch.Row(2) + mjb_nstate(b)),
               before);

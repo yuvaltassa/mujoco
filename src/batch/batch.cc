@@ -228,7 +228,12 @@ thread_local const void* tls_batch = nullptr;   // batch whose simulation the th
 // trap errors by unwinding to tls_jmp, pass other messages to the previous handler
 void BatchLogHandler(const mjLogMessage* msg) {
   if (msg->level == mjLOG_ERROR && tls_jmp) {
-    std::snprintf(tls_error, sizeof(tls_error), "%s", msg->subject);
+    // as MuJoCo formats an error: the raising function, then the message
+    if (msg->func) {
+      std::snprintf(tls_error, sizeof(tls_error), "%s: %s", msg->func, msg->subject);
+    } else {
+      std::snprintf(tls_error, sizeof(tls_error), "%s", msg->subject);
+    }
     mjb_longjmp(*tls_jmp, 1);
   }
   (tls_prev ? tls_prev : _mjPRIVATE_getGlobalLogHandler())(msg);
