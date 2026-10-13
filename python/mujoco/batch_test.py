@@ -344,6 +344,37 @@ class BatchTest(parameterized.TestCase):
       mujoco.mj_setConst(mi, mujoco.MjData(mi))
       np.testing.assert_array_equal(b.get_model(i).bvh_aabb, mi.bvh_aabb)
 
+  def test_caller_models(self):
+    m = self.model
+    pole = m.body('pole').id
+    variants = []
+    for i in range(N):
+      variant = copy.copy(m)
+      variant.body_mass[pole] = 0.1 * (i + 1)
+      mujoco.mj_setConst(variant, mujoco.MjData(variant))
+      variants.append(variant)
+    b = batch.Batch(m, N, 3)
+    b.set_models(variants)
+    b.ctrl[:, 0] = 0.5
+    b.step(nstep=10)
+    for i in range(N):
+      d = mujoco.MjData(m)
+      d.ctrl[0] = 0.5
+      for _ in range(10):
+        mujoco.mj_step(variants[i], d)
+      np.testing.assert_array_equal(b.qpos[i], d.qpos)
+      self.assertEqual(b.get_model(i).body_mass[pole], variants[i].body_mass[pole])
+    with self.assertRaisesRegex(mujoco.FatalError, 'caller'):
+      b.expand('body_mass')
+    with self.assertRaisesRegex(mujoco.FatalError, 'caller'):
+      b.set_const()
+    with self.assertRaisesRegex(ValueError, 'per simulation'):
+      b.set_models(variants[:-1])
+    b.set_models(None)
+    b.expand('body_mass')
+    with self.assertRaisesRegex(mujoco.FatalError, 'per-simulation'):
+      b.set_models(variants)
+
   def test_expand_option(self):
     m = self.model
     b = batch.Batch(m, N, 2)

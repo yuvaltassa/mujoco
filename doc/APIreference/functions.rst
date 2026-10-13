@@ -4302,6 +4302,22 @@ Return 1 if the batch keeps one mjData per simulation, 0 otherwise.
 
 Return the batch's copy of the model.
 
+.. _mjb_setModels:
+
+`mjb_setModels <#mjb_setModels>`__
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. mujoco-include:: mjb_setModels
+
+Run simulation ``i`` on ``models[i]``, one of the caller's models, instead of the batch's model, or on the batch's model
+again if ``models`` is ``NULL``. Each model must give mjData the layout of the batch's model, the same sizes of
+everything mjData holds, as models compiled from one spec with other parameters, or with meshes of other shapes, do. The
+batch reads the models during its calls and never writes them. Set them again after editing one: a persistent batch
+would otherwise continue a step from stages computed before the edit. Caller models replace per-simulation fields:
+raise if the batch has fields from :ref:`mjb_expand`; while caller models are set, :ref:`mjb_expand` and
+:ref:`mjb_setConst` raise, keyframes are those of each simulation's model, and :ref:`mjb_getModel` copies the
+simulation's model.
+
 .. _mjb_nstate:
 
 `mjb_nstate <#mjb_nstate>`__
@@ -4458,8 +4474,9 @@ not yet computed, so contact forces must not be read before the acceleration sta
 .. mujoco-include:: mjb_getModel
 
 Write simulation ``sim``'s model into ``m``, which must have the batch's sizes, such as a copy of :ref:`mjb_model`: the
-batch's model with the simulation's per-simulation fields and the constants :ref:`mjb_setConst` computed for it. The
-result can be rendered or passed to any function.
+batch's model with the simulation's per-simulation fields and the constants :ref:`mjb_setConst` computed for it, or a
+copy of its model from :ref:`mjb_setModels`, whose sizes ``m`` must then have. The result can be rendered or passed to
+any function.
 
 .. _mjb_getData:
 

@@ -66,6 +66,10 @@ MJAPI int mjb_persistent(const mjBatch* b);
 // Return the batch's copy of the model.
 MJAPI const mjModel* mjb_model(const mjBatch* b);
 
+// Run simulation i on models[i], the caller's, instead of the batch's model; NULL: the batch's.
+// Nullable: models
+MJAPI void mjb_setModels(mjBatch* b, const mjModel* const* models);
+
 // Return size of a state row: mj_stateSize(m, mjSTATE_INTEGRATION).
 MJAPI int mjb_nstate(const mjBatch* b);
 

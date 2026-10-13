@@ -1088,6 +1088,8 @@ thread count.
   ``nsim x 1``, and ``b.body('pole').mass = masses`` writes per-simulation masses, as ``expand`` does.
 - ``get_model(sim)`` and ``get_data(sim)`` materialize one simulation as an ``MjModel`` and ``MjData``, for rendering
   or for any function; see :ref:`mjb_getModel` and :ref:`mjb_getData`.
+- ``set_models(models)`` runs each simulation on a model of the caller's, an ``MjModel`` per simulation or one for all,
+  instead of the batch's model, in place of expanded fields; see :ref:`mjb_setModels`.
 - ``expand(name)`` gives an ``MjModel`` field, or an ``MjOption`` field named ``opt.<name>``, per-simulation values,
   applied before each call. ``set_const`` runs :ref:`mj_setConst` per simulation, and the fields it derives become
   per-simulation as well.

@@ -333,6 +333,25 @@ PYBIND11_MODULE(_batch, pymodule, pybind11::mod_gil_not_used()) {
              py::gil_scoped_release release;  // waits for a running call
              InterceptMjErrors(mjb_getData)(b.get(), sim, data.get());
            })
+      .def("set_models",
+           // models: an MjModel for every simulation, nsim MjModels, or None for the batch's
+           [](Batch& b, py::object models) {
+             int nsim = mjb_nsim(b.get());
+             std::vector<const mjModel*> ptrs;
+             if (py::isinstance<MjModelWrapper>(models)) {
+               ptrs.assign(nsim, models.cast<const MjModelWrapper&>().get());
+             } else if (!models.is_none()) {
+               py::list list = models;
+               if (static_cast<int>(list.size()) != nsim) {
+                 throw py::value_error("set_models needs a model per simulation");
+               }
+               for (py::handle model : list) {
+                 ptrs.push_back(model.cast<const MjModelWrapper&>().get());
+               }
+             }
+             py::gil_scoped_release release;  // waits for a running call
+             InterceptMjErrors(mjb_setModels)(b.get(), ptrs.empty() ? nullptr : ptrs.data());
+           })
       .def("set_const",
            [](Batch& b, std::optional<Ids> ids) { return b.Call(mjb_setConst, ids); },
            py::arg("ids") = py::none())

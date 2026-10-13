@@ -3636,6 +3636,7 @@ int mjb_nsim(const mjBatch* b);
 int mjb_nthread(const mjBatch* b);
 int mjb_persistent(const mjBatch* b);
 const mjModel* mjb_model(const mjBatch* b);
+void mjb_setModels(mjBatch* b, const mjModel* const* models);
 int mjb_nstate(const mjBatch* b);
 mjtNum* mjb_state(mjBatch* b);
 mjtNum* mjb_stateComponent(mjBatch* b, int component, int* size);

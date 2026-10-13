@@ -233,6 +233,15 @@ case it would already be expanded. So derived constants are complete without a m
 the scalars it writes (`ngravcomp`, the gravcomp, surface-velocity and adhesion flags, `stat`) are
 kept per simulation too. A simulation that raises keeps its constants, and the others complete.
 
+Caller models are the other way to vary simulations: `set_models` runs simulation i on a model of
+the caller's, read and never written, in place of the batch's model and its expanded fields. A
+batch uses one or the other: `set_models` raises on a batch with expanded fields, and `expand` and
+`set_const` raise while caller models are set, so that no write to an expanded field goes unused.
+A caller model must give mjData the batch model's layout, the sizes in `MJDATA_POINTERS` and the
+arena, which is what lets the batch's `mjData` serve it; models compiled from one spec with other
+parameters, or with meshes of other shapes, qualify. Caller models cost nothing per thread. Setting
+them clears a persistent batch's continuation, whose stages were computed with the previous models.
+
 Thread models are shallow: a copy of the struct and of every non-asset array, with meshes,
 heightfields, textures, skins and BVH data shared with the batch's model, which the pipeline only
 reads. A Menagerie G1's model buffer is 76 MB, all but 81 KB of it assets, so full copies at 48
@@ -329,8 +338,6 @@ Requests from review that this change does not take, and why:
 ## Not in this change
 
 - Reimplementing `mujoco.rollout` on `mjb_rollout`, with `rollout_test.py` as its acceptance test.
-- Template lists: structurally different models of one size signature in one batch, which mjlab's
-  mesh variants need.
 - Tagging the fields `mj_setConst` writes in `mjxmacro.h`, which would replace the
   change-detection loop.
 - Recording at a reduced rate for long horizons.

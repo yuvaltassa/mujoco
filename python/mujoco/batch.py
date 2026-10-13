@@ -34,7 +34,8 @@ sensor(name) and the other named views slice the bound and expanded fields per
 object, with the attributes of MjData's and MjModel's: batch.joint('hinge').qpos
 is (nsim, 1), and batch.body('pole').mass = masses writes per-simulation masses.
 get_model(sim) and get_data(sim) materialize one simulation, to render it or to
-pass it to any function. Fields are also attributes, as on MjData:
+pass it to any function. set_models(models) runs each simulation on a model of
+the caller's instead, of the same MjData layout, in place of expanded fields. Fields are also attributes, as on MjData:
 batch.xpos binds xpos, and batch.ctrl = u writes every simulation's controls.
 DATA_FIELDS and MODEL_FIELDS name the fields bind() and expand() accept.
 
@@ -110,6 +111,7 @@ class Batch:
     self._b = _batch.Batch(model, nsim, nthread, persistent)
     self.model = model
     self._data = mujoco.MjData(model)  # field shapes and dtypes
+    self._models = None  # caller models, kept alive while the batch runs on them
     self.state = self._b.state()
     self.warning = self._b.warning()
     self.status = self._b.status()
@@ -276,18 +278,47 @@ class Batch:
   ) -> mujoco.MjModel:
     """Simulation sim's model: the batch's, with its per-simulation fields.
 
+    With caller models set, a copy of simulation sim's.
+
     Args:
       sim: the simulation.
-      model: an MjModel with the batch's sizes to write into, or None for a
-        copy of the batch's model.
+      model: an MjModel with the sizes of simulation sim's model to write
+        into, or None for a copy of it.
 
     Returns:
       The model, for rendering or for any mj_ function.
     """
     if model is None:
-      model = copy.copy(self.model)
+      if self._models is None:
+        model = copy.copy(self.model)
+      elif isinstance(self._models, mujoco.MjModel):
+        model = copy.copy(self._models)
+      else:
+        model = copy.copy(self._models[sim])
     self._b.get_model(sim, model)
     return model
+
+  def set_models(
+      self,
+      models: Union[None, mujoco.MjModel, Sequence[mujoco.MjModel]],
+  ) -> None:
+    """Run simulation i on models[i] instead of the batch's model.
+
+    Each model must give MjData the layout of the batch's model: the same
+    sizes of everything MjData holds, as models compiled from one spec with
+    different parameters, or with meshes of other shapes, do. The batch keeps
+    them alive and reads them; set them again after editing one. expand() and
+    set_const() serve the batch's own model, and raise while caller models are
+    set.
+
+    Args:
+      models: an MjModel per simulation, one MjModel for all of them, or None
+        for the batch's model.
+    """
+    if models is not None and not isinstance(models, mujoco.MjModel):
+      models = list(models)
+    self._b.set_models(models)
+    self._models = models
 
   def get_data(
       self, sim: int, data: Optional[mujoco.MjData] = None

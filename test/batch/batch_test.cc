@@ -1451,6 +1451,162 @@ TEST_F(BatchTest, MakeDataErrorFailsMakeBatch) {
   EXPECT_THAT(batch.b, NotNull());
 }
 
+// copies of model m with the pole's mass of simulation i, constants included
+std::vector<MjModelPtr> MassVariants(const mjModel* m, int nsim) {
+  int pole = mj_name2id(m, mjOBJ_BODY, "pole");
+  std::vector<MjModelPtr> variants;
+  for (int i = 0; i < nsim; ++i) {
+    variants.emplace_back(mj_copyModel(nullptr, m));
+    variants.back()->body_mass[pole] = 0.1 * (i + 1);
+    mjData* d = mj_makeData(variants.back().get());
+    mj_setConst(variants.back().get(), d);
+    mj_deleteData(d);
+  }
+  return variants;
+}
+
+// each simulation runs on its caller model as in a loop, from a step after a
+// call on the batch's own model, which a persistent batch must not continue
+void CallerModels(int persistent) {
+  MjModelPtr model = LoadModelFromString(kXml);
+  ASSERT_THAT(model, NotNull());
+  const mjModel* m = model.get();
+  std::vector<MjModelPtr> variants = MassVariants(m, kNsim);
+  std::vector<const mjModel*> models;
+  for (auto& v : variants) models.push_back(v.get());
+  BatchPtr batch(MakeBatch(m, kNsim, 3, persistent));
+  mjBatch* b = batch.b;
+  ASSERT_EQ(mjb_reset(b, nullptr, 0, nullptr, mjSTAGE_VEL), 0);
+  mjb_setModels(b, models.data());
+  mjtNum* ctrl = mjb_stateComponent(b, mjSTATE_CTRL, nullptr);
+  for (int i = 0; i < kNsim; ++i) ctrl[i * mjb_nstate(b)] = 0.5;
+  ASSERT_EQ(mjb_step(b, nullptr, 0, 20, mjSTAGE_NONE), 0);
+  mjModel* copy = mj_copyModel(nullptr, m);
+  for (int i = 0; i < kNsim; ++i) {
+    MjDataPtr d = MakeData(model);
+    mj_resetData(m, d.get());
+    d->ctrl[0] = 0.5;
+    for (int k = 0; k < 20; ++k) mj_step(models[i], d.get());
+    EXPECT_EQ(std::vector<mjtNum>(batch.Row(i), batch.Row(i) + mjb_nstate(b)),
+              GetState(m, d.get()))
+        << "sim " << i;
+    mjb_getModel(b, i, copy);
+    int pole = mj_name2id(m, mjOBJ_BODY, "pole");
+    EXPECT_EQ(copy->body_mass[pole], models[i]->body_mass[pole]);
+  }
+  mj_deleteModel(copy);
+
+  // back on the batch's own model
+  mjb_setModels(b, nullptr);
+  std::vector<mjtNum> row(batch.Row(0), batch.Row(0) + mjb_nstate(b));
+  ASSERT_EQ(mjb_step(b, nullptr, 0, 1, mjSTAGE_NONE), 0);
+  MjDataPtr d = MakeData(model);
+  mj_setState(m, d.get(), row.data(), mjSTATE_INTEGRATION);
+  mj_step(m, d.get());
+  EXPECT_EQ(std::vector<mjtNum>(batch.Row(0), batch.Row(0) + mjb_nstate(b)),
+            GetState(m, d.get()));
+}
+
+TEST_F(BatchTest, CallerModels) { CallerModels(0); }
+
+TEST_F(BatchTest, CallerModelsPersistent) { CallerModels(1); }
+
+// caller models may differ in the shape of their meshes: mjData holds only the
+// number of their bounding volumes
+TEST_F(BatchTest, CallerModelsWithDifferentMeshes) {
+  std::string xml = R"(
+  <mujoco>
+    <asset><mesh name="rock" vertex="VERTICES"/></asset>
+    <worldbody>
+      <geom type="plane" size="1 1 .1"/>
+      <body pos="0 0 .3"><freejoint/><geom type="mesh" mesh="rock"/></body>
+    </worldbody>
+  </mujoco>
+  )";
+  std::string tet = xml, skewed = xml;
+  tet.replace(tet.find("VERTICES"), 8, "0 0 0  .2 0 0  0 .2 0  0 0 .2");
+  skewed.replace(skewed.find("VERTICES"), 8,
+                 "0 0 0  .3 0 0  0 .1 0  .05 0 .25");
+  MjModelPtr m0 = LoadModelFromString(tet.c_str());
+  MjModelPtr m1 = LoadModelFromString(skewed.c_str());
+  ASSERT_THAT(m0, NotNull());
+  ASSERT_THAT(m1, NotNull());
+  ASSERT_NE(m0->mesh_vert[3], m1->mesh_vert[3]);
+  const mjModel* models[] = {m0.get(), m1.get()};
+  BatchPtr batch(MakeBatch(m0.get(), 2, 2, 0));
+  mjb_setModels(batch.b, models);
+  ASSERT_EQ(mjb_reset(batch.b, nullptr, 0, nullptr, mjSTAGE_NONE), 0);
+  ASSERT_EQ(mjb_step(batch.b, nullptr, 0, 300, mjSTAGE_NONE), 0);
+  for (int i = 0; i < 2; ++i) {
+    mjData* d = mj_makeData(models[i]);
+    for (int k = 0; k < 300; ++k) mj_step(models[i], d);
+    EXPECT_GT(d->ncon, 0);
+    EXPECT_EQ(
+        std::vector<mjtNum>(batch.Row(i), batch.Row(i) + mjb_nstate(batch.b)),
+        GetState(models[i], d))
+        << "sim " << i;
+    mj_deleteData(d);
+  }
+}
+
+// caller models must give mjData the batch model's layout, and replace the
+// batch's own per-simulation fields rather than combine with them
+TEST_F(BatchTest, CallerModelsChecks) {
+  MjModelPtr model = LoadModelFromString(kXml);
+  MjModelPtr other = LoadModelFromString(kContactXml);
+  const mjModel* m = model.get();
+  std::vector<MjModelPtr> variants = MassVariants(m, 2);
+  const mjModel* good[] = {variants[0].get(), variants[1].get()};
+  const mjModel* mismatched[] = {variants[0].get(), other.get()};
+  const mjModel* missing[] = {variants[0].get(), nullptr};
+  {
+    BatchPtr batch(MakeBatch(m, 2, 1, 0));
+    EXPECT_THAT(MjuErrorMessageFrom(mjb_setModels)(batch.b, mismatched),
+                HasSubstr("layout"));
+    EXPECT_THAT(MjuErrorMessageFrom(mjb_setModels)(batch.b, missing),
+                HasSubstr("NULL"));
+    mjb_setModels(batch.b, good);
+    EXPECT_THAT(
+        MjuErrorMessageFrom(mjb_expand)(batch.b, "body_mass", nullptr, nullptr),
+        HasSubstr("caller"));
+    EXPECT_THAT(MjuErrorMessageFrom(mjb_setConst)(batch.b, nullptr, 0),
+                HasSubstr("caller"));
+  }
+  {
+    BatchPtr batch(MakeBatch(m, 2, 1, 0));
+    ASSERT_THAT(mjb_expand(batch.b, "body_mass", nullptr, nullptr), NotNull());
+    EXPECT_THAT(MjuErrorMessageFrom(mjb_setModels)(batch.b, good),
+                HasSubstr("per-simulation"));
+  }
+  {
+    // sleep, enabled by a caller model, needs a persistent batch
+    MjModelPtr sleepy(mj_copyModel(nullptr, m));
+    sleepy->opt.enableflags |= mjENBL_SLEEP;
+    const mjModel* models[] = {variants[0].get(), sleepy.get()};
+    BatchPtr batch(MakeBatch(m, 2, 1, 0));
+    EXPECT_THAT(MjuErrorMessageFrom(mjb_setModels)(batch.b, models),
+                HasSubstr("persistent"));
+  }
+  {
+    // keyframes are each model's
+    std::string xml(kXml);
+    xml.replace(xml.find("</keyframe>"), 11,
+                "<key qpos=\"-0.3 -0.5 0 1 .5 1 0 0 0\"/></keyframe>");
+    MjModelPtr twokeys = LoadModelFromString(xml.c_str());
+    ASSERT_EQ(twokeys->nkey, 2);
+    const mjModel* models[] = {twokeys.get(), variants[1].get()};
+    BatchPtr batch(MakeBatch(m, 2, 1, 0));
+    mjb_setModels(batch.b, models);
+    int key0[] = {1, 0};
+    EXPECT_EQ(mjb_reset(batch.b, nullptr, 0, key0, mjSTAGE_NONE), 0);
+    EXPECT_EQ(batch.Row(0)[Offset(m, mjSTATE_QPOS)], twokeys->key_qpos[m->nq]);
+    int key1[] = {0, 1};
+    EXPECT_THAT(
+        MjuErrorMessageFrom(mjb_reset)(batch.b, nullptr, 0, key1, mjSTAGE_NONE),
+        HasSubstr("keyframe"));
+  }
+}
+
 // IPC, like sleep, keeps state in mjData from step to step: it needs a
 // persistent batch
 TEST_F(BatchTest, IpcNeedsPersistent) {

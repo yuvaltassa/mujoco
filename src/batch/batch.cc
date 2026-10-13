@@ -95,6 +95,16 @@ bool InState(std::string_view name) {
   return false;
 }
 
+// whether models a and b give mjData the same layout
+bool SameDataLayout(const mjModel* a, const mjModel* b) {
+  if (a->narena != b->narena) return false;
+#define X(type, name, nr, nc) \
+  if (a->nr != b->nr) return false;
+  MJDATA_POINTERS
+#undef X
+  return true;
+}
+
 // whether an mjModel field is asset data, shared by the thread models
 bool IsAsset(std::string_view name) {
   for (std::string_view p : {"mesh_", "hfield_", "tex_", "skin_", "bvh_", "oct_"}) {
@@ -440,6 +450,7 @@ struct mjBatch_ {
   int input_adr = 0;                            // ctrl, qfrc_applied, xfrc_applied in a row
   int input_end = 0;                            // their end
   std::vector<mjModel*> models;                 // per thread, once a field is expanded
+  std::vector<const mjModel*> ext;              // per simulation: the caller's models, or empty
   std::vector<void*> model_buffers;             // their non-asset arrays
   std::vector<mjtNum*> bvh_bodies;              // per thread: its bodies' bounding volumes
   std::vector<mjtNum*> bvh_all;                 // per thread: all bounding volumes
@@ -550,35 +561,38 @@ struct mjBatch_ {
 
   // run the current op on simulation i, at position j of the call, on thread t; may longjmp
   void RunSim(int t, int i, int j) {
-    mjModel* m = models.empty() ? model : models[t];
+    // the batch's model, or the thread's copy with per-simulation fields; with caller models,
+    // neither is used
+    mjModel* own = models.empty() ? model : models[t];
+    const mjModel* m = ext.empty() ? own : ext[i];
     mjData* d = Data(t, i);
     if (!models.empty()) {
       // mj_setConst writes only the bodies' bounding volumes; the pipeline reads the meshes' too
-      m->bvh_aabb = op == Op::SetConst ? bvh_bodies[t] : bvh_all[t];
+      own->bvh_aabb = op == Op::SetConst ? bvh_bodies[t] : bvh_all[t];
     }
-    if (op == Op::SetConst) Restore(m);
+    if (op == Op::SetConst) Restore(own);
     for (auto& s : expanded) {
       // mj_setConst recomputes its outputs from the template's, as on a fresh copy
       if (op == Op::SetConst && s->derived) continue;
-      std::memcpy(s->field->get(m), s->Row(i), s->field->bytes);
+      std::memcpy(s->field->get(own), s->Row(i), s->field->bytes);
     }
 
     if (op == Op::SetConst) {
-      mj_setConst(m, d);
-      for (auto& s : expanded) std::memcpy(s->Row(i), s->field->get(m), s->field->bytes);
-      scalars[i] = Scalars::Of(m);
+      mj_setConst(own, d);
+      for (auto& s : expanded) std::memcpy(s->Row(i), s->field->get(own), s->field->bytes);
+      scalars[i] = Scalars::Of(own);
       for (const Field* f : restorable) {
-        if (!expanded_set.count(f) && std::memcmp(f->get(m), f->get(model), f->bytes)) {
+        if (!expanded_set.count(f) && std::memcmp(f->get(own), f->get(model), f->bytes)) {
           std::lock_guard<std::mutex> lock(changed_mu);
           changed.insert(f);
         }
       }
-      Restore(m);
+      Restore(own);
       if (persistent) current[i] = 0;  // the model's constants changed
       return;
     }
 
-    if (!models.empty()) scalars[i].Apply(m);
+    if (!models.empty()) scalars[i].Apply(own);
     if (!persistent && (m->opt.enableflags & (mjENBL_SLEEP | mjENBL_IPC))) {
       mju_error("sleep and IPC require a persistent batch");
     }
@@ -819,6 +833,18 @@ struct mjBatch_ {
     }
   }
 
+  // whether the simulations run on caller models
+  bool CallerModels() {
+    std::lock_guard<std::mutex> lock(mu);
+    return !ext.empty();
+  }
+
+  // the model simulation i runs on, but for its per-simulation fields
+  const mjModel* SimModel(int i) {
+    std::lock_guard<std::mutex> lock(mu);
+    return ext.empty() ? model : ext[i];
+  }
+
   // raise if called from a function running on one of this batch's simulations
   void CheckNotNested() {
     if (tls_batch == this) mju_error("mjb: a function run by mjb_apply called its own batch");
@@ -982,6 +1008,7 @@ void* mjb_output(mjBatch* b, const char* name, int* size, int* elemsize) {
 // give an mjModel field per-simulation values, return their storage
 void* mjb_expand(mjBatch* b, const char* name, int* size, int* elemsize) {
   b->CheckNotNested();
+  if (b->CallerModels()) mju_error("mjb_expand: the batch runs on caller models");
   std::lock_guard<std::mutex> lock(b->mu);
   auto it = b->model_fields.find(name);
   if (it == b->model_fields.end() || it->second.asset) return nullptr;
@@ -1016,9 +1043,10 @@ int mjb_reset(mjBatch* b, const int* ids, int nid, const int* key, int stage) {
   if (stage < mjSTAGE_NONE || stage > mjSTAGE_ACC) {
     mju_error("mjb_reset: invalid stage %d", stage);
   }
+  b->CheckIds(ids, nid);
   int n = ids ? nid : b->nsim;
   for (int j = 0; key && j < n; ++j) {
-    if (key[j] < -1 || key[j] >= b->model->nkey) {
+    if (key[j] < -1 || key[j] >= b->SimModel(ids ? ids[j] : j)->nkey) {
       mju_error("mjb_reset: keyframe %d out of range", key[j]);
     }
   }
@@ -1028,12 +1056,20 @@ int mjb_reset(mjBatch* b, const int* ids, int nid, const int* key, int stage) {
 // simulation sim's model: the batch's with its per-simulation fields and constants
 void mjb_getModel(mjBatch* b, int sim, mjModel* m) {
   if (sim < 0 || sim >= b->nsim) mju_error("mjb_getModel: simulation %d out of range", sim);
+  b->CheckNotNested();
+  const mjModel* source = b->SimModel(sim);
 #define X(name) \
-  if (m->name != b->model->name) mju_error("mjb_getModel: model sizes differ from the batch's");
+  if (m->name != source->name) mju_error("mjb_getModel: model sizes differ from the simulation's");
   MJMODEL_SIZES
 #undef X
-  b->CheckNotNested();
+  if (m->nbuffer != source->nbuffer) {
+    mju_error("mjb_getModel: model sizes differ from the simulation's");
+  }
   std::lock_guard<std::mutex> lock(b->mu);
+  if (source != b->model) {
+    mj_copyModel(m, source);
+    return;
+  }
   for (const Field* f : b->restorable) std::memcpy(f->get(m), f->get(b->model), f->bytes);
   for (auto& s : b->expanded) std::memcpy(s->field->get(m), s->Row(sim), s->field->bytes);
   b->scalars[sim].Apply(m);
@@ -1054,7 +1090,40 @@ void mjb_getData(mjBatch* b, int sim, mjData* d) {
 
 // run mj_setConst on each simulation's model
 int mjb_setConst(mjBatch* b, const int* ids, int nid) {
+  b->CheckNotNested();
+  if (b->CallerModels()) mju_error("mjb_setConst: the batch runs on caller models");
   return b->Run(mjBatch_::Op::SetConst, ids, nid, 0);
+}
+
+// run each simulation on a model of the caller's, or on the batch's model
+void mjb_setModels(mjBatch* b, const mjModel* const* models) {
+  b->CheckNotNested();
+  for (int i = 0; models && i < b->nsim; ++i) {
+    const mjModel* m = models[i];
+    if (i > 0 && m == models[i - 1]) continue;  // checked already
+    if (!m) mju_error("mjb_setModels: model %d is NULL", i);
+    if (!SameDataLayout(m, b->model)) {
+      mju_error("mjb_setModels: model %d does not give mjData the batch model's layout", i);
+    }
+    if (!b->persistent && (m->opt.enableflags & (mjENBL_SLEEP | mjENBL_IPC))) {
+      mju_error("mjb_setModels: model %d enables sleep or IPC, which need a persistent batch", i);
+    }
+  }
+  bool expanded;
+  {
+    std::lock_guard<std::mutex> lock(b->mu);
+    expanded = models && !b->expanded.empty();
+    if (!expanded) {
+      if (models) {
+        b->ext.assign(models, models + b->nsim);
+      } else {
+        b->ext.clear();
+      }
+      // the stages in a persistent batch's mjData were computed with the previous models
+      std::fill(b->current.begin(), b->current.end(), 0);
+    }
+  }
+  if (expanded) mju_error("mjb_setModels: the batch has per-simulation model fields");
 }
 
 // advance simulations with per-substep controls and records
