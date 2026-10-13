@@ -29,6 +29,49 @@ libmujoco those costs vanish, and every language binding can use the C API.
 The accelerated backends (MJX, MuJoCo Warp) batch on the GPU. An exact, deterministic CPU batch that
 runs wherever MuJoCo runs is the missing middle.
 
+## User stories
+
+Who would use the batch, for what, and whether the design serves it. The sources are mjlab's
+classic backend, mjbatch's examples, `mujoco.rollout` and its callers (`mujoco.sysid`, the rollout
+notebook), and UniLab, a robot-learning framework whose CPU backends, MuJoCoUni and a fork of
+mjbatch, run RL with a GPU learner at thousands of environments.
+
+- **RL on CPU with a learner on any device** (mjlab, UniLab): write actions, step, read
+  observations, reset the terminated simulations to their own keyframes, randomize model fields at
+  reset. Covered: `bind`, `step(stage=...)`, `reset(ids, keyframe)`, `expand` and `set_const`.
+  Calls release the GIL, so a learner thread overlaps the physics.
+- **Control at every substep from fresh sensors** (UniLab's wrench and impedance control):
+  position and velocity sensors at the new state, then `ctrl` and `xfrc_applied`, then the rest of
+  the step. Covered: `step(nstep=1, stage=mjSTAGE_VEL)`, which a persistent batch continues with
+  `mj_step2`.
+- **Planning** (predictive sampling, iLQR, MPC): fan out from one state with sampled controls and
+  record costs. Covered: rows written from one state, `rollout`. Batched derivatives
+  (`mjd_transitionFD`) are C-only, through `mjb_apply`.
+- **System identification and co-design** (`mujoco.sysid`, CEM over link lengths): roll out models
+  compiled with different parameters. Covered: `set_models` with the compiled models, or `expand` of
+  the parameters and `set_const`, which also recomputes bounding volumes after changes of geometry.
+- **`mujoco.rollout`**: open-loop trajectories from initial states, with a model per rollout.
+  Covered: `rollout` with `set_models`; rollout can be implemented on the batch.
+- **Many mesh variants** (UniLab: 1200 objects over thousands of environments): models whose meshes
+  differ in vertex or face counts change mjData's layout, which holds a flag per bounding volume, so
+  `set_models` cannot take them, and a compiled model per variant (16 MB each there) does not fit
+  in memory anyway. The scalable form is one model holding every variant's meshes with a
+  per-simulation `geom_dataid`, and the variant's mesh-derived fields (geom bounds, body inertia)
+  per simulation as well; `set_const` then refits the bodies' bounding volumes. Partly covered: the
+  pooled model and its derived fields are the caller's to assemble, and a per-simulation
+  `geom_dataid` is not range-checked.
+- **Several layouts in one process** (UniLab's topology groups, multi-task RL): a batch per layout.
+  Covered, but each batch has threads of its own, so concurrent calls on several batches
+  oversubscribe the CPU. A pool shared by batches would be a `mjBatchConfig` parameter.
+- **Pinned workers** (UniLab's disjoint CPU sets for several pools on one machine): not covered;
+  pinning would be a `mjBatchConfig` parameter. Each `mjData` is first touched by the thread that
+  runs it.
+- **Terrain perception** (height scans for legged robots): covered by `ray`, which also scans
+  terrain built from geoms. UniLab samples one heightfield directly; their relative speed is not
+  measured.
+- **Rewards from contacts**: through sensors only, since the batch exposes no contact arrays (see
+  Observations of the new state).
+
 ## A simulation is its state row
 
 `mjSTATE_INTEGRATION` exists to define exact continuation: it is everything `mj_step` reads that it
