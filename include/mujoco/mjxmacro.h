@@ -832,6 +832,82 @@
     X   ( int,     mapM2D,                nD,            1                    ) \
     X   ( int,     mapD2M,                nC,            1                    )
 
+// mjModel arrays that mj_setConst writes, in whole or in part; while it runs it also clears
+// the sleep flag in opt.enableflags
+#define MJMODEL_SETCONST     \
+    X( body_treeid         ) \
+    X( body_sameframe      ) \
+    X( body_subtreemass    ) \
+    X( body_invweight0     ) \
+    X( body_margin         ) \
+    X( body_contype        ) \
+    X( body_conaffinity    ) \
+    X( jnt_actuatorid      ) \
+    X( dof_invweight0      ) \
+    X( dof_M0              ) \
+    X( dof_length          ) \
+    X( tree_bodyadr        ) \
+    X( tree_bodynum        ) \
+    X( tree_dofadr         ) \
+    X( tree_dofnum         ) \
+    X( tree_sleep_policy   ) \
+    X( geom_sameframe      ) \
+    X( geom_size           ) \
+    X( geom_aabb           ) \
+    X( geom_rbound         ) \
+    X( geom_fluid          ) \
+    X( site_sameframe      ) \
+    X( cam_mode            ) \
+    X( cam_poscom0         ) \
+    X( cam_pos0            ) \
+    X( cam_mat0            ) \
+    X( light_mode          ) \
+    X( light_poscom0       ) \
+    X( light_pos0          ) \
+    X( light_dir0          ) \
+    X( flex_vertedgeadr    ) \
+    X( flex_vertedgenum    ) \
+    X( flex_vertedge       ) \
+    X( flex_vert0          ) \
+    X( flex_vertmetric     ) \
+    X( flexedge_length0    ) \
+    X( flexedge_invweight0 ) \
+    X( efm0_dofid          ) \
+    X( efm0_L_rownnz       ) \
+    X( efm0_L_rowadr       ) \
+    X( efm0_L_colind       ) \
+    X( efm0_L              ) \
+    X( efmC_perm           ) \
+    X( flex_rigid          ) \
+    X( flexedge_J_rownnz   ) \
+    X( flexedge_J_rowadr   ) \
+    X( flexedge_J_colind   ) \
+    X( flexvert_J_rownnz   ) \
+    X( flexvert_J_rowadr   ) \
+    X( flexvert_J_colind   ) \
+    X( eq_data             ) \
+    X( tendon_actuatorid   ) \
+    X( tendon_treenum      ) \
+    X( tendon_treeid       ) \
+    X( ten_J_rownnz        ) \
+    X( ten_J_rowadr        ) \
+    X( ten_J_colind        ) \
+    X( tendon_length0      ) \
+    X( tendon_invweight0   ) \
+    X( actuator_acc0       ) \
+    X( actuator_length0    ) \
+    X( bvh_aabb            )
+
+// mjModel scalars that mj_setConst writes
+#define MJMODEL_SETCONST_SCALARS \
+    X( npolygonmax    )          \
+    X( nmeshdegmax    )          \
+    X( ngravcomp      )          \
+    X( flg_gravcomp   )          \
+    X( flg_surfacevel )          \
+    X( flg_adhesion   )          \
+    X( stat           )
+
 //-------------------------------- mjData ----------------------------------------------------------
 
 // pointer fields of mjData

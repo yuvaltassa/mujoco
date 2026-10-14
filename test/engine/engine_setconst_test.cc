@@ -15,13 +15,36 @@
 // Tests for engine/engine_setconst.c.
 
 #include <cstddef>
+#include <cstring>
+#include <filesystem>
+#include <set>
 #include <string>
+#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <mujoco/mjmodel.h>
+#include <mujoco/mjxmacro.h>
 #include <mujoco/mujoco.h>
 #include "test/fixture.h"
+
+// writes are tracked with page protection, on POSIX systems and outside
+// sanitizers, which handle memory faults themselves
+#if defined(__has_feature)
+  #if __has_feature(address_sanitizer) || __has_feature(memory_sanitizer) || \
+      __has_feature(thread_sanitizer)
+    #define MJ_SANITIZED
+  #endif
+#endif
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+  #define MJ_SANITIZED
+#endif
+#if (defined(__linux__) || defined(__APPLE__)) && !defined(MJ_SANITIZED)
+  #define MJ_TRACK_WRITES
+  #include <signal.h>
+  #include <sys/mman.h>
+  #include <unistd.h>
+#endif
 
 namespace mujoco {
 namespace {
@@ -34,6 +57,207 @@ using ::testing::IsNull;
 using ::testing::NotNull;
 
 using SetConstTest = MujocoTest;
+
+#ifdef MJ_TRACK_WRITES
+// an mjModel array copied into pages of its own
+struct TrackedArray {
+  const char* name;
+  char* begin;
+  size_t len;
+  bool written;
+};
+
+std::vector<TrackedArray>* tracked =
+    nullptr;  // arrays whose pages are write-protected
+
+// record a write to a tracked array and let it proceed; crash on any other
+// fault
+void OnWrite(int sig, siginfo_t* info, void* context) {
+  char* address = static_cast<char*>(info->si_addr);
+  for (TrackedArray& a : *tracked) {
+    if (address >= a.begin && address < a.begin + a.len) {
+      a.written = true;
+      mprotect(a.begin, a.len, PROT_READ | PROT_WRITE);
+      return;
+    }
+  }
+  signal(sig, SIG_DFL);
+}
+
+// names of the arrays mj_setConst writes in a copy of m, whatever it writes
+// into them
+std::set<std::string> WrittenArrays(const mjModel* m, mjData* d) {
+  size_t page = sysconf(_SC_PAGESIZE);
+  mjModel copy = *m;
+  std::vector<TrackedArray> arrays;
+  #if defined(__clang__) || defined(__GNUC__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wunused-variable"
+  #endif
+  MJMODEL_POINTERS_PREAMBLE(m)
+  #define X(type, name, nr, nc)                                         \
+    if (size_t bytes = sizeof(type) * m->nr * (nc)) {                   \
+      size_t len = (bytes + page - 1) / page * page;                    \
+      void* pages = mmap(nullptr, len, PROT_READ | PROT_WRITE,          \
+                         MAP_PRIVATE | MAP_ANON, -1, 0);                \
+      std::memcpy(pages, m->name, bytes);                               \
+      copy.name = static_cast<type*>(pages);                            \
+      arrays.push_back({#name, static_cast<char*>(pages), len, false}); \
+    }
+  MJMODEL_POINTERS
+  #undef X
+  #if defined(__clang__) || defined(__GNUC__)
+    #pragma GCC diagnostic pop
+  #endif
+
+  struct sigaction action = {}, segv, bus;
+  action.sa_sigaction = OnWrite;
+  action.sa_flags = SA_SIGINFO;
+  tracked = &arrays;
+  sigaction(SIGSEGV, &action, &segv);
+  sigaction(SIGBUS, &action, &bus);
+  for (TrackedArray& a : arrays) mprotect(a.begin, a.len, PROT_READ);
+  mj_setConst(&copy, d);
+  sigaction(SIGSEGV, &segv, nullptr);
+  sigaction(SIGBUS, &bus, nullptr);
+  tracked = nullptr;
+
+  std::set<std::string> written;
+  for (TrackedArray& a : arrays) {
+    if (a.written) written.insert(a.name);
+    munmap(a.begin, a.len);
+  }
+  return written;
+}
+
+// set the scalars mj_setConst writes to values it would not, and clear the
+// pointers, so that what remains of m is its other scalars
+void MaskScalars(mjModel* m, const mjModel* poison) {
+  #define X(name) m->name = poison->name;
+  MJMODEL_SETCONST_SCALARS
+  #undef X
+  #define X(type, name, nr, nc) m->name = nullptr;
+  MJMODEL_POINTERS
+  #undef X
+  m->buffer = nullptr;
+}
+
+// the models of the repository that compile
+std::vector<std::string> CorpusModels() {
+  std::vector<std::string> models;
+  for (const auto& dir : {GetTestDataFilePath("."), GetModelPath(".")}) {
+    for (const auto& p : std::filesystem::recursive_directory_iterator(dir)) {
+      std::string xml = p.path().generic_string();
+      if (p.path().extension() != ".xml" ||
+          // intentional failures, and models too slow to load repeatedly
+          xml.find("malformed_") != std::string::npos ||
+          xml.find("_fail") != std::string::npos ||
+          xml.find("perf") != std::string::npos ||
+          xml.find("100_humanoids") != std::string::npos) {
+        continue;
+      }
+      models.push_back(xml);
+    }
+  }
+  return models;
+}
+#endif
+
+// MJMODEL_SETCONST and MJMODEL_SETCONST_SCALARS are what mj_setConst writes: in
+// the models of the repository, every write to an mjModel array lands in a
+// listed one, no other scalar changes, and every listed array and scalar is
+// written, at least in part, in some model
+TEST_F(SetConstTest, WritesListedFields) {
+#ifndef MJ_TRACK_WRITES
+  GTEST_SKIP() << "writes are tracked with page protection, on Linux and macOS";
+#else
+  std::set<std::string> listed = {
+  #define X(name) #name,
+      MJMODEL_SETCONST
+  #undef X
+  };
+  std::set<std::string> listed_scalars = {
+  #define X(name) #name,
+      MJMODEL_SETCONST_SCALARS
+  #undef X
+  };
+  std::set<std::string> written;
+  int nmodel = 0;
+  for (const std::string& xml : CorpusModels()) {
+    mjModel* m = mj_loadXML(xml.c_str(), nullptr, nullptr, 0);
+    if (!m) continue;  // needs a plugin or an asset this build lacks
+    mjData* d = mj_makeData(m);
+    ++nmodel;
+
+    std::set<std::string> arrays = WrittenArrays(m, d);
+    for (const std::string& name : arrays) {
+      EXPECT_TRUE(listed.count(name))
+          << "mj_setConst writes " << name << " in " << xml;
+    }
+    written.insert(arrays.begin(), arrays.end());
+
+    // which listed scalars are written, from values mj_setConst would not write
+    mjModel* expected = mj_copyModel(nullptr, m);
+    mj_setConst(expected, d);
+    mjModel* poisoned = mj_copyModel(nullptr, m);
+    poisoned->npolygonmax = expected->npolygonmax + 1;
+    poisoned->nmeshdegmax = expected->nmeshdegmax + 1;
+    poisoned->ngravcomp = expected->ngravcomp + 1;
+    poisoned->flg_gravcomp = !expected->flg_gravcomp;
+    poisoned->flg_surfacevel = !expected->flg_surfacevel;
+    poisoned->flg_adhesion = !expected->flg_adhesion;
+    poisoned->stat.meaninertia = 2 * expected->stat.meaninertia + 1;
+    poisoned->stat.meanmass = 2 * expected->stat.meanmass + 1;
+    poisoned->stat.meansize = 2 * expected->stat.meansize + 1;
+    poisoned->stat.extent = 2 * expected->stat.extent + 1;
+    for (int k = 0; k < 3; ++k)
+      poisoned->stat.center[k] = expected->stat.center[k] + 1;
+    mjModel poison = *poisoned;
+    mj_setConst(poisoned, d);
+  #define X(name)                                                        \
+    if (std::memcmp(&poisoned->name, &poison.name, sizeof(poison.name))) \
+      written.insert(#name);
+    MJMODEL_SETCONST_SCALARS
+  #undef X
+
+    // the other scalars keep their values; a scalar is one page with the
+    // others, so a write of an unchanged value cannot be seen, but one that
+    // per-simulation inputs (masses, inertias, primitive sizes, gravity
+    // compensation) would change can
+    mjModel* perturbed = mj_copyModel(nullptr, m);
+    for (int i = 0; i < m->nbody; ++i) {
+      perturbed->body_mass[i] *= 1.25;
+      for (int k = 0; k < 3; ++k) perturbed->body_inertia[3 * i + k] *= 1.25;
+      perturbed->body_gravcomp[i] = i % 2 ? 0.5 : 0;
+    }
+    for (int i = 0; i < m->ngeom; ++i) {
+      if (m->geom_type[i] < mjGEOM_SPHERE || m->geom_type[i] > mjGEOM_BOX)
+        continue;
+      for (int k = 0; k < 3; ++k) perturbed->geom_size[3 * i + k] *= 1.25;
+    }
+    mj_setConst(perturbed, d);
+    for (const mjModel* result : {expected, perturbed}) {
+      mjModel before = *m, after = *result;
+      MaskScalars(&before, expected);
+      MaskScalars(&after, expected);
+      EXPECT_EQ(std::memcmp(&before, &after, sizeof(mjModel)), 0)
+          << "mj_setConst changes an unlisted scalar in " << xml;
+    }
+    mj_deleteModel(perturbed);
+
+    mj_deleteModel(poisoned);
+    mj_deleteModel(expected);
+    mj_deleteData(d);
+    mj_deleteModel(m);
+  }
+  EXPECT_GT(nmodel, 100) << "the corpus was not found";
+  listed.insert(listed_scalars.begin(), listed_scalars.end());
+  for (const std::string& name : listed) {
+    EXPECT_TRUE(written.count(name))
+        << name << " is listed but not written in any model";
+  }
+#endif
+}
 
 TEST_F(SetConstTest, AwakeActuatedJoint) {
   string xml = R"(

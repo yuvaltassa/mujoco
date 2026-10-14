@@ -187,22 +187,24 @@ FieldTable ModelFields(const mjModel* m) {
 
 // mjModel scalars that mj_setConst writes; kept per simulation like expanded fields
 struct Scalars {
-  mjtSize ngravcomp;                                   // number of bodies with gravcomp
-  mjtByte flg_gravcomp, flg_surfacevel, flg_adhesion;  // features in use
-  mjStatistic stat;                                    // model statistics
+#define X(name) decltype(mjModel::name) name;
+  MJMODEL_SETCONST_SCALARS
+#undef X
 
   // scalars of model m
   static Scalars Of(const mjModel* m) {
-    return {m->ngravcomp, m->flg_gravcomp, m->flg_surfacevel, m->flg_adhesion, m->stat};
+    Scalars s;
+#define X(name) s.name = m->name;
+    MJMODEL_SETCONST_SCALARS
+#undef X
+    return s;
   }
 
   // write the scalars into model m
   void Apply(mjModel* m) const {
-    m->ngravcomp = ngravcomp;
-    m->flg_gravcomp = flg_gravcomp;
-    m->flg_surfacevel = flg_surfacevel;
-    m->flg_adhesion = flg_adhesion;
-    m->stat = stat;
+#define X(name) m->name = name;
+    MJMODEL_SETCONST_SCALARS
+#undef X
   }
 };
 
@@ -434,7 +436,8 @@ struct mjBatch_ {
   mjModel* model = nullptr;                     // the batch's copy
   FieldTable data_fields;                       // mjData fields, by name
   FieldTable model_fields;                      // mjModel and mjOption fields, by name
-  std::vector<const Field*> restorable;         // non-asset model fields
+  std::vector<const Field*> nonasset;           // non-asset model fields
+  std::vector<const Field*> setconst;           // model fields mj_setConst writes
   std::vector<mjtNum> state;                    // (nsim, nstate)
   std::vector<mjWarningStat> warning;           // (nsim, mjNWARNING)
   std::vector<Scalars> scalars;                 // per simulation
@@ -478,10 +481,12 @@ struct mjBatch_ {
   // warning counters of simulation i
   mjWarningStat* Warning(int i) { return warning.data() + static_cast<size_t>(i) * mjNWARNING; }
 
-  // restore the non-expanded model fields and the scalars of a thread's model
+  // restore the model fields and scalars mj_setConst writes in a thread's model, and the
+  // options, whose sleep flag it clears while it runs
   void Restore(mjModel* m) {
-    for (const Field* f : restorable) std::memcpy(f->get(m), f->get(model), f->bytes);
+    for (const Field* f : setconst) std::memcpy(f->get(m), f->get(model), f->bytes);
     Scalars::Of(model).Apply(m);
+    m->opt = model->opt;
   }
 
   // give model field f per-simulation storage, seeded from the model
@@ -581,7 +586,7 @@ struct mjBatch_ {
       mj_setConst(own, d);
       for (auto& s : expanded) std::memcpy(s->Row(i), s->field->get(own), s->field->bytes);
       scalars[i] = Scalars::Of(own);
-      for (const Field* f : restorable) {
+      for (const Field* f : setconst) {
         if (!expanded_set.count(f) && std::memcmp(f->get(own), f->get(model), f->bytes)) {
           std::lock_guard<std::mutex> lock(changed_mu);
           changed.insert(f);
@@ -893,8 +898,11 @@ mjBatch* mjb_makeBatch(const mjModel* m, int nsim, const mjBatchConfig* config, 
     b->data_fields = DataFields(b->model);
     b->model_fields = ModelFields(b->model);
     for (auto& [name, f] : b->model_fields) {
-      if (!f.asset) b->restorable.push_back(&f);
+      if (!f.asset) b->nonasset.push_back(&f);
     }
+#define X(name) b->setconst.push_back(&b->model_fields.at(#name));
+    MJMODEL_SETCONST
+#undef X
     b->scalars.assign(nsim, Scalars::Of(b->model));
     b->status.assign(nsim, 0);
     b->errors.resize(nsim);
@@ -1070,7 +1078,7 @@ void mjb_getModel(mjBatch* b, int sim, mjModel* m) {
     mj_copyModel(m, source);
     return;
   }
-  for (const Field* f : b->restorable) std::memcpy(f->get(m), f->get(b->model), f->bytes);
+  for (const Field* f : b->nonasset) std::memcpy(f->get(m), f->get(b->model), f->bytes);
   for (auto& s : b->expanded) std::memcpy(s->field->get(m), s->Row(sim), s->field->bytes);
   b->scalars[sim].Apply(m);
 }

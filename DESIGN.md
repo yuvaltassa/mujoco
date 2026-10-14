@@ -269,12 +269,14 @@ Names follow MuJoCo (`nsim`, `nthread`, `ids`) rather than mjbatch.
 
 `expand` gives a field per-simulation storage, seeded from the model and copied into the thread's
 model before each simulation's call. `set_const` runs `mj_setConst` per simulation and compares
-every non-expanded field with the template: whatever it changed is expanded and the call's
-simulations are recomputed, until nothing changes. The others need not be: a newly expanded field
-starts from the template's value, which is theirs unless their own `set_const` changed it, in which
-case it would already be expanded. So derived constants are complete without a maintained list, and
-the scalars it writes (`ngravcomp`, the gravcomp, surface-velocity and adhesion flags, `stat`) are
-kept per simulation too. A simulation that raises keeps its constants, and the others complete.
+the fields it writes, which `MJMODEL_SETCONST` in `mjxmacro.h` lists, with the template: whatever it
+changed is expanded and the call's simulations are recomputed, until nothing changes. The others need
+not be: a newly expanded field starts from the template's value, which is theirs unless their own
+`set_const` changed it, in which case it would already be expanded. The scalars it writes
+(`MJMODEL_SETCONST_SCALARS`) are kept per simulation too. A simulation that raises keeps its
+constants, and the others complete. An engine test keeps the lists exact: it write-protects every
+`mjModel` array in pages of its own and runs `mj_setConst` on every model of the repository, so a
+write to an unlisted array fails it, as does a listed field no model writes.
 
 Caller models are the other way to vary simulations: `set_models` runs simulation i on a model of
 the caller's, read and never written, in place of the batch's model and its expanded fields. A
@@ -381,8 +383,6 @@ Requests from review that this change does not take, and why:
 ## Not in this change
 
 - Reimplementing `mujoco.rollout` on `mjb_rollout`, with `rollout_test.py` as its acceptance test.
-- Tagging the fields `mj_setConst` writes in `mjxmacro.h`, which would replace the
-  change-detection loop.
 - Recording at a reduced rate for long horizons.
 - A Python entry to `mjb_apply` for C functions through ctypes. `jac` and `ray` cover mjbatch's
   queries; others can follow their uses.

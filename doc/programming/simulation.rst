@@ -743,7 +743,8 @@ Exceptions to the general rule that **integer** types are **not safe to change**
 
 When considering exceptions to the rule that real-valued parameters are safe to change, we need to note the function
 :ref:`mj_setConst`, which constitutes the last step of the compilation process. This function propagates changes from
-some fields to other fields, allowing changes that would otherwise be unsafe.
+some fields to other fields, allowing changes that would otherwise be unsafe. The fields it writes are listed by the
+``MJMODEL_SETCONST`` and ``MJMODEL_SETCONST_SCALARS`` :ref:`X Macros<tyXMacro>`.
 
 Exceptions to the general rule that **real-valued** types **are safe to change**:
 

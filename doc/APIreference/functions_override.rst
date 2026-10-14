@@ -741,11 +741,12 @@ Compute the stages of :ref:`mj_forward` up to ``stage``, an :ref:`mjtStage`, on 
 
 .. _mjb_setConst:
 
-Run :ref:`mj_setConst` on each simulation's model. Every model field it changes gets per-simulation values, as with
-:ref:`mjb_expand`, so the derived constants are per-simulation; when a field gains them, the call's simulations are
-recomputed. The others need not be, since such a field starts from the model's value. Such fields are recomputed from the model's values on each call, unless they are
-expanded with :ref:`mjb_expand`, which makes their values inputs, as the anchors of connect constraints are in
-``eq_data``. A simulation in which MuJoCo raises an error keeps its constants.
+Run :ref:`mj_setConst` on each simulation's model. Every field it changes, of those ``MJMODEL_SETCONST`` and
+``MJMODEL_SETCONST_SCALARS`` in ``mjxmacro.h`` list, gets per-simulation values, as with :ref:`mjb_expand`, so the
+derived constants are per-simulation; when a field gains them, the call's simulations are recomputed. The others need
+not be, since such a field starts from the model's value. Such fields are recomputed from the model's values on each
+call, unless they are expanded with :ref:`mjb_expand`, which makes their values inputs, as the anchors of connect
+constraints are in ``eq_data``. A simulation in which MuJoCo raises an error keeps its constants.
 
 .. _mjb_rollout:
 

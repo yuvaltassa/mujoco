@@ -49,6 +49,8 @@ Engine
   gap of geoms, to the inertial frames of bodies and to the size of height fields are then safe; previously contacts
   could be missed. :ref:`mj_setConst` also computes the constants of sleeping bodies, which it skipped, and resolves the
   automatic :ref:`sleep policy<body-sleep>` of trees anew.
+- Added the ``MJMODEL_SETCONST`` and ``MJMODEL_SETCONST_SCALARS`` :ref:`X Macros<tyXMacro>`, listing the
+  :ref:`mjModel` arrays and scalars that :ref:`mj_setConst` writes.
 - Corrected the shear contribution to solid and membrane stiffness for interpolated flexes, and the three-point Gauss
   quadrature used by quadratic flexes. Material parameters now produce the standard isotropic linear-elastic stiffness;
   existing models using these flexes can change behavior.
