@@ -17,17 +17,25 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <filesystem>  // NOLINT
+#include <limits>
+#include <set>
 #include <sstream>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "absl/strings/match.h"
-#include <mujoco/mujoco.h>
+#include <mujoco/mjmodel.h>
 #include <mujoco/mjspec.h>
+#include <mujoco/mjxmacro.h>
+#include <mujoco/mujoco.h>
 #include "src/xml/xml_api.h"
 #include "src/xml/xml_numeric_format.h"
 #include "test/compare_model.h"
@@ -95,6 +103,249 @@ std::string SaveToString(const mjSpec* s) {
   xml.resize(size);
   return xml;
 }
+
+// The difference of two values, relative to their magnitude where it exceeds
+// one; zero for two NaNs, infinite for unequal integers.
+template <typename T>
+double Difference(T a, T b) {
+  if constexpr (std::is_floating_point_v<T>) {
+    if (a == b || (std::isnan(a) && std::isnan(b))) return 0;
+    double scale = std::max({1.0, std::abs(static_cast<double>(a)),
+                             std::abs(static_cast<double>(b))});
+    double dif = std::abs(static_cast<double>(a) - b) / scale;
+    return std::isnan(dif) ? std::numeric_limits<double>::infinity() : dif;
+  } else {
+    return a == b ? 0 : std::numeric_limits<double>::infinity();
+  }
+}
+
+// values of an mjModel array, as (array, index) pairs
+using ModelValues = std::set<std::pair<std::string, int>>;
+
+// The fields in which two models differ by more than tol, one line per field
+// with its largest difference, apart from fields whose names start with one of
+// the ignored prefixes, and the ignored values.
+std::string ModelDifferences(const mjModel* m1, const mjModel* m2, double tol,
+                             const std::vector<std::string>& ignored = {},
+                             const ModelValues& ignored_values = {}) {
+  std::ostringstream out;
+  out.precision(17);
+  auto compared = [&](const char* name) {
+    return std::none_of(ignored.begin(), ignored.end(),
+                        [&](const std::string& prefix) {
+                          return absl::StartsWith(name, prefix);
+                        });
+  };
+
+  // sizes: the arrays of models of different sizes are not compared
+#define X(name)                                                     \
+  if (m1->name != m2->name) {                                       \
+    out << #name << ": " << m1->name << " vs " << m2->name << '\n'; \
+  }
+  MJMODEL_SIZES
+#undef X
+  if (!out.str().empty()) return out.str();
+
+  // arrays
+  MJMODEL_POINTERS_PREAMBLE(m1);
+#define X(type, name, nr, nc, sc)                                         \
+  if (compared(#name)) {                                                  \
+    double maxdif = 0;                                                    \
+    int adr = 0;                                                          \
+    for (int i = 0; i < m1->nr * (nc); i++) {                             \
+      if (ignored_values.count({#name, i})) continue;                     \
+      double dif = Difference(m1->name[i], m2->name[i]);                  \
+      if (dif > maxdif) {                                                 \
+        maxdif = dif;                                                     \
+        adr = i;                                                          \
+      }                                                                   \
+    }                                                                     \
+    if (maxdif > tol) {                                                   \
+      out << #name << "[" << adr / (nc) << "][" << adr % (nc)             \
+          << "]: " << +m1->name[adr] << " vs " << +m2->name[adr] << '\n'; \
+    }                                                                     \
+  }
+  MJMODEL_POINTERS
+#undef X
+
+  // scalars which are not sizes
+  auto scalar = [&](const std::string& name, double a, double b) {
+    if (compared(name.c_str()) && Difference(a, b) > tol) {
+      out << name << ": " << a << " vs " << b << '\n';
+    }
+  };
+  scalar("flg_gravcomp", m1->flg_gravcomp, m2->flg_gravcomp);
+  scalar("flg_surfacevel", m1->flg_surfacevel, m2->flg_surfacevel);
+  scalar("flg_adhesion", m1->flg_adhesion, m2->flg_adhesion);
+  auto statistic = [&](const std::string& name, const mjStatistic& s1,
+                       const mjStatistic& s2) {
+#define X(field, n)                                                          \
+  for (int i = 0; i < n; i++) {                                              \
+    scalar(name + "." #field, reinterpret_cast<const mjtNum*>(&s1.field)[i], \
+           reinterpret_cast<const mjtNum*>(&s2.field)[i]);                   \
+  }
+#define XVEC X
+    MJSTATISTIC_FIELDS
+#undef XVEC
+#undef X
+  };
+  statistic("stat", m1->stat, m2->stat);
+#define X(type, name, n) scalar("opt." #name, m1->opt.name, m2->opt.name);
+#define XVEC(type, name, n)                                 \
+  for (int i = 0; i < n; i++) {                             \
+    scalar("opt." #name, m1->opt.name[i], m2->opt.name[i]); \
+  }
+  MJOPTION_FIELDS
+#undef X
+#undef XVEC
+  return out.str();
+}
+
+// the values which compilation derives once from the conventions of the spec,
+// which mj_setConst leaves as compiled: the damping of actuators given a
+// damping ratio, the stiffness and damping of joints given a spring-damper, the
+// spring length of tendons and the relative pose of welds between bodies which
+// have none
+ModelValues CompiledValues(const mjSpec* s, const mjModel* m) {
+  ModelValues values;
+  mjSpec* spec = const_cast<mjSpec*>(s);
+  for (mjsElement* e = mjs_firstElement(spec, mjOBJ_ACTUATOR); e;
+       e = mjs_nextElement(spec, e)) {
+    if (mjs_asActuator(e)->biasprm[2] > 0) {
+      values.insert({"actuator_biasprm", mjNBIAS * mjs_getId(e) + 2});
+    }
+  }
+  for (mjsElement* e = mjs_firstElement(spec, mjOBJ_JOINT); e;
+       e = mjs_nextElement(spec, e)) {
+    const double* springdamper = mjs_asJoint(e)->springdamper;
+    if (springdamper[0] > 0 && springdamper[1] > 0) {
+      int id = mjs_getId(e);
+      int type = m->jnt_type[id];
+      int ndof = type == mjJNT_FREE ? 6 : (type == mjJNT_BALL ? 3 : 1);
+      values.insert({"jnt_stiffness", id});
+      for (int k = 0; k < ndof; k++) {
+        values.insert({"dof_damping", m->jnt_dofadr[id] + k});
+      }
+    }
+  }
+  for (mjsElement* e = mjs_firstElement(spec, mjOBJ_TENDON); e;
+       e = mjs_nextElement(spec, e)) {
+    const double* springlength = mjs_asTendon(e)->springlength;
+    if (springlength[0] == -1 && springlength[1] == -1) {
+      values.insert({"tendon_lengthspring", 2 * mjs_getId(e)});
+      values.insert({"tendon_lengthspring", 2 * mjs_getId(e) + 1});
+    }
+  }
+  for (mjsElement* e = mjs_firstElement(spec, mjOBJ_EQUALITY); e;
+       e = mjs_nextElement(spec, e)) {
+    const mjsEquality* eq = mjs_asEquality(e);
+    if (eq->type == mjEQ_WELD && eq->objtype == mjOBJ_BODY && !eq->data[6] &&
+        !eq->data[7] && !eq->data[8] && !eq->data[9]) {
+      for (int k = 3; k < 10; k++) {
+        values.insert({"eq_data", mjNEQDATA * mjs_getId(e) + k});
+      }
+    }
+  }
+  return values;
+}
+
+// An edit of a compiled model, of the kind made to randomize its parameters.
+struct ModelEdit {
+  const char* name;
+  bool geometric;  // whether it can change the inertia inferred from geoms
+  void (*apply)(mjModel* m);
+  const char* recompiled = "";  // prefix of fields which only compilation sets
+};
+
+// geom types whose size is given in the spec
+bool IsPrimitive(int type) {
+  return type == mjGEOM_PLANE || type == mjGEOM_SPHERE ||
+         type == mjGEOM_CAPSULE || type == mjGEOM_ELLIPSOID ||
+         type == mjGEOM_CYLINDER || type == mjGEOM_BOX;
+}
+
+const ModelEdit kModelEdits[] = {
+    {"mass", false,
+     [](mjModel* m) {
+       for (int i = 1; i < m->nbody; i++) {
+         m->body_mass[i] *= 1.5;
+         for (int k = 0; k < 3; k++) m->body_inertia[3 * i + k] *= 1.5;
+       }
+     }},
+    {"com", false,
+     [](mjModel* m) {
+       for (int i = 1; i < m->nbody; i++) {
+         if (m->body_simple[i]) continue;
+         m->body_ipos[3 * i + 0] += 0.01;
+         m->body_ipos[3 * i + 1] -= 0.02;
+         m->body_ipos[3 * i + 2] += 0.015;
+       }
+     }},
+    {"armature", false,
+     [](mjModel* m) {
+       for (int i = 0; i < m->nv; i++) m->dof_armature[i] += 0.05;
+     }},
+    {"qpos0", false,
+     [](mjModel* m) {
+       for (int i = 0; i < m->njnt; i++) {
+         if (m->jnt_type[i] == mjJNT_HINGE || m->jnt_type[i] == mjJNT_SLIDE) {
+           m->qpos0[m->jnt_qposadr[i]] += 0.05;
+         }
+       }
+     },
+     // compilation completes keyframes with qpos0
+     "key_qpos"},
+    {"qpos_spring", false,
+     [](mjModel* m) {
+       for (int i = 0; i < m->njnt; i++) {
+         if (m->jnt_type[i] == mjJNT_HINGE || m->jnt_type[i] == mjJNT_SLIDE) {
+           m->qpos_spring[m->jnt_qposadr[i]] += 0.05;
+         }
+       }
+     }},
+    {"kp", false,
+     [](mjModel* m) {
+       for (int i = 0; i < m->nactuator; i++) {
+         mjtNum* gainprm = m->actuator_gainprm + mjNGAIN * i;
+         mjtNum* biasprm = m->actuator_biasprm + mjNBIAS * i;
+         if (gainprm[0] != 0 && gainprm[0] == -biasprm[1]) {
+           gainprm[0] *= 2;
+           biasprm[1] *= 2;
+         }
+       }
+     }},
+    {"tendon_spring", false,
+     [](mjModel* m) {
+       for (int i = 0; i < m->ntendon; i++) {
+         m->tendon_stiffness[i] = 0;
+         m->tendon_damping[i] = 0;
+       }
+     }},
+    {"margin", false,
+     [](mjModel* m) {
+       for (int i = 0; i < m->ngeom; i++) m->geom_margin[i] += 0.01;
+     }},
+    {"camlight", false,
+     [](mjModel* m) {
+       for (int i = 0; i < m->ncam; i++) m->cam_pos[3 * i + 2] += 0.1;
+       for (int i = 0; i < m->nlight; i++) m->light_pos[3 * i + 2] += 0.1;
+     }},
+    {"geom_size", true,
+     [](mjModel* m) {
+       for (int i = 0; i < m->ngeom; i++) {
+         if (!IsPrimitive(m->geom_type[i])) continue;
+         for (int k = 0; k < 3; k++) m->geom_size[3 * i + k] *= 1.25;
+       }
+     }},
+    {"geom_pos", true,
+     [](mjModel* m) {
+       for (int i = 0; i < m->ngeom; i++) {
+         m->geom_pos[3 * i + 0] += 0.01;
+         m->geom_pos[3 * i + 1] += 0.02;
+         m->geom_pos[3 * i + 2] -= 0.01;
+       }
+     }},
+};
 
 class RecompileCompareTest : public MujocoTest,
                              public ::testing::WithParamInterface<std::string> {
@@ -281,6 +532,103 @@ TEST_P(RecompileCompareTest, SavedAsWritten) {
 
     mj_deleteModel(m_saved);
     mj_deleteSpec(r);
+  }
+
+  mj_deleteModel(m);
+  mj_deleteSpec(s);
+}
+
+// mj_setConst leaves a compiled model as it is.
+TEST_P(RecompileCompareTest, SetConstIdempotent) {
+  std::string xml = GetParam();
+  std::array<char, 1000> err;
+  mjSpec* s = mj_parseXML(xml.c_str(), 0, err.data(), err.size());
+  if (!s) {
+    GTEST_SKIP() << "Failed to load " << xml << ": " << err.data();
+  }
+  mjModel* m = mj_compile(s, nullptr);
+  if (!m) {
+    std::string error_message = mjs_getError(s);
+    mj_deleteSpec(s);
+    GTEST_SKIP() << "Failed to compile " << xml << ": " << error_message;
+  }
+
+  mjModel* m_set = mj_copyModel(nullptr, m);
+  mjData* d = mj_makeData(m_set);
+  mj_setConst(m_set, d);
+  EXPECT_THAT(ModelDifferences(m, m_set, 0), IsEmpty()) << xml;
+
+  mj_deleteData(d);
+  mj_deleteModel(m_set);
+  mj_deleteModel(m);
+  mj_deleteSpec(s);
+}
+
+// A model which is edited and passed to mj_setConst is the model which the
+// spec compiles to once the edit is copied back to it, apart from what
+// compilation derives once: the values which follow from the conventions of
+// the spec, the statistics, and the actuator length ranges, which
+// mj_setLengthRange computes.
+TEST_P(RecompileCompareTest, SetConstMatchesRecompile) {
+  std::string xml = GetParam();
+  std::array<char, 1000> err;
+  mjSpec* s = mj_parseXML(xml.c_str(), 0, err.data(), err.size());
+  if (!s) {
+    GTEST_SKIP() << "Failed to load " << xml << ": " << err.data();
+  }
+
+  // inertias inferred from geoms are adopted, so that geometric edits leave
+  // them as they are
+  bool adopted = true;
+  for (mjsElement* e = mjs_firstElement(s, mjOBJ_BODY); e;
+       e = mjs_nextElement(s, e)) {
+    mjsBody* body = mjs_asBody(e);
+    if (mjs_getId(e) != 0 && mjs_adoptInertial(body, nullptr)) adopted = false;
+  }
+
+  mjModel* m = mj_compile(s, nullptr);
+  if (!m) {
+    std::string error_message = mjs_getError(s);
+    mj_deleteSpec(s);
+    GTEST_SKIP() << "Failed to compile " << xml << ": " << error_message;
+  }
+
+  ModelValues compiled = CompiledValues(s, m);
+  for (const ModelEdit& edit : kModelEdits) {
+    if (edit.geometric && !adopted) continue;
+
+    // the edit, copied back to a copy of the spec and compiled; an edit which
+    // the spec cannot express, or which does not compile, is skipped
+    mjModel* m_edit = mj_copyModel(nullptr, m);
+    edit.apply(m_edit);
+    mjSpec* s_edit = mj_copySpec(s);
+    mjModel* m_recompiled = nullptr;
+    if (mj_copyBack(s_edit, m_edit)) {
+      m_recompiled = mj_compile(s_edit, nullptr);
+    }
+
+    // the same edit, passed to mj_setConst; bounding volume hierarchies whose
+    // structure compilation changes are refit by mj_setConst
+    if (m_recompiled) {
+      mjData* d = mj_makeData(m_edit);
+      mj_setConst(m_edit, d);
+      std::vector<std::string> ignored = {"actuator_lengthrange", "stat."};
+      if (*edit.recompiled) ignored.push_back(edit.recompiled);
+      if (std::memcmp(m_edit->bvh_nodeid, m_recompiled->bvh_nodeid,
+                      sizeof(int) * m_edit->nbvh) ||
+          std::memcmp(m_edit->bvh_child, m_recompiled->bvh_child,
+                      sizeof(int) * 2 * m_edit->nbvh)) {
+        ignored.push_back("bvh_");
+      }
+      EXPECT_THAT(ModelDifferences(m_edit, m_recompiled, MjTol(1e-12, 1e-6),
+                                   ignored, compiled),
+                  IsEmpty())
+          << xml << "\nedit: " << edit.name;
+      mj_deleteData(d);
+      mj_deleteModel(m_recompiled);
+    }
+    mj_deleteSpec(s_edit);
+    mj_deleteModel(m_edit);
   }
 
   mj_deleteModel(m);
