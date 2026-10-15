@@ -1152,7 +1152,7 @@ static void set0(mjModel* m, mjData* d) {
   makeFlexSparse(m, d);
 
   int nv = m->nv;
-  mjtNum A[36] = {0}, pos[3];
+  mjtNum A[36] = {0}, pos[3], quat[4];
   mj_markStack(d);
   mjtNum* jac = mjSTACKALLOC(d, 6*nv, mjtNum);
   mjtNum* tmp = mjSTACKALLOC(d, 6*nv, mjtNum);
@@ -1368,19 +1368,37 @@ static void set0(mjModel* m, mjData* d) {
     mju_zero(m->actuator_acc0, m->nout);
   }
 
-  // anchor of connect constraints between bodies in the second body
+  // equality constraints between bodies: the anchor of connects in the second body, and the
+  // relative pose of welds which are marked in data[11] for it to be computed
   for (int i=0; i < m->neq; i++) {
-    if (m->eq_type[i] != mjEQ_CONNECT || m->eq_objtype[i] != mjOBJ_BODY) {
+    if (m->eq_objtype[i] != mjOBJ_BODY) {
       continue;
     }
-
-    // pos = anchor position in global frame
-    mj_local2Global(d, pos, 0, m->eq_data+mjNEQDATA*i, 0, m->eq_obj1id[i], 0);
-
-    // data[3-5] = anchor position in body2 local frame
+    int id1 = m->eq_obj1id[i];
     int id2 = m->eq_obj2id[i];
-    mju_subFrom3(pos, d->xpos+3*id2);
-    mju_mulMatTVec3(m->eq_data+mjNEQDATA*i+3, d->xmat+9*id2, pos);
+    mjtNum* data = m->eq_data + mjNEQDATA*i;
+
+    // connect: anchor position is in body1 local frame
+    if (m->eq_type[i] == mjEQ_CONNECT) {
+      mj_local2Global(d, pos, 0, data, 0, id1, 0);
+
+      // data[3-5] = anchor position in body2 local frame
+      mju_subFrom3(pos, d->xpos+3*id2);
+      mju_mulMatTVec3(data+3, d->xmat+9*id2, pos);
+    }
+
+    // weld: anchor position is in body2 local frame
+    else if (m->eq_type[i] == mjEQ_WELD && data[11]) {
+      mj_local2Global(d, pos, 0, data, 0, id2, 0);
+
+      // data[3-5] = anchor position in body1 local frame
+      mju_subFrom3(pos, d->xpos+3*id1);
+      mju_mulMatTVec3(data+3, d->xmat+9*id1, pos);
+
+      // data[6-9] = neg(xquat1)*xquat2 = "xquat2-xquat1" in body1 local frame
+      mju_negQuat(quat, d->xquat+4*id1);
+      mju_mulQuat(data+6, quat, d->xquat+4*id2);
+    }
   }
 
   // camera compos0, pos0, mat0
@@ -1887,61 +1905,6 @@ static void setDampRatio(mjModel* m, mjData* d) {
 }
 
 
-// complete the data of equality constraints: zero the unused data of connects between sites, and
-// compute the relative pose of welds between bodies which have none, given as a zero quaternion,
-// or normalize the one they have; assume computations already executed in qpos0
-static void setEqualityData(mjModel* m, mjData* d) {
-  mjtNum pos[3], quat[4];
-  for (int i=0; i < m->neq; i++) {
-    int id1 = m->eq_obj1id[i];
-    int id2 = m->eq_obj2id[i];
-    mjtNum* data = m->eq_data + mjNEQDATA*i;
-
-    // connect constraint: mj_setConst computes the anchor in the second body
-    if (m->eq_type[i] == mjEQ_CONNECT) {
-      switch ((mjtObj) m->eq_objtype[i]) {
-        case mjOBJ_BODY:
-          break;
-        case mjOBJ_SITE:
-          // site-based connect, eq_data is unused
-          mju_zero(data, mjNEQDATA);
-          break;
-        default:
-          mjERROR("invalid objtype in connect constraint %d", i);
-      }
-    }
-
-    // weld constraint
-    else if (m->eq_type[i] == mjEQ_WELD) {
-      switch ((mjtObj) m->eq_objtype[i]) {
-        case mjOBJ_BODY:
-          // relative pose given: normalize the quaternion
-          if (!mju_isZero(data+6, 4)) {
-            mju_normalize4(data+6);
-            break;
-          }
-
-          // anchor position is in body2 local frame
-          mj_local2Global(d, pos, 0, data, 0, id2, 0);
-
-          // data[3-5] = anchor position in body1 local frame
-          mju_subFrom3(pos, d->xpos+3*id1);
-          mju_mulMatTVec3(data+3, d->xmat+9*id1, pos);
-
-          // data[6-9] = neg(xquat1)*xquat2 = "xquat2-xquat1" in body1 local frame
-          mju_negQuat(quat, d->xquat+4*id1);
-          mju_mulQuat(data+6, quat, d->xquat+4*id2);
-          break;
-        case mjOBJ_SITE:
-          break;
-        default:
-          mjERROR("invalid objtype in weld constraint %d", i);
-      }
-    }
-  }
-}
-
-
 // set the spring length range of tendons which have none, given as (-1, -1), to their length;
 // assume computations already executed in qpos_spring
 static void setSpringLength(mjModel* m, mjData* d) {
@@ -1970,7 +1933,6 @@ void mj_setCompiledConst(mjModel* m, mjData* d) {
 
   // set quantities that depend on qpos0
   setDampRatio(m, d);
-  setEqualityData(m, d);
   setStat(m, d);
 
   // run computations in qpos_spring

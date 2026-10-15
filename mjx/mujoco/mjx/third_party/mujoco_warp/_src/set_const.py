@@ -87,7 +87,7 @@ def _compute_eq_data0(
   xquat_in: wp.array2d[wp.quat],
   xmat_in: wp.array2d[wp.mat33],
   # Out:
-  eq_data_out: wp.array2d[types.vec11],
+  eq_data_out: wp.array2d[types.vec12],
 ):
   """Compute eq_data for connect/weld constraints.
 
@@ -117,39 +117,30 @@ def _compute_eq_data0(
       eq_data_out[eq_data_id, eqid] = data
     elif objtype == int(types.ObjType.SITE.value):
       # site-based connect, eq_data is unused
-      eq_data_out[eq_data_id, eqid] = types.vec11(0.0)
+      eq_data_out[eq_data_id, eqid] = types.vec12(0.0)
   elif eqtype == int(types.EqType.WELD.value):
-    if objtype == int(types.ObjType.BODY.value):
-      quat = wp.quat(data[6], data[7], data[8], data[9])
-      if wp.length_sq(quat) > 0.0:
-        # user has set quaternion data: normalize it and keep the remaining data
-        quat = wp.normalize(quat)
-        data[6] = quat[0]
-        data[7] = quat[1]
-        data[8] = quat[2]
-        data[9] = quat[3]
-        eq_data_out[eq_data_id, eqid] = data
-      else:
-        obj1id = eq_obj1id[eqid]
-        obj2id = eq_obj2id[eqid]
+    # data[11] marks a relative pose which is computed
+    if objtype == int(types.ObjType.BODY.value) and data[11] != 0.0:
+      obj1id = eq_obj1id[eqid]
+      obj2id = eq_obj2id[eqid]
 
-        # data[0:3] = anchor in body2 local frame; map to global frame
-        anchor2 = wp.vec3(data[0], data[1], data[2])
-        pos = xpos_in[worldid, obj2id] + xmat_in[worldid, obj2id] @ anchor2
+      # data[0:3] = anchor in body2 local frame; map to global frame
+      anchor2 = wp.vec3(data[0], data[1], data[2])
+      pos = xpos_in[worldid, obj2id] + xmat_in[worldid, obj2id] @ anchor2
 
-        # data[3:6] = anchor position in body1 local frame
-        anchor1 = wp.transpose(xmat_in[worldid, obj1id]) @ (pos - xpos_in[worldid, obj1id])
-        data[3] = anchor1[0]
-        data[4] = anchor1[1]
-        data[5] = anchor1[2]
+      # data[3:6] = anchor position in body1 local frame
+      anchor1 = wp.transpose(xmat_in[worldid, obj1id]) @ (pos - xpos_in[worldid, obj1id])
+      data[3] = anchor1[0]
+      data[4] = anchor1[1]
+      data[5] = anchor1[2]
 
-        # data[6:10] = neg(xquat1) * xquat2 = "xquat2 - xquat1" in body1 local frame
-        relquat = mjmath.mul_quat(mjmath.quat_inv(xquat_in[worldid, obj1id]), xquat_in[worldid, obj2id])
-        data[6] = relquat[0]
-        data[7] = relquat[1]
-        data[8] = relquat[2]
-        data[9] = relquat[3]
-        eq_data_out[eq_data_id, eqid] = data
+      # data[6:10] = neg(xquat1) * xquat2 = "xquat2 - xquat1" in body1 local frame
+      relquat = mjmath.mul_quat(mjmath.quat_inv(xquat_in[worldid, obj1id]), xquat_in[worldid, obj2id])
+      data[6] = relquat[0]
+      data[7] = relquat[1]
+      data[8] = relquat[2]
+      data[9] = relquat[3]
+      eq_data_out[eq_data_id, eqid] = data
 
 
 @wp.kernel

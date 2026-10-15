@@ -16,10 +16,14 @@ Engine
   longer affects simulation, is deprecated.
 - :ref:`mj_setConst` no longer computes the values which the compiler derives once from the conventions of the spec:
   the damping of position-like actuators given a damping ratio as a positive ``biasprm[2]``, the spring length of
-  tendons given ``(-1, -1)``, the relative pose of welds between bodies given a zero quaternion, and the model
-  statistics, which it recomputed, dropping those given by the :ref:`statistic<statistic>` element. The compiler
-  computes them as before. Code which writes these conventions into a compiled model and calls :ref:`mj_setConst` to
-  resolve them should set the values directly.
+  tendons given ``(-1, -1)``, and the model statistics, which it recomputed, dropping those given by the
+  :ref:`statistic<statistic>` element. The compiler computes them as before. Code which writes these conventions into a
+  compiled model and calls :ref:`mj_setConst` to resolve them should set the values directly.
+- The relative pose of a :ref:`weld<equality-weld>` between bodies which has none in the spec now follows the model:
+  the compiler marks the weld with a nonzero ``eq_data[11]``, and :ref:`mj_setConst` computes the pose of marked welds
+  from their anchor in ``qpos0``, as it computes the anchor of a connect in its second body. It used to compute the
+  pose of welds whose quaternion was zero in the model, which compilation filled in. ``mjNEQDATA`` increased from 11
+  to 12.
 - ``MJMODEL_POINTERS`` in ``mjxmacro.h`` has a fifth column, saying how :ref:`mj_setConst` uses each field:
   ``mjSC_IN`` if it reads the field, ``mjSC_OUT`` if it writes it, ``mjSC_INOUT`` if both, and 0 if neither.
   ``MJMODEL_SETCONST_SCALARS`` lists the scalars it writes. Code which expands ``MJMODEL_POINTERS`` needs a fifth
