@@ -453,6 +453,19 @@ mjTHREADLOCAL int mj_nesterov_momentum = 1;
 
 //---------------------------- PGS solver ----------------------------------------------------------
 
+// inverse trace of the inertia matrix, over all dofs (island < 0) or over those of an island
+static mjtNum inertiaScale(const mjModel* m, const mjData* d, int island) {
+  int nv = island < 0 ? m->nv : d->island_nv[island];
+  const int* dofs = island < 0 ? NULL : d->map_idof2dof + d->island_idofadr[island];
+  mjtNum trace = 0;
+  for (int i=0; i < nv; i++) {
+    int dof = dofs ? dofs[i] : i;
+    trace += d->M[m->M_rowadr[dof] + m->M_rownnz[dof] - 1];
+  }
+  return 1 / mju_max(mjMINVAL, trace);
+}
+
+
 // core PGS solver: iterates over constraints specified by efclist
 //   island: island index for stats (use -1 for monolithic, mapped to 0)
 //   ne, nf, nefc: constraint type counts
@@ -478,7 +491,7 @@ static void solPGS(const mjModel* m, mjData* d, int island,
   }
 
   int island_stat = mjMAX(0, island);  // island index for diagnostic stats
-  mjtNum scale = 1 / (m->stat.meaninertia * mjMAX(1, m->nv));
+  mjtNum scale = inertiaScale(m, d, island);
 
   // precompute inverse diagonal of AR
   ARdiaginv(m, d, ARinv, nefc, efclist, 0);
@@ -781,7 +794,7 @@ static void solNoSlip(const mjModel* m, mjData* d, int island,
   int* oldstate = mjSTACKALLOC(d, nefc, int);
 
   int island_stat = mjMAX(0, island);
-  mjtNum scale = 1 / (m->stat.meaninertia * mjMAX(1, m->nv));
+  mjtNum scale = inertiaScale(m, d, island);
 
   // precompute inverse diagonal of A
   ARdiaginv(m, d, ARinv, nefc, efclist, 1);
@@ -2890,18 +2903,12 @@ static void mj_solPrimal(const mjModel* m, mjData* d, int island, int maxiter, i
   PrimalUpdateConstraint(&ctx, flg_Newton & (m->opt.cone == mjCONE_ELLIPTIC));
   PrimalUpdateGrad(&ctx);
 
-  // compute and save scaling factor
-  mjtNum scale;
-  if (island < 0) {
-    scale = 1 / (m->stat.meaninertia * mjMAX(1, m->nv));
-  } else {
-    mjtNum island_inertia = 0;
-    for (int i=0; i < nv; i++) {
-      int diag_i = ctx.M_rowadr[i] + ctx.M_rownnz[i] - 1;
-      island_inertia += ctx.M[diag_i];
-    }
-    scale = 1 / island_inertia;
+  // compute and save scaling factor: inverse trace of the inertia matrix
+  mjtNum trace = 0;
+  for (int i=0; i < nv; i++) {
+    trace += ctx.M[ctx.M_rowadr[i] + ctx.M_rownnz[i] - 1];
   }
+  mjtNum scale = 1 / mju_max(mjMINVAL, trace);
   ctx.scale = scale;
 
   // IPC: fold the contact class and the efc rows into the solver-owned copy of the metric

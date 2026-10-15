@@ -6366,6 +6366,13 @@ void mjCModel::TryCompile(mjModel*& m, mjData*& d, const mjVFS* vfs) {
   m->nJmom = nJmom = CountNJmom(m);
 
 
+  // mean inertia (deprecated)
+  if (mjuu_defined(stat.meaninertia)) {
+    AddWarning(
+        "statistic attribute 'meaninertia' is deprecated and will be removed in a future release: "
+        "it does not affect simulation");
+  }
+
   // scale mass (deprecated)
   if (compiler.settotalmass > 0) {
     AddWarning(
