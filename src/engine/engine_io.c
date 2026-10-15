@@ -84,7 +84,7 @@ static int getnsize(void) {
 static int getnptr(void) {
   int cnt = 0;
 
-#define X(type, name, nr, nc) cnt++;
+#define X(type, name, nr, nc, sc) cnt++;
   MJMODEL_POINTERS
 #undef X
 
@@ -149,7 +149,7 @@ static void mj_setPtrModel(mjModel* m) {
   MJMODEL_POINTERS_PREAMBLE(m);
 
   // assign pointers with padding
-#define X(type, name, nr, nc)                             \
+#define X(type, name, nr, nc, sc)                         \
   m->name = (type*)(ptr + SKIP((intptr_t)ptr));           \
   ASAN_POISON_MEMORY_REGION(ptr, PTRDIFF(m->name, ptr));  \
   ptr += SKIP((intptr_t)ptr) + sizeof(type)*(m->nr)*(nc);
@@ -398,7 +398,7 @@ void mj_makeModel(mjModel** dest,
 
   // compute buffer size, including padding to align the first array at any buffer address
   m->nbuffer = BUFFER_ALIGN - 1;
-#define X(type, name, nr, nc)                                                \
+#define X(type, name, nr, nc, sc)                                            \
   if (!safeAddToBufferSize(&offset, &m->nbuffer, sizeof(type), m->nr, nc)) { \
     if (allocate) mju_free(m);                                               \
     mju_warning("Invalid model: " #name " too large.");                      \
@@ -476,7 +476,7 @@ mjModel* mj_copyModel(mjModel* dest, const mjModel* src) {
   // copy buffer contents
   {
     MJMODEL_POINTERS_PREAMBLE(src)
-    #define X(type, name, nr, nc)  \
+    #define X(type, name, nr, nc, sc)  \
       memcpy((char*)dest->name, (const char*)src->name, sizeof(type)*(src->nr)*nc);
     MJMODEL_POINTERS
     #undef X
@@ -501,12 +501,12 @@ void mjv_copyModel(mjModel* dest, const mjModel* src) {
 
   // redefine XNV to do nothing
   #undef XNV
-  #define XNV(type, name, nr, nc)
+  #define XNV(type, name, nr, nc, sc)
 
   // copy buffer contents, skipping arrays marked XNV
   {
     MJMODEL_POINTERS_PREAMBLE(src)
-    #define X(type, name, nr, nc)    \
+    #define X(type, name, nr, nc, sc)    \
       memcpy((char*)dest->name, (const char*)src->name, sizeof(type)*(src->nr)*nc);
     MJMODEL_POINTERS
     #undef X
@@ -555,7 +555,7 @@ void mj_saveModel(const mjModel* m, const char* filename, void* buffer, mjtSize 
   bufwrite(&m->flg_adhesion, sizeof(mjtBool), buffer_sz, buffer, &ptrbuf);
   {
     MJMODEL_POINTERS_PREAMBLE(m)
-    #define X(type, name, nr, nc)  \
+    #define X(type, name, nr, nc, sc)  \
       bufwrite((void*)m->name, sizeof(type)*(m->nr)*(nc), buffer_sz, buffer, &ptrbuf);
     MJMODEL_POINTERS
     #undef X
@@ -666,7 +666,7 @@ mjModel* mj_loadModelBuffer(const void* buffer, mjtSize buffer_sz) {
   bufread(&m->flg_adhesion, sizeof(mjtBool), buffer_sz, buffer, &ptrbuf);
   {
     MJMODEL_POINTERS_PREAMBLE(m)
-    #define X(type, name, nr, nc)                                           \
+    #define X(type, name, nr, nc, sc)                                       \
       if (buffer_sz - ptrbuf < sizeof(type) * (m->nr) * (nc)) {             \
         mju_warning(                                                        \
             "Truncated model file - ran out of data while reading " #name); \
@@ -717,7 +717,7 @@ mjtSize mj_sizeModel(const mjModel* m) {
     + sizeof(mjtBool)*3);
 
   MJMODEL_POINTERS_PREAMBLE(m)
-#define X(type, name, nr, nc)         \
+#define X(type, name, nr, nc, sc)     \
   size += sizeof(type)*(m->nr)*(nc);
   MJMODEL_POINTERS
 #undef X

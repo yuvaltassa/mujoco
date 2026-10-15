@@ -571,7 +571,7 @@ class MjWrapper<raw::MjModel> : public WrapperBase<raw::MjModel> {
   MjVisualWrapper vis;
   MjStatisticWrapper stat;
 
-#define X(dtype, var, dim0, dim1) py_array_or_tuple_t<dtype> var;
+#define X(dtype, var, dim0, dim1, sc) py_array_or_tuple_t<dtype> var;
   MJMODEL_POINTERS
 #undef X
   // TODO(nimrod): Exclude text_data and names from the MJMODEL_POINTERS macro.

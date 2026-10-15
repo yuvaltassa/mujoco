@@ -443,13 +443,13 @@ This is useful for example when the MJB is not available as a file on disk.)"));
 #define X(var) fields.push_back(#var);
     MJMODEL_SIZES
 #undef X
-#define X(type, name, nr, nc) fields.push_back(#name);
+#define X(type, name, nr, nc, sc) fields.push_back(#name);
     MJMODEL_POINTERS
 #undef X
     return py::tuple(py::cast(fields));
   });
 
-#define X(dtype, var, dim0, dim1)                        \
+#define X(dtype, var, dim0, dim1, sc)                    \
   if constexpr (std::string_view(#var) != "text_data" && \
                 std::string_view(#var) != "names" &&     \
                 std::string_view(#var) != "paths") {     \

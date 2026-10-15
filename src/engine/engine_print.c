@@ -732,7 +732,7 @@ void mj_printFormattedModel(const mjModel* m, const char* filename, const char* 
 
   const mjtSize* object_class;
 
-#define X(type, name, num, sz)                                              \
+#define X(type, name, num, sz, sc)                                          \
   if (&m->num == object_class && sz > 0) {                                  \
     const char* format = _Generic(*m->name,                                 \
                                   double:  float_format,                    \

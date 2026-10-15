@@ -15,14 +15,42 @@
 // Tests for engine/engine_setconst.c.
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <filesystem>  // NOLINT
+#include <map>
+#include <set>
 #include <string>
+#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <mujoco/mjmodel.h>
+#include <mujoco/mjxmacro.h>
 #include <mujoco/mujoco.h>
 #include "test/fixture.h"
+
+// accesses are tracked with page protection where the kind of a faulting access
+// can be read from its context, outside sanitizers, which handle memory faults
+// themselves
+#if defined(__has_feature)
+  #if __has_feature(address_sanitizer) || __has_feature(memory_sanitizer) || \
+      __has_feature(thread_sanitizer)
+    #define MJ_SANITIZED
+  #endif
+#endif
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+  #define MJ_SANITIZED
+#endif
+#if ((defined(__APPLE__) && (defined(__aarch64__) || defined(__x86_64__))) || \
+     (defined(__linux__) && defined(__x86_64__))) &&                          \
+    !defined(MJ_SANITIZED)
+  #define MJ_TRACK_ACCESS
+  #include <signal.h>
+  #include <sys/mman.h>
+  #include <sys/ucontext.h>
+  #include <unistd.h>
+#endif
 
 namespace mujoco {
 namespace {
@@ -35,6 +63,207 @@ using ::testing::IsNull;
 using ::testing::NotNull;
 
 using SetConstTest = MujocoTest;
+
+#ifdef MJ_TRACK_ACCESS
+// an mjModel array copied into pages of its own, and how mj_setConst first
+// accessed it
+struct TrackedArray {
+  const char* name;
+  char* begin;
+  size_t len;
+  bool read;     // read before it was written
+  bool written;  // written
+};
+
+std::vector<TrackedArray>* tracked =
+    nullptr;  // arrays whose pages are protected
+
+// whether the faulting access was a write
+bool IsWrite(void* context) {
+  ucontext_t* uc = static_cast<ucontext_t*>(context);
+  #if defined(__APPLE__) && defined(__aarch64__)
+  return uc->uc_mcontext->__es.__esr &
+         (1u << 6);  // WnR bit of the data abort syndrome
+  #elif defined(__APPLE__)
+  return uc->uc_mcontext->__es.__err & 2;  // W bit of the page fault error code
+  #else
+  return uc->uc_mcontext.gregs[REG_ERR] & 2;
+  #endif
+}
+
+// record the first read or write of a tracked array and let it proceed: a read
+// leaves its pages readable, so that a later write is recorded too; crash on
+// any other fault
+void OnAccess(int sig, siginfo_t* info, void* context) {
+  char* address = static_cast<char*>(info->si_addr);
+  for (TrackedArray& a : *tracked) {
+    if (address >= a.begin && address < a.begin + a.len) {
+      if (IsWrite(context)) {
+        a.written = true;
+        mprotect(a.begin, a.len, PROT_READ | PROT_WRITE);
+      } else {
+        a.read = true;
+        mprotect(a.begin, a.len, PROT_READ);
+      }
+      return;
+    }
+  }
+  signal(sig, SIG_DFL);
+}
+
+// how mj_setConst accesses each array of a copy of m: bit 1 if it reads the
+// array before writing it, bit 2 if it writes it
+std::map<std::string, int> SetConstAccess(const mjModel* m, mjData* d) {
+  size_t page = sysconf(_SC_PAGESIZE);
+  mjModel copy = *m;
+  std::vector<TrackedArray> arrays;
+  #if defined(__clang__) || defined(__GNUC__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wunused-variable"
+  #endif
+  MJMODEL_POINTERS_PREAMBLE(m)
+  #define X(type, name, nr, nc, sc)                                            \
+    if (size_t bytes = sizeof(type) * m->nr * (nc)) {                          \
+      size_t len = (bytes + page - 1) / page * page;                           \
+      void* pages = mmap(nullptr, len, PROT_READ | PROT_WRITE,                 \
+                         MAP_PRIVATE | MAP_ANON, -1, 0);                       \
+      std::memcpy(pages, m->name, bytes);                                      \
+      copy.name = static_cast<type*>(pages);                                   \
+      arrays.push_back({#name, static_cast<char*>(pages), len, false, false}); \
+    }
+  MJMODEL_POINTERS
+  #undef X
+  #if defined(__clang__) || defined(__GNUC__)
+    #pragma GCC diagnostic pop
+  #endif
+
+  struct sigaction action = {}, segv, bus;
+  action.sa_sigaction = OnAccess;
+  action.sa_flags = SA_SIGINFO;
+  tracked = &arrays;
+  sigaction(SIGSEGV, &action, &segv);
+  sigaction(SIGBUS, &action, &bus);
+  for (TrackedArray& a : arrays) mprotect(a.begin, a.len, PROT_NONE);
+  mj_setConst(&copy, d);
+  for (TrackedArray& a : arrays)
+    mprotect(a.begin, a.len, PROT_READ | PROT_WRITE);
+  sigaction(SIGSEGV, &segv, nullptr);
+  sigaction(SIGBUS, &bus, nullptr);
+  tracked = nullptr;
+
+  std::map<std::string, int> access;
+  for (TrackedArray& a : arrays) {
+    access[a.name] = (a.read ? 1 : 0) | (a.written ? 2 : 0);
+    munmap(a.begin, a.len);
+  }
+  return access;
+}
+
+// the models of the repository
+std::vector<std::string> CorpusModels() {
+  std::vector<std::string> models;
+  for (const auto& dir : {GetTestDataFilePath("."), GetModelPath(".")}) {
+    for (const auto& p : std::filesystem::recursive_directory_iterator(dir)) {
+      std::string xml = p.path().generic_string();
+      if (p.path().extension() != ".xml" ||
+          // intentional failures, and models too slow to load repeatedly
+          xml.find("malformed_") != std::string::npos ||
+          xml.find("_fail") != std::string::npos ||
+          xml.find("perf") != std::string::npos ||
+          xml.find("100_humanoids") != std::string::npos) {
+        continue;
+      }
+      models.push_back(xml);
+    }
+  }
+  return models;
+}
+
+// set the scalars mj_setConst writes to poison, and clear the pointers, so
+// that what remains of m is its other scalars
+void MaskScalars(mjModel* m, const mjModel* poison) {
+  #define X(name) m->name = poison->name;
+  MJMODEL_SETCONST_SCALARS
+  #undef X
+  #define X(type, name, nr, nc, sc) m->name = nullptr;
+  MJMODEL_POINTERS
+  #undef X
+  m->buffer = nullptr;
+}
+#endif
+
+// The setConst column of MJMODEL_POINTERS, and MJMODEL_SETCONST_SCALARS, are
+// what mj_setConst does: over the models of the repository, it reads the
+// arrays marked mjSC_IN before writing them, and writes those marked mjSC_OUT,
+// and no others; it writes the listed scalars, and no other scalar changes.
+// cam_mode, light_mode and flex_rigid are an exception: mj_setConst overwrites
+// them for its pass in qpos0, and restores them.
+TEST_F(SetConstTest, AccessMatchesTable) {
+#ifndef MJ_TRACK_ACCESS
+  GTEST_SKIP() << "accesses are tracked with page protection, on Linux x86-64 "
+                  "and macOS";
+#else
+  std::map<std::string, int> declared = {
+  #define X(type, name, nr, nc, sc) {#name, sc},
+      MJMODEL_POINTERS
+  #undef X
+  };
+  const std::map<std::string, int> transient = {{"cam_mode", mjSC_INOUT},
+                                                {"light_mode", mjSC_INOUT},
+                                                {"flex_rigid", mjSC_OUT}};
+  std::map<std::string, int> observed;
+  mjModel poison;
+  std::memset(&poison, 0xff, sizeof(mjModel));
+  int nmodel = 0;
+  for (const std::string& xml : CorpusModels()) {
+    char error[1024];
+    mjModel* m = mj_loadXML(xml.c_str(), nullptr, error, sizeof(error));
+    if (!m) continue;
+    nmodel++;
+    mjData* d = mj_makeData(m);
+    for (const auto& [name, access] : SetConstAccess(m, d)) {
+      observed[name] |= access;
+    }
+
+    // scalars, as compiled and with masses, sizes and gravity compensation
+    // changed
+    for (bool perturbed : {false, true}) {
+      if (perturbed) {
+        for (int i = 1; i < m->nbody; i++) {
+          m->body_mass[i] *= 2;
+          m->body_gravcomp[i] = 0.5 - m->body_gravcomp[i];
+        }
+        for (int i = 0; i < 3 * m->ngeom; i++) m->geom_size[i] *= 1.25;
+      }
+      mjModel* copy = mj_copyModel(nullptr, m);
+      mjModel before = *copy;
+  #define X(name) copy->name = poison.name;
+      MJMODEL_SETCONST_SCALARS
+  #undef X
+      mj_setConst(copy, d);
+  #define X(name) \
+    EXPECT_NE(copy->name, poison.name) << #name << " not written in " << xml;
+      MJMODEL_SETCONST_SCALARS
+  #undef X
+      mjModel after = *copy;
+      MaskScalars(&before, &poison);
+      MaskScalars(&after, &poison);
+      EXPECT_EQ(std::memcmp(&before, &after, sizeof(mjModel)), 0)
+          << "a scalar which is not listed changed in " << xml;
+      mj_deleteModel(copy);
+    }
+    mj_deleteData(d);
+    mj_deleteModel(m);
+  }
+  EXPECT_GT(nmodel, 300);
+
+  for (const auto& [name, mark] : declared) {
+    int access = observed[name];
+    if (transient.count(name)) access &= ~transient.at(name);
+    EXPECT_EQ(access, mark) << name;
+  }
+#endif
+}
 
 TEST_F(SetConstTest, AwakeActuatedJoint) {
   string xml = R"(

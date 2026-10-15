@@ -27,7 +27,7 @@
 // Define the mujoco X macros to add fields to the ImGui_DataTable.
 // We limit the fields to the ones with a matching element by comparing the
 // array size field (e.g. nbody) with the MATCH constexpr value.
-#define X(TYPE, NAME, NELEM, SIZE) \
+#define X(TYPE, NAME, NELEM, SIZE, ...) \
   if constexpr (#NELEM == MATCH) table.DataPtr(#NAME, ptr->NAME, index, SIZE);
 
 // Simple wrapper around MJMODEL_POINTERS that prepares values we need for the

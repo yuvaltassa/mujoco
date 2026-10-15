@@ -245,7 +245,7 @@ MjModelWrapper* MjModelWrapper::FromRawPointer(raw::MjModel* m) noexcept {
 
 #undef MJ_M
 #define MJ_M(x) ptr_->x
-#define X(dtype, var, dim0, dim1) \
+#define X(dtype, var, dim0, dim1, sc) \
   , var(InitPyArray(X_ARRAY_SHAPE(ptr_->dim0, dim1), ptr_->var, owner_))
 MjModelWrapper::MjWrapper(raw::MjModel* ptr)
     : WrapperBase(ptr, &MjModelCapsuleDestructor),

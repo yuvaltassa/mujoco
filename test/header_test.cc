@@ -321,7 +321,7 @@ TEST_F(HeaderTest, MjModelPointersOrdered) {
   mjModel m;
   std::vector<std::pair<const void*, const char*>> pointers;
 
-#define X(type, name, dim1, dim2) \
+#define X(type, name, dim1, dim2, sc) \
   pointers.push_back({static_cast<const void*>(&m.name), #name});
 #define XNV X
   MJMODEL_POINTERS

@@ -341,7 +341,7 @@ TEST_F(EngineIoTest, MisalignedUserAllocator) {
     // the buffers are misaligned, their arrays are 64-byte aligned
     ASSERT_EQ(reinterpret_cast<std::uintptr_t>(model->buffer) % 64, 16);
     ASSERT_EQ(reinterpret_cast<std::uintptr_t>(data->buffer) % 64, 16);
-#define X(type, name, nr, nc) \
+#define X(type, name, nr, nc, sc) \
   EXPECT_EQ(reinterpret_cast<std::uintptr_t>(model->name) % 64, 0) << #name;
     MJMODEL_POINTERS
 #undef X

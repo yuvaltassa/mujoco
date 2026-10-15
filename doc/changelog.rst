@@ -20,6 +20,10 @@ Engine
   statistics, which it recomputed, dropping those given by the :ref:`statistic<statistic>` element. The compiler
   computes them as before. Code which writes these conventions into a compiled model and calls :ref:`mj_setConst` to
   resolve them should set the values directly.
+- ``MJMODEL_POINTERS`` in ``mjxmacro.h`` has a fifth column, saying how :ref:`mj_setConst` uses each field:
+  ``mjSC_IN`` if it reads the field, ``mjSC_OUT`` if it writes it, ``mjSC_INOUT`` if both, and 0 if neither.
+  ``MJMODEL_SETCONST_SCALARS`` lists the scalars it writes. Code which expands ``MJMODEL_POINTERS`` needs a fifth
+  parameter in its ``X``.
 
 Python bindings
 ^^^^^^^^^^^^^^^

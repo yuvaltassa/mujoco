@@ -88,7 +88,7 @@ mjtNum CompareModel(const mjModel* m1, const mjModel* m2, std::string& field) {
   // those are sensitive to numerical differences when meshes are perfectly
   // symmetric.  Also skip flex fields derived from node local positions and
   // cell geometry that are not fully serialized to XML.
-#define X(type, name, nr, nc)                                             \
+#define X(type, name, nr, nc, sc)                                         \
   if (strncmp(#name, "bvh_", 4) && strncmp(#name, "flex_vert", 9) &&      \
       strncmp(#name, "mesh_poly", 9) && strcmp(#name, "flex_centered") && \
       strcmp(#name, "flex_size") && strcmp(#name, "flexedge_length0") &&  \

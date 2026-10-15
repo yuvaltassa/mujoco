@@ -71,7 +71,12 @@ mujoco_test(
 
 mujoco_test(engine_sensor_test)
 
-mujoco_test(engine_setconst_test)
+mujoco_test(
+  engine_setconst_test
+  PROPERTIES
+  ENVIRONMENT
+  "MUJOCO_PLUGIN_DIR=$<TARGET_FILE_DIR:elasticity>"
+)
 
 mujoco_test(engine_sleep_test)
 
