@@ -6519,8 +6519,10 @@ void mjCModel::TryCompile(mjModel*& m, mjData*& d, const mjVFS* vfs) {
   // normalize keyframe quaternions
   for (int i = 0; i < m->nkey; i++) { mj_normalizeQuat(m, m->key_qpos + i * m->nq); }
 
-  // set constant fields
+  // set constant fields, after aligning 2D flexes, then those which compilation derives once
+  mj_alignFlex(m);
   mj_setConst(m, d);
+  mj_setCompiledConst(m, d);
 
   // automatic spring-damper adjustment
   AutoSpringDamper(m);

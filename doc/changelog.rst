@@ -14,6 +14,12 @@ Engine
   by CG and Newton only without islands. Models solved without islands, or with PGS or noslip, can stop at slightly
   different iterations. The :ref:`statistic<statistic>` attribute :ref:`meaninertia<statistic-meaninertia>`, which no
   longer affects simulation, is deprecated.
+- :ref:`mj_setConst` no longer computes the values which the compiler derives once from the conventions of the spec:
+  the damping of position-like actuators given a damping ratio as a positive ``biasprm[2]``, the spring length of
+  tendons given ``(-1, -1)``, the relative pose of welds between bodies given a zero quaternion, and the model
+  statistics, which it recomputed, dropping those given by the :ref:`statistic<statistic>` element. The compiler
+  computes them as before. Code which writes these conventions into a compiled model and calls :ref:`mj_setConst` to
+  resolve them should set the values directly.
 
 Python bindings
 ^^^^^^^^^^^^^^^
