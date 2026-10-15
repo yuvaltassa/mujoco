@@ -7431,6 +7431,7 @@ void mjCModel::BackValues(const mjModel* m, bool tospec, bool write) {
     copy(pt->spec.damping + 1, pt->damping + 1, m->tendon_dampingpoly + mjNPOLY * i, mjNPOLY);
     copy(&pt->spec.armature, &pt->armature, m->tendon_armature + i);
     copy(&pt->spec.frictionloss, &pt->frictionloss, m->tendon_frictionloss + i);
+    copy(pt->spec.springlength, pt->springlength, m->tendon_lengthspring + 2 * i, 2);
     copyvector(pt->spec_userdata_, pt->userdata_, m->tendon_user + nuser_tendon * i, nuser_tendon);
   }
 
