@@ -2,6 +2,16 @@
 Changelog
 =========
 
+Upcoming version (not yet released)
+-----------------------------------
+
+General
+^^^^^^^
+- Added :ref:`mju_QP`, a dual active-set solver for dense convex quadratic programs with bounds and two-sided linear
+  constraints. Constraints can be soft: a soft constraint holds exactly up to a threshold on its multiplier and then
+  yields with a given compliance, so problems with soft constraints remain feasible. The solver can be warmstarted
+  from a previous active set.
+
 Version 4.0.1 (November 11, 2026)
 ---------------------------------
 
