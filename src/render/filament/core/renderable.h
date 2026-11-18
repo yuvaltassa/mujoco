@@ -95,11 +95,6 @@ class Renderable : public mjrfRenderable {
   // Returns the current transform of this renderable.
   const filament::math::mat4f& GetTransform() const;
 
-  // Returns true if every part of this renderable lies entirely behind the
-  // plane through `point` with the given unit `normal`.
-  bool IsBehindPlane(const filament::math::float3& point,
-                     const filament::math::float3& normal);
-
   // Returns true if this renderable is an infinite plane (a square and a
   // horizon disk, see SetPartTransform).
   bool IsInfinitePlane() const { return infinite_plane_; }

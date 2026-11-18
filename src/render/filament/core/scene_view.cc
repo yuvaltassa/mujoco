@@ -58,6 +58,8 @@
 
 namespace mujoco {
 
+using filament::math::double3;
+using filament::math::double4;
 using filament::math::float3;
 using filament::math::float4;
 using filament::math::mat3f;
@@ -172,20 +174,61 @@ static void SetupCamera(const mjrfRenderRequest& request,
   }
 }
 
+// Returns the GL-convention `projection` with its near plane moved onto
+// `plane`, given in view space with the camera on its negative side, so that the
+// rasterizer clips everything behind the plane. The x, y and w rows are
+// untouched. Lengyel, "Oblique View Frustum Depth Projection and Clipping",
+// Journal of Game Development 1(2), 2005.
+static mat4 ObliqueProjection(mat4 projection, const double4& plane) {
+  const double4 corner =
+      inverse(projection) * double4(plane.x < 0 ? -1.0 : 1.0,
+                                    plane.y < 0 ? -1.0 : 1.0, 1.0, 1.0);
+  const double4 row = plane * (2.0 / dot(plane, corner));
+  for (int i = 0; i < 4; ++i) {
+    projection[i][2] = row[i] - projection[i][3];
+  }
+  return projection;
+}
+
 // Sets up the `reflection_camera` as a reflection of `src_camera` across the
 // plane defined by `surface_xform`, so the reflection texture can be applied to
-// the plane with screen-space uvs.
+// the plane with screen-space uvs. The projection's near plane lies on the
+// mirror, so geometry behind the mirror is clipped out of the reflection.
 static void SetupReflectionCamera(const mat4& surface_xform,
                                   const filament::Camera* src_camera,
-                                  filament::Camera* reflection_camera) {
-  const mat4 src_model_matrix = src_camera->getModelMatrix();
-  const mat4 src_projection = src_camera->getCullingProjectionMatrix();
+                                  filament::Camera* reflection_camera,
+                                  filament::View* reflection_view) {
+  const mat4 model =
+      ToReflectionMatrix(surface_xform) * src_camera->getModelMatrix();
+  const mat4 projection = src_camera->getCullingProjectionMatrix();
+  reflection_camera->setModelMatrix(model);
 
-  reflection_camera->setModelMatrix(ToReflectionMatrix(surface_xform) *
-                                    src_model_matrix);
+  // The mirror plane in the reflection camera's view space, positive in front
+  // of the mirror. A camera in front of the mirror reflects to a camera behind
+  // it, on the negative side.
+  const double3 normal = normalize(surface_xform[2].xyz);
+  const double4 world_plane(normal, -dot(normal, surface_xform[3].xyz));
+  double4 plane = transpose(model) * world_plane;
 
-  // Use un-skewed projection to preserve froxel lighting grid and shadow cascades.
-  reflection_camera->setCustomProjection(src_projection, src_projection,
+  // Clipping opens solids that cross the mirror, and the cut would show as a
+  // seam where a solid meets its reflection. Keep a sliver behind the mirror,
+  // in proportion to the camera's distance, so the cut is hidden.
+  plane.w *= 1.0 - 5e-3;
+
+  mat4 render_projection = projection;
+  if (plane.w < 0) {
+    render_projection = ObliqueProjection(projection, plane);
+
+    // Filament assigns lights to depth slices of its froxel grid by window
+    // depth, assuming a standard projection, which the oblique one is not.
+    // Collapse the slices: with the light depth range squeezed against the far
+    // plane, the first slice spans the whole scene, so every fragment and light
+    // falls in it, leaving a 2D grid that the oblique projection does not
+    // disturb. Culling and shadow cascades keep the un-skewed projection.
+    const double far = src_camera->getCullingFar();
+    reflection_view->setDynamicLightingOptions(0.999 * far, far);
+  }
+  reflection_camera->setCustomProjection(render_projection, projection,
                                          src_camera->getNear(),
                                          src_camera->getCullingFar());
 }
@@ -444,23 +487,10 @@ void SceneView::Render(filament::Renderer* renderer,
     Renderable* renderable =
         Renderable::downcast(reflection_mgr_->GetRenderable(i));
     const mat4 transform(renderable->GetTransform());
-    SetupReflectionCamera(transform, camera_, reflect_camera_);
+    SetupReflectionCamera(transform, camera_, reflect_camera_, reflect_view_);
 
     // Hide reflective surface from its own reflection pass.
     std::uint8_t prev_layer_mask = renderable->SetLayerMask(kLayerMask_None);
-
-    // Hide geometry completely behind the mirror plane from the reflection pass.
-    const float3 mirror_pos = transform[3].xyz;
-    const float3 mirror_normal = normalize(transform[2].xyz);
-    std::vector<std::pair<Renderable*, std::uint8_t>> hidden_behind;
-    for (Renderable* other : renderables_) {
-      if (other == renderable) {
-        continue;
-      }
-      if (other->IsBehindPlane(mirror_pos, mirror_normal)) {
-        hidden_behind.emplace_back(other, other->SetLayerMask(kLayerMask_None));
-      }
-    }
 
     // Render the reflection to its render target.
     viewport.left = 0;
@@ -471,10 +501,7 @@ void SceneView::Render(filament::Renderer* renderer,
     renderer->render(reflect_view_);
     reflect_view_->setRenderTarget(nullptr);
 
-    // Restore the behind-mirror geometry and the reflective surface.
-    for (const auto& [other, mask] : hidden_behind) {
-      other->SetLayerMask(mask);
-    }
+    // Restore the reflective surface.
     renderable->SetLayerMask(prev_layer_mask);
   }
   for (int i = 0; i < num_reflective; ++i) {
