@@ -462,6 +462,14 @@ void SceneView::Render(filament::Renderer* renderer,
       }
     }
 
+    // Clip everything behind the mirror plane, keeping a sliver of 0.5% of the
+    // camera's distance so solids cut by the mirror show no seam.
+    const float3 eye = camera_->getPosition();
+    const float eye_dist = std::abs(dot(eye - mirror_pos, mirror_normal));
+    reflect_view_->setMaterialGlobal(
+        0, float4(mirror_normal,
+                  -dot(mirror_normal, mirror_pos) + 5e-3f * eye_dist));
+
     // Render the reflection to its render target.
     viewport.left = 0;
     viewport.bottom = 0;

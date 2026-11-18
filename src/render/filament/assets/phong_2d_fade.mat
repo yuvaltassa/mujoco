@@ -39,6 +39,11 @@ vertex {
 
 fragment {
   void material(inout MaterialInputs material) {
+    // A reflection pass clips at its mirror plane, which it passes as material
+    // global 0; every other pass leaves it at (0, 0, 0, 1), which keeps all.
+    if (dot(getMaterialGlobal0(), vec4(getUserWorldPosition(), 1.0)) < 0.0) {
+      discard;
+    }
     // Convert centered object-space positions [-1, 1] to standard [0, 1] UVs:
     //   * 0.5 scales [-1, 1] to [-0.5, 0.5]
     //   * -0.5 on Y flips the vertical axis (top of geom = V=0)

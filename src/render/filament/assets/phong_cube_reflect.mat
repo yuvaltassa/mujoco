@@ -42,6 +42,11 @@ vertex {
 
 fragment {
   void material(inout MaterialInputs material) {
+    // A reflection pass clips at its mirror plane, which it passes as material
+    // global 0; every other pass leaves it at (0, 0, 0, 1), which keeps all.
+    if (dot(getMaterialGlobal0(), vec4(getUserWorldPosition(), 1.0)) < 0.0) {
+      discard;
+    }
     vec3 uv = variable_vertex_pos.xyz * materialParams.UvScale;
 
     prepareMaterial(material);
