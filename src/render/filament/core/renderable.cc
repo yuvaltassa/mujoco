@@ -225,6 +225,30 @@ void Renderable::UpdateTransform() {
 
 const mat4f& Renderable::GetTransform() const { return transform_; }
 
+bool Renderable::IsBehindPlane(const float3& point,
+                               const float3& normal) {
+  if (parts_.empty()) {
+    return false;
+  }
+  filament::TransformManager& tm = GetEngine()->getTransformManager();
+  for (const Part& part : parts_) {
+    if (!part.mesh->HasBounds()) {
+      return false;
+    }
+    const filament::Box bounds = part.mesh->GetBounds();
+    const mat4f& xform = tm.getTransform(tm.getInstance(part.entity));
+    const float3 center = (xform * float4(bounds.center, 1.0f)).xyz;
+    const float extent =
+        bounds.halfExtent.x * std::abs(dot(xform[0].xyz, normal)) +
+        bounds.halfExtent.y * std::abs(dot(xform[1].xyz, normal)) +
+        bounds.halfExtent.z * std::abs(dot(xform[2].xyz, normal));
+    if (dot(center - point, normal) + extent >= 0.0f) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void Renderable::SetPartTransform(int index, const mat4f& transform) {
   filament::TransformManager& tm = GetEngine()->getTransformManager();
   tm.setTransform(tm.getInstance(parts_[index].entity), transform);

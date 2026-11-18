@@ -457,15 +457,7 @@ void SceneView::Render(filament::Renderer* renderer,
       if (other == renderable) {
         continue;
       }
-      const mat4 other_xform(other->GetTransform());
-      const float3 center = other_xform[3].xyz;
-      // The geom's three scaled axes reach every corner, so their summed
-      // lengths conservatively bound it; only hide when the whole bound is
-      // behind the plane.
-      const float radius = length(other_xform[0].xyz) +
-                           length(other_xform[1].xyz) +
-                           length(other_xform[2].xyz);
-      if (dot(center - mirror_pos, mirror_normal) + radius < 0.0f) {
+      if (other->IsBehindPlane(mirror_pos, mirror_normal)) {
         hidden_behind.emplace_back(other, other->SetLayerMask(kLayerMask_None));
       }
     }
